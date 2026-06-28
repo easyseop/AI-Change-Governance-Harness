@@ -1,0 +1,4 @@
+# locks.yaml — 파일 편집 락 (advisory · 보조 수단)
+# 형식: 편집 전 자기 항목 갱신. 진짜 충돌방지는 브랜치 분리(collab-protocol §2).
+# 예: "- path: policies/sensitive-zones.yaml { owner: claude, since: '2026-06-28T10:00' }"
+locks: []
