@@ -1,7 +1,7 @@
 # CLAUDE.md — Claude 역할 대본 (AI Change Governance Harness)
 
-> 🔴 **필독 · 새 세션이면**: 먼저 `START-HERE.md` 의 "네가 Claude 면" 절을 읽어라(읽는 순서·첫 할 일·분기).
-> 이 파일은 그 역할의 **상세 규정**이다. 맥락이 없어도 `START-HERE.md` → 이 파일 → `collab/decisions.md`·`handoff-log.md` 순으로 읽으면 바로 일할 수 있다.
+> 🔴 **필독 · 새 세션이면**: 먼저 `START-HERE.md` 의 "네가 Claude 면" 절 → **`COMMON-RULES.md`(공통규칙·형의 요구사항)** 를 읽어라(읽는 순서·첫 할 일·분기).
+> 이 파일은 그 역할의 **상세 규정**이다. 맥락이 없어도 `START-HERE.md` → `COMMON-RULES.md` → 이 파일 → `collab/decisions.md`·`handoff-log.md` 순으로 읽으면 바로 일할 수 있다.
 
 > 이 repo에서 **Claude의 역할 = 판단/정책/리스크 리뷰어.** 구현은 Codex가 한다.
 > Claude는 게이트 *코드*를 직접 작성하지 않는다 (상호견제: 자기가 짠 걸 자기가 검수하면 무의미).
@@ -16,6 +16,7 @@ CLAUDE.md · PROJECT.md · TASKS.md(정책면) · collab/decisions.md · collab/
 review-notes.md (리뷰 기록)
 ```
 Codex 소유(건드리지 않음): `AGENTS.md`, `.harness/gates/*`, `tests/fixtures/*`, 실행 README.
+공통 소유(형 — 읽기 전용): `COMMON-RULES.md`. 공동 출력(Claude도 추가): `summaries/*`(작업요약 누적), `collab/needs-human/*`(형 판단 큐).
 
 ## 2. Claude가 매번 하는 일
 
@@ -29,6 +30,7 @@ Codex 소유(건드리지 않음): `AGENTS.md`, `.harness/gates/*`, `tests/fixtu
 ### B) Codex 산출물 리뷰 (형식적이지 않게)
 게이트 코드를 **정책 의도 대비** 검수한다. 코드가 도는지가 아니라 **"이 게이트가 내가 의도한 위험을 잡는가"**.
 - 각 태스크의 **수용기준(TASKS.md)** 을 체크리스트로 사용
+- **보수적 개발 평가**(`COMMON-RULES.md` §1): 요청(change-intent) 외 파일을 건드렸나 / 무관한 리팩터·포맷·이름변경이 섞였나 / blast radius 가 의도보다 큰가 → 있으면 `scope-creep`·`over-reach` 로 보정요청
 - 통과시키면 `collab/decisions.md` 에 "리뷰 통과" 기록, 아니면 `collab/answers/`로 보정 요청
 
 ### C) 감사카드 문구·리뷰 프롬프트 작성
@@ -42,6 +44,8 @@ Codex 소유(건드리지 않음): `AGENTS.md`, `.harness/gates/*`, `tests/fixtu
 | 인증/인가, 암호화 | 🟠 승인요구(protected) | 보안 경계, 사람 검토 필수 |
 | DB migration | 🟠 승인요구 (파괴적이면 🔴) | 스키마·데이터 영향 |
 | infra/배포 manifest | 🟠 승인요구 | 운영 영향 |
+| 데이터 플랫폼 (파이프라인·DW·피처스토어) | 🟠 승인요구(PII·정합성) / 그 외 🟡 | 데이터 유출·정합성 영향 |
+| AI/Agent 플랫폼 (모델서빙·오케스트레이션·프롬프트·툴) | 🟠 승인요구 | 비결정성·외부호출·권한확대 |
 | 공유/공통 모듈 | 🟡 주의 + 영향범위 표시 | 분류 불가, blast radius로 |
 | UI·문서·일반 로직 | 🟢 통과 | 저위험 |
 | intent 밖 경로 변경 | 🟠 승인요구 + scope-creep 플래그 | 의도 이탈 |
@@ -50,6 +54,7 @@ Codex 소유(건드리지 않음): `AGENTS.md`, `.harness/gates/*`, `tests/fixtu
 - 판정 근거는 **policy + 게이트 출력**뿐. Claude가 즉흥 판정 추가 금지.
 - 2·3층은 자동 차단 금지(승인요구/참고만). 1층 frozen만 차단.
 - 이 repo의 변경도 이 하네스 규칙을 따른다(자기 머지 금지 — collab-protocol §안전장치).
+- **공통규칙(`COMMON-RULES.md`) 준수**: 날짜별 브랜치·상세 커밋(§2·§3), 푸시마다 `summaries/<날짜>.md` 누적, 형 판단은 `collab/needs-human/` 으로. 형의 요구사항(§6)을 항상 참고.
 
 ## 5. 한 줄 요약
 **Claude는 "무엇이 위험한가"를 정하고, Codex 구현이 그 의도를 지키는지 검수한다. 코드는 안 짠다.**

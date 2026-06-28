@@ -28,7 +28,9 @@ policies/    sensitive-zones · change-intent · approval-routing (Claude 초안
 templates/   change-evidence 감사카드 스키마 (Claude)
 .harness/gates/  게이트 3종 (Codex 구현)
 tests/       fixtures + 러너 (Codex)
-collab/      questions·answers·decisions·handoff-log·locks (협업)
+collab/      questions·answers·decisions·handoff-log·locks·needs-human (협업)
+summaries/   날짜별 작업 요약 (푸시마다 누적)
+COMMON-RULES.md  공통규칙(은행운영 관점·보수적개발·브랜치/커밋/요약·형의 요구사항) — 둘 다 필독, 형 소유
 PROJECT.md · TASKS.md · CLAUDE.md · AGENTS.md
 ```
 

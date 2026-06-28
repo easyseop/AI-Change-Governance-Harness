@@ -12,14 +12,16 @@
 | 공유(조심) | `PROJECT.md`, `TASKS.md`, `collab/handoff-log.md`, `collab/locks.yaml` | (좌동) |
 
 **상대 소유 파일은 수정하지 않는다.** 바꿔야 하면 질문/handoff로 요청.
+공통 소유(형): `COMMON-RULES.md`(두 AI 읽기전용). 공동 출력(둘 다 추가): `summaries/*`, `collab/needs-human/*`.
 
 ## 2. 브랜치 (충돌 방지의 2차 수단)
+**단일 장수 브랜치를 쓰지 않는다. 작업 단위마다 날짜별 브랜치를 판다** (`COMMON-RULES.md` §2).
 ```
-main            ← 합의된 것만 (직접 push 금지, 리뷰 통과 후 머지)
-codex/work      ← Codex 작업
-claude/review   ← Claude 작업/리뷰
+main                          ← 합의된 것만 (직접 push 금지, 리뷰 통과 후 머지)
+codex/<YYYY-MM-DD>-<주제>      ← Codex 작업 (base=최신 main)
+claude/<YYYY-MM-DD>-<주제>     ← Claude 작업/리뷰 (base=최신 main)
 ```
-가능하면 git worktree로 작업 디렉터리 분리.
+가능하면 git worktree로 작업 디렉터리 분리. 커밋/푸시는 상세히(`COMMON-RULES.md` §3).
 
 ## 3. 질문/답변 큐
 - 막히는 결정은 `collab/questions/Q-XXXX.md` 에 남긴다 (`Status: open`, `Blocking: true/false`).
