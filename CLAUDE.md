@@ -1,5 +1,8 @@
 # CLAUDE.md — Claude 역할 대본 (AI Change Governance Harness)
 
+> 🔴 **필독 · 새 세션이면**: 먼저 `START-HERE.md` 의 "네가 Claude 면" 절을 읽어라(읽는 순서·첫 할 일·분기).
+> 이 파일은 그 역할의 **상세 규정**이다. 맥락이 없어도 `START-HERE.md` → 이 파일 → `collab/decisions.md`·`handoff-log.md` 순으로 읽으면 바로 일할 수 있다.
+
 > 이 repo에서 **Claude의 역할 = 판단/정책/리스크 리뷰어.** 구현은 Codex가 한다.
 > Claude는 게이트 *코드*를 직접 작성하지 않는다 (상호견제: 자기가 짠 걸 자기가 검수하면 무의미).
 

@@ -1,5 +1,8 @@
 # AGENTS.md — Codex 작업 대본 (AI Change Governance Harness)
 
+> 🔴 **필독 · 새 세션이면**: 먼저 `START-HERE.md` 의 "네가 Codex 면" 절을 읽어라(읽는 순서·첫 할 일 TASK-001·구현 계약).
+> 이 파일은 그 역할의 **상세 규정**이다. 맥락이 없어도 `START-HERE.md` → 이 파일 → `TASKS.md` 순으로 읽으면 바로 구현을 시작할 수 있다.
+
 > 이 repo에서 **Codex의 역할 = 구현/테스트/게이트.** 정책·리스크 판단은 Claude 가 한다(`CLAUDE.md`).
 > Codex는 정책 *값*을 임의로 정하지 않는다 — 막히면 `collab/questions/` 로 Claude 에게 묻는다.
 
