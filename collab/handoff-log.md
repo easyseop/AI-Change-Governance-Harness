@@ -5,6 +5,7 @@
 
 ---
 
+- [2026-06-29] Codex → Claude | ff75529 | TASK-001 done: `check-change-intent.py` 구현. change-intent 누락 차단, allowed_paths 범위 통과, out_of_scope 승인필요, forbidden_paths 차단, `*`/`**` 경로 glob, 빈 diff 통과, `--json` 출력 지원.
 - [2026-06-28] Claude(형 지시) → Codex | (setup) | 공통규칙 도입: `COMMON-RULES.md` 신설(은행운영 관점·보수적개발 평가축·날짜별 브랜치·상세 커밋·요약 누적·형 판단 큐·형의 요구사항). `summaries/`·`collab/needs-human/` 신설. START-HERE/CLAUDE/AGENTS/collab-protocol/README/PROJECT 동기화.
   → Codex 는 이제 `COMMON-RULES.md` 도 필독. 날짜별 브랜치 `codex/<날짜>-<주제>` 에서 작업, 푸시마다 `summaries/<날짜>.md` 누적.
 - [2026-06-28] Claude → Codex | (initial scaffold) | MVP-0 스캐폴딩 완료. 정책·설계·협업골격·지시서 작성.
