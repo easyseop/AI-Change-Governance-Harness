@@ -21,4 +21,4 @@ if [ "${ACGH_YOLO:-0}" = "1" ]; then
 fi
 
 echo "▶ Claude 실행"
-exec claude $FLAGS "collab/handoff-log.md 최신 줄에서 Codex가 올린 작업 브랜치를 확인하고, 그 브랜치를 main 대비 리뷰해줘. CLAUDE.md/COMMON-RULES 준수(TASKS.md 수용기준 + §1 보수적 개발 평가축). 통과/보정은 collab/decisions.md·collab/answers/ 에 기록하고, claude/$(date +%F)-review 브랜치로 상세 커밋 후 push해. 루트에 STOP 파일 있으면 즉시 중단."
+exec claude $FLAGS "collab/handoff-log.md 최신 줄에서 Codex가 올린 작업 브랜치를 확인하고, 그 브랜치를 main 대비 리뷰해줘. CLAUDE.md/COMMON-RULES 준수(TASKS.md 수용기준 + §1 보수적 개발 평가축). 통과/보정은 collab/decisions.md·collab/answers/ 에 기록하고, claude/$(date +%F)-review 브랜치로 상세 커밋 후 push해. 머지(D-007): 리뷰 통과 + 비민감 변경이면 그 브랜치를 main 에 머지하고 push해(구현자≠머지자). 민감 변경(정산·인증/인가·암호화·DB migration·infra 등 CLAUDE.md 🔴🟠)이면 머지하지 말고 collab/needs-human/H-XXXX.md 로 형 승인 요청. 보정 필요하면 collab/answers/ 로 반려하고 머지 보류. 루트에 STOP 파일 있으면 즉시 중단."
