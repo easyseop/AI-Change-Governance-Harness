@@ -21,7 +21,7 @@
 5. glob 매칭은 `**`(다단계)·`*`(단일단계) 지원. 경로 구분자 OS 무관.
 6. 변경 0건이면 통과(빈 diff 안전).
 
-## TASK-002 ☐ `check-sensitive-zones` 게이트  (Codex)
+## TASK-002 ☑ `check-sensitive-zones` 게이트  (Codex)  — 리뷰통과 D-008 (704f7a0)
 **목적**: diff 가 민감 경로(zones)를 건드렸는지 level별 판정.
 
 **입력**: diff + `policies/sensitive-zones.yaml`
