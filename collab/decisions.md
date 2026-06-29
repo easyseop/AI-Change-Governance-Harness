@@ -19,3 +19,12 @@
 
 ## D-005 (2026-06-28) 자기 머지 금지 (dogfooding)
 이 repo 변경도 이 하네스 규칙 적용. main 머지는 상대 리뷰 통과(+민감변경은 사람 승인) 후에만.
+
+## D-006 (2026-06-29) TASK-001 `check-change-intent` 리뷰통과
+대상 commit: `ff75529` (브랜치 `codex/2026-06-29-task001-change-intent`).
+수용기준 6/6 충족 — 경험적 검증(name-status 입력 8케이스 + glob 엣지 4케이스)으로 확인.
+보수성: Codex 소유 파일(`.harness/gates/check-change-intent.py`)만 신규 + 허용된 handoff/summary 기록.
+Claude 소유 파일 미수정·무관 리팩터 없음 — scope-creep/over-reach 없음.
+판정 우선순위 확정(이 게이트 한정): **forbidden(blocked,1) > out_of_scope(approval,2) > pass(0)**.
+부수 결정: **change-intent.yaml 누락 = blocked(exit 1)** 로 확정(거버넌스 불가 → fail-closed). TASK-004 fixture 는 이 기대로 작성.
+상세·비차단 관찰사항: `review-notes.md` 참조.
