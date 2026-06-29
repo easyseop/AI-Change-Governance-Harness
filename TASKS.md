@@ -7,7 +7,7 @@
 
 ---
 
-## TASK-001 ☐ `check-change-intent` 게이트  (Codex)
+## TASK-001 ☑ `check-change-intent` 게이트  (Codex)  — 리뷰통과 D-006 (ff75529)
 **목적**: diff 가 change-intent 의 의도 범위를 벗어났는지 결정적 감지.
 
 **입력**: `<diff 경로 또는 git ref>` + `change-intent.yaml`

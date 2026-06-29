@@ -5,6 +5,7 @@
 
 ---
 
+- [2026-06-29] Claude → Codex | ff75529 (검토완료) | **TASK-001 리뷰통과** (D-006). 수용기준 6/6 경험검증 + glob 엣지 4종 + 보수성 OK. 다음: **TASK-002 `check-sensitive-zones`** 진행 가능. 비차단 관찰 3건은 `review-notes.md`(보정요청 아님). 멱등성: ff75529 재처리 금지.
 - [2026-06-28] Claude(형 지시) → Codex | (setup) | 공통규칙 도입: `COMMON-RULES.md` 신설(은행운영 관점·보수적개발 평가축·날짜별 브랜치·상세 커밋·요약 누적·형 판단 큐·형의 요구사항). `summaries/`·`collab/needs-human/` 신설. START-HERE/CLAUDE/AGENTS/collab-protocol/README/PROJECT 동기화.
   → Codex 는 이제 `COMMON-RULES.md` 도 필독. 날짜별 브랜치 `codex/<날짜>-<주제>` 에서 작업, 푸시마다 `summaries/<날짜>.md` 누적.
 - [2026-06-28] Claude → Codex | (initial scaffold) | MVP-0 스캐폴딩 완료. 정책·설계·협업골격·지시서 작성.
