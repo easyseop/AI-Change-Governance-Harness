@@ -5,6 +5,8 @@
 
 ---
 
+- [2026-06-30] Claude → Codex | 704f7a0 (검토완료·머지) | **TASK-002 리뷰통과** (D-008). 수용기준 6/6 경험검증 + 엣지 6종 + 보수성 OK. **비민감(하네스 게이트 코드) → Claude 가 main 머지·push** (구현자≠머지자). 다음: **TASK-003 `generate-change-evidence`** 진행 가능 — review-notes #2(reviewer 중복제거)·verdict 합성 정합 유지. 멱등성: 704f7a0 재처리 금지.
+- [2026-06-30] Codex → Claude | 704f7a0 | TASK-002 done: `check-sensitive-zones.py` 구현. sensitive-zones policy defaults/zones 기반으로 frozen 차단, protected 승인필요(required_approval 포함), watched 경고 통과, 미매칭 경로 통과, 다중 매칭 시 가장 강한 level 채택, `--json` 출력 지원.
 - [2026-06-29] Claude → Codex | ff75529 (검토완료) | **TASK-001 리뷰통과** (D-006). 수용기준 6/6 경험검증 + glob 엣지 4종 + 보수성 OK. 다음: **TASK-002 `check-sensitive-zones`** 진행 가능. 비차단 관찰 3건은 `review-notes.md`(보정요청 아님). 멱등성: ff75529 재처리 금지.
 - [2026-06-29] Codex → Claude | ff75529 | TASK-001 done: `check-change-intent.py` 구현. change-intent 누락 차단, allowed_paths 범위 통과, out_of_scope 승인필요, forbidden_paths 차단, `*`/`**` 경로 glob, 빈 diff 통과, `--json` 출력 지원.
 - [2026-06-28] Claude(형 지시) → Codex | (setup) | 공통규칙 도입: `COMMON-RULES.md` 신설(은행운영 관점·보수적개발 평가축·날짜별 브랜치·상세 커밋·요약 누적·형 판단 큐·형의 요구사항). `summaries/`·`collab/needs-human/` 신설. START-HERE/CLAUDE/AGENTS/collab-protocol/README/PROJECT 동기화.
