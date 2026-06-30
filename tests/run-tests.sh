@@ -6,6 +6,7 @@ cd "$ROOT_DIR" || exit 1
 
 python3 - <<'PY'
 import json
+import os
 import subprocess
 import sys
 
@@ -17,7 +18,9 @@ GATES = {
     "check-sensitive-zones": ".harness/gates/check-sensitive-zones.py",
     "generate-change-evidence": ".harness/gates/generate-change-evidence.py",
     "extract-python-inventory": ".harness/gates/extract-python-inventory.py",
+    "map-diff-to-functions": ".harness/gates/map-diff-to-functions.py",
 }
+ROOT_DIR = os.getcwd()
 
 
 def run_command(command):
@@ -28,6 +31,22 @@ def run_command(command):
         stderr=subprocess.PIPE,
         text=True,
     )
+
+
+def prepare_function_mapping_fixture(fixture_dir):
+    work_dir = subprocess.check_output(["mktemp", "-d"], text=True).strip()
+    run_command(["git", "init", "-q", work_dir])
+    run_command(["git", "-C", work_dir, "config", "user.email", "codex@example.invalid"])
+    run_command(["git", "-C", work_dir, "config", "user.name", "Codex Test"])
+    subprocess.run(["cp", "-R", f"{fixture_dir}/base/.", work_dir], check=True)
+    run_command(["git", "-C", work_dir, "add", "."])
+    run_command(["git", "-C", work_dir, "commit", "-qm", "base"])
+    base = run_command(["git", "-C", work_dir, "rev-parse", "HEAD"]).stdout.strip()
+    subprocess.run(["cp", "-R", f"{fixture_dir}/head/.", work_dir], check=True)
+    run_command(["git", "-C", work_dir, "add", "."])
+    run_command(["git", "-C", work_dir, "commit", "-qm", "head"])
+    head = run_command(["git", "-C", work_dir, "rev-parse", "HEAD"]).stdout.strip()
+    return work_dir, f"{base}..{head}"
 
 
 def load_output(gate, stdout):
@@ -82,6 +101,17 @@ def case_command(case):
             "python3",
             script,
             data["source_file"],
+            "--json",
+        ]
+
+    if gate == "map-diff-to-functions":
+        work_dir, rev_range = prepare_function_mapping_fixture(data["fixture_dir"])
+        return [
+            "python3",
+            f"{ROOT_DIR}/{script}",
+            rev_range,
+            "--repo",
+            work_dir,
             "--json",
         ]
 
@@ -153,6 +183,33 @@ def validate_inventory(case, result, exit_code):
     return errors
 
 
+def validate_function_mapping(case, result, exit_code):
+    expect = case["expect"]
+    errors = []
+    assert_equal(errors, "exit_code", exit_code, expect["exit_code"])
+    if result.get("error"):
+        errors.append(f"unexpected error: {result['error']}")
+        return errors
+
+    actual_files = []
+    for file_record in result.get("files", []):
+        actual_files.append(
+            {
+                "path": file_record.get("path"),
+                "status": file_record.get("status"),
+                "touched_function_names": values_at(
+                    file_record.get("touched_functions", []), "name"
+                ),
+                "hunk_function_names": [
+                    values_at(hunk.get("touched_functions", []), "name")
+                    for hunk in file_record.get("hunks", [])
+                ],
+            }
+        )
+    assert_equal(errors, "files", actual_files, expect["files"])
+    return errors
+
+
 def main():
     with open("tests/cases.yaml", "r", encoding="utf-8") as stream:
         cases = yaml.safe_load(stream)["cases"]
@@ -169,6 +226,8 @@ def main():
                 errors = validate_evidence(case, result, completed.returncode)
             elif case["gate"] == "extract-python-inventory":
                 errors = validate_inventory(case, result, completed.returncode)
+            elif case["gate"] == "map-diff-to-functions":
+                errors = validate_function_mapping(case, result, completed.returncode)
             else:
                 errors = validate_json_gate(case, result, completed.returncode)
         except Exception as error:
