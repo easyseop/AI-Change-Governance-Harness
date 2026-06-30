@@ -1,0 +1,71 @@
+cases:
+  - name: good
+    gate: generate-change-evidence
+    input:
+      name_status: tests/fixtures/good/name-status.txt
+      numstat: tests/fixtures/good/numstat.txt
+      change_intent: tests/fixtures/good/change-intent.yaml
+    expect:
+      verdict: pass
+      exit_code: 0
+      files_changed: 1
+      lines_added: 3
+      lines_removed: 1
+      changed_files:
+        - path: app/features/search.py
+          zone_level: free
+          in_allowed_paths: true
+
+  - name: out-of-scope
+    gate: check-change-intent
+    input:
+      name_status: tests/fixtures/out-of-scope/name-status.txt
+      change_intent: tests/fixtures/out-of-scope/change-intent.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      out_of_scope_paths:
+        - docs/release-notes.md
+
+  - name: forbidden
+    gate: check-change-intent
+    input:
+      name_status: tests/fixtures/forbidden/name-status.txt
+      change_intent: tests/fixtures/forbidden/change-intent.yaml
+    expect:
+      verdict: blocked
+      exit_code: 1
+      forbidden_touched:
+        - secrets/prod.key
+
+  - name: frozen
+    gate: check-sensitive-zones
+    input:
+      name_status: tests/fixtures/frozen/name-status.txt
+    expect:
+      verdict: blocked
+      exit_code: 1
+      frozen_touched:
+        - services/settlement/calculate.py
+
+  - name: protected
+    gate: check-sensitive-zones
+    input:
+      name_status: tests/fixtures/protected/name-status.txt
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      protected_touched:
+        - services/auth/login.py
+      required_approval:
+        - security-reviewer
+
+  - name: watched
+    gate: check-sensitive-zones
+    input:
+      name_status: tests/fixtures/watched/name-status.txt
+    expect:
+      verdict: pass
+      exit_code: 0
+      watched_touched:
+        - lib/common/helpers.py
