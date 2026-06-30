@@ -69,3 +69,68 @@ cases:
       exit_code: 0
       watched_touched:
         - lib/common/helpers.py
+
+  - name: python-inventory
+    gate: extract-python-inventory
+    input:
+      source_file: tests/fixtures/python-inventory/valid.py
+    expect:
+      exit_code: 0
+      parse_error: null
+      items:
+        - type: function
+          name: decorator
+          start_line: 1
+          end_line: 4
+          decorators: []
+        - type: function
+          name: decorator.wrapper
+          start_line: 2
+          end_line: 3
+          decorators: []
+        - type: function
+          name: outer
+          start_line: 6
+          end_line: 9
+          decorators: []
+        - type: function
+          name: outer.inner
+          start_line: 7
+          end_line: 8
+          decorators: []
+        - type: class
+          name: Service
+          start_line: 11
+          end_line: 18
+          decorators: []
+        - type: async_function
+          name: Service.load
+          start_line: 13
+          end_line: 14
+          decorators:
+            - decorator
+        - type: class
+          name: Service.Nested
+          start_line: 16
+          end_line: 18
+          decorators: []
+        - type: function
+          name: Service.Nested.method
+          start_line: 17
+          end_line: 18
+          decorators: []
+        - type: function
+          name: decorated
+          start_line: 21
+          end_line: 22
+          decorators:
+            - decorator
+
+  - name: python-inventory-parse-error
+    gate: extract-python-inventory
+    input:
+      source_file: tests/fixtures/python-inventory/invalid.py
+    expect:
+      exit_code: 0
+      parse_error_present: true
+      items: []
