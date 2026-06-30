@@ -134,3 +134,27 @@ cases:
       exit_code: 0
       parse_error_present: true
       items: []
+
+  - name: function-mapping
+    gate: map-diff-to-functions
+    input:
+      fixture_dir: tests/fixtures/function-mapping
+    expect:
+      exit_code: 0
+      files:
+        - path: app/sample.py
+          status: M
+          touched_function_names:
+            - secure_view
+            - outer
+            - outer.inner
+            - <module>
+            - Service
+            - Service.method
+            - remove_me
+          hunk_function_names:
+            - [secure_view]
+            - [outer, outer.inner]
+            - [<module>]
+            - [Service, Service.method]
+            - [remove_me]
