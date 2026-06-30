@@ -45,7 +45,7 @@
 4. `base_commit` 기록(멱등성). `summary` 파일/라인 수 정확.
 5. 출력 yaml 이 템플릿 스키마와 키 일치(임의 키 추가 금지).
 
-## TASK-004 ☐ 테스트 fixtures + 러너  (Codex)
+## TASK-004 ☑ 테스트 fixtures + 러너  (Codex)  — 리뷰통과 D-010 (93e2c40)
 **수용기준**:
 1. `tests/fixtures/` 에 최소 케이스: good(통과) / out-of-scope(승인요구) / forbidden(차단) / frozen(차단) / protected(승인요구) / watched(경고통과).
 2. `tests/cases.yaml` 에 각 케이스의 gate·input·expect(pass/blocked/approval_required) 선언.
