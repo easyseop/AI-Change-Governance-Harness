@@ -1,0 +1,476 @@
+#!/usr/bin/env python3
+import argparse
+import fnmatch
+import os
+import subprocess
+import sys
+from pathlib import PurePosixPath
+
+import yaml
+
+
+PASS = 0
+BLOCKED = 1
+APPROVAL_REQUIRED = 2
+
+
+def normalize_path(path):
+    return str(PurePosixPath(path.replace("\\", "/")))
+
+
+def match_glob(path, pattern):
+    path_parts = [part for part in normalize_path(path).split("/") if part]
+    pattern_parts = [part for part in normalize_path(pattern).split("/") if part]
+
+    def match_parts(path_index, pattern_index):
+        if pattern_index == len(pattern_parts):
+            return path_index == len(path_parts)
+
+        pattern_part = pattern_parts[pattern_index]
+        if pattern_part == "**":
+            if pattern_index == len(pattern_parts) - 1:
+                return True
+            for next_path_index in range(path_index, len(path_parts) + 1):
+                if match_parts(next_path_index, pattern_index + 1):
+                    return True
+            return False
+
+        if path_index >= len(path_parts):
+            return False
+        if not fnmatch.fnmatchcase(path_parts[path_index], pattern_part):
+            return False
+        return match_parts(path_index + 1, pattern_index + 1)
+
+    return match_parts(0, 0)
+
+
+def run_git(args):
+    result = subprocess.run(
+        ["git"] + args,
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr.strip() or "git command failed")
+    return result.stdout
+
+
+def read_diff_lines(diff_input, mode):
+    if os.path.exists(diff_input):
+        with open(diff_input, "r", encoding="utf-8") as stream:
+            return stream.read().splitlines()
+    return run_git(["diff", mode, diff_input]).splitlines()
+
+
+def parse_changed_files(name_status_lines):
+    files = []
+    for line in name_status_lines:
+        line = line.strip()
+        if not line:
+            continue
+
+        parts = line.split("\t")
+        status = parts[0]
+        if status.startswith(("R", "C")) and len(parts) >= 3:
+            path = parts[2]
+        elif len(parts) >= 2:
+            path = parts[1]
+        else:
+            continue
+        files.append(normalize_path(path))
+    return files
+
+
+def parse_numstat(numstat_lines):
+    files = {}
+    for line in numstat_lines:
+        line = line.strip()
+        if not line:
+            continue
+
+        parts = line.split("\t")
+        if len(parts) < 3:
+            continue
+
+        added = 0 if parts[0] == "-" else int(parts[0])
+        removed = 0 if parts[1] == "-" else int(parts[1])
+        path = parts[-1]
+        if " => " in path:
+            path = path.split(" => ", 1)[1].rstrip("}")
+        files[normalize_path(path)] = {"added": added, "removed": removed}
+    return files
+
+
+def base_ref_from_diff_input(diff_input):
+    if os.path.exists(diff_input):
+        return None
+    if "..." in diff_input:
+        return diff_input.split("...", 1)[0]
+    if ".." in diff_input:
+        return diff_input.split("..", 1)[0]
+    return diff_input
+
+
+def resolve_base_commit(diff_input):
+    base_ref = base_ref_from_diff_input(diff_input)
+    if not base_ref:
+        return "unknown"
+    return run_git(["rev-parse", base_ref]).strip()
+
+
+def resolve_generated_on(diff_input, generated_on):
+    if generated_on:
+        return generated_on
+
+    base_ref = base_ref_from_diff_input(diff_input)
+    if not base_ref:
+        return "1970-01-01"
+    return run_git(["show", "-s", "--format=%cs", base_ref]).strip()
+
+
+def load_intent(path):
+    if not os.path.exists(path):
+        raise FileNotFoundError("의도 선언 누락: change-intent.yaml 파일을 찾을 수 없습니다.")
+
+    with open(path, "r", encoding="utf-8") as stream:
+        data = yaml.safe_load(stream) or {}
+
+    intent = data.get("change_intent") or {}
+    return {
+        "requirement_id": intent.get("requirement_id"),
+        "author": intent.get("author"),
+        "allowed_paths": intent.get("allowed_paths") or [],
+        "forbidden_paths": intent.get("forbidden_paths") or [],
+    }
+
+
+def load_sensitive_policy(path):
+    with open(path, "r", encoding="utf-8") as stream:
+        data = yaml.safe_load(stream) or {}
+
+    defaults = data.get("defaults") or {}
+    return {
+        "block_levels": defaults.get("block_levels") or [],
+        "approve_levels": defaults.get("approve_levels") or [],
+        "warn_levels": defaults.get("warn_levels") or [],
+        "unlisted_level": defaults.get("unlisted_level") or "free",
+        "zones": data.get("zones") or [],
+    }
+
+
+def load_routing_policy(path):
+    with open(path, "r", encoding="utf-8") as stream:
+        data = yaml.safe_load(stream) or {}
+    return {
+        "routing": data.get("routing") or [],
+        "default_reviewer": data.get("default_reviewer"),
+    }
+
+
+def level_strength(level, policy):
+    if level in policy["block_levels"]:
+        return 3
+    if level in policy["approve_levels"]:
+        return 2
+    if level in policy["warn_levels"]:
+        return 1
+    return 0
+
+
+def matching_zone_records(path, policy):
+    records = []
+    for zone in policy["zones"]:
+        pattern = zone.get("path")
+        if not pattern or not match_glob(path, pattern):
+            continue
+        level = zone.get("level", policy["unlisted_level"])
+        records.append(
+            {
+                "path": path,
+                "zone": normalize_path(pattern),
+                "level": level,
+                "reason": zone.get("reason", ""),
+                "required_approval": zone.get("required_approval"),
+                "strength": level_strength(level, policy),
+            }
+        )
+    return records
+
+
+def strongest_records(records):
+    if not records:
+        return []
+    max_strength = max(record["strength"] for record in records)
+    strongest = [record for record in records if record["strength"] == max_strength]
+    return sorted(strongest, key=lambda record: (record["path"], record["zone"], record["reason"]))
+
+
+def public_record(record):
+    result = {
+        "path": record["path"],
+        "zone": record["zone"],
+        "level": record["level"],
+        "reason": record["reason"],
+    }
+    if record["required_approval"]:
+        result["required_approval"] = record["required_approval"]
+    return result
+
+
+def intent_result(files, intent):
+    out_of_scope = []
+    forbidden_touched = []
+
+    for path in files:
+        in_forbidden = any(match_glob(path, pattern) for pattern in intent["forbidden_paths"])
+        in_allowed = any(match_glob(path, pattern) for pattern in intent["allowed_paths"])
+
+        if in_forbidden:
+            forbidden_touched.append(path)
+        elif not in_allowed:
+            out_of_scope.append(path)
+
+    return {
+        "status": "fail" if forbidden_touched or out_of_scope else "pass",
+        "out_of_scope_paths": sorted(out_of_scope),
+        "forbidden_touched": sorted(forbidden_touched),
+    }
+
+
+def sensitive_result(files, policy):
+    frozen_touched = []
+    protected_touched = []
+    watched_touched = []
+    zone_level_by_path = {}
+
+    for path in files:
+        records = strongest_records(matching_zone_records(path, policy))
+        if not records:
+            zone_level_by_path[path] = policy["unlisted_level"]
+            continue
+
+        zone_level_by_path[path] = records[0]["level"]
+        for record in records:
+            public = public_record(record)
+            level = record["level"]
+            if level in policy["block_levels"]:
+                frozen_touched.append(public)
+            elif level in policy["approve_levels"]:
+                protected_touched.append(public)
+            elif level in policy["warn_levels"]:
+                watched_touched.append(public)
+
+    frozen_touched = sorted(frozen_touched, key=lambda item: (item["path"], item["zone"]))
+    protected_touched = sorted(protected_touched, key=lambda item: (item["path"], item["zone"]))
+    watched_touched = sorted(watched_touched, key=lambda item: (item["path"], item["zone"]))
+
+    if frozen_touched:
+        status = "blocked"
+    elif protected_touched:
+        status = "approval_required"
+    else:
+        status = "pass"
+
+    return {
+        "status": status,
+        "frozen_touched": frozen_touched,
+        "protected_touched": protected_touched,
+        "watched_touched": watched_touched,
+        "zone_level_by_path": zone_level_by_path,
+    }
+
+
+def reviewers_for_files(files, routing_policy):
+    reviewers = []
+    seen = set()
+
+    def add_reviewer(reviewer):
+        if reviewer and reviewer not in seen:
+            seen.add(reviewer)
+            reviewers.append(reviewer)
+
+    for path in files:
+        matched = False
+        for route in routing_policy["routing"]:
+            pattern = route.get("match_path")
+            if not pattern or not match_glob(path, pattern):
+                continue
+            matched = True
+            add_reviewer(route.get("reviewer"))
+        if not matched:
+            add_reviewer(routing_policy["default_reviewer"])
+
+    return reviewers
+
+
+def build_reasons(intent_check, sensitive_check):
+    reasons = []
+    for path in intent_check["forbidden_touched"]:
+        reasons.append(f"forbidden_path:{path}")
+    for item in sensitive_check["frozen_touched"]:
+        reasons.append(f"frozen:{item['path']}:{item['reason']}")
+    for path in intent_check["out_of_scope_paths"]:
+        reasons.append(f"out_of_scope:{path}")
+    for item in sensitive_check["protected_touched"]:
+        reasons.append(f"protected:{item['path']}:{item['reason']}")
+    for item in sensitive_check["watched_touched"]:
+        reasons.append(f"watched:{item['path']}:{item['reason']}")
+    return reasons
+
+
+def verdict_and_exit(intent_check, sensitive_check):
+    if intent_check["forbidden_touched"] or sensitive_check["frozen_touched"]:
+        return "blocked", BLOCKED
+    if intent_check["out_of_scope_paths"] or sensitive_check["protected_touched"]:
+        return "approval_required", APPROVAL_REQUIRED
+    return "pass", PASS
+
+
+def build_evidence(args):
+    intent = load_intent(args.change_intent)
+    sensitive_policy = load_sensitive_policy(args.sensitive_zones)
+    routing_policy = load_routing_policy(args.approval_routing)
+
+    name_status_lines = read_diff_lines(args.diff_input, "--name-status")
+    if args.numstat_input:
+        with open(args.numstat_input, "r", encoding="utf-8") as stream:
+            numstat_lines = stream.read().splitlines()
+    elif os.path.exists(args.diff_input):
+        numstat_lines = []
+    else:
+        numstat_lines = read_diff_lines(args.diff_input, "--numstat")
+
+    files = parse_changed_files(name_status_lines)
+    numstat = parse_numstat(numstat_lines)
+    intent_check = intent_result(files, intent)
+    sensitive_check = sensitive_result(files, sensitive_policy)
+    verdict, exit_code = verdict_and_exit(intent_check, sensitive_check)
+
+    changed_files = []
+    for path in files:
+        changed_files.append(
+            {
+                "path": path,
+                "zone_level": sensitive_check["zone_level_by_path"].get(
+                    path, sensitive_policy["unlisted_level"]
+                ),
+                "in_allowed_paths": any(
+                    match_glob(path, pattern) for pattern in intent["allowed_paths"]
+                ),
+            }
+        )
+
+    summary = {
+        "files_changed": len(files),
+        "lines_added": sum(item["added"] for item in numstat.values()),
+        "lines_removed": sum(item["removed"] for item in numstat.values()),
+    }
+
+    evidence = {
+        "change_evidence": {
+            "requirement_id": intent["requirement_id"],
+            "author": intent["author"],
+            "generated_on": resolve_generated_on(args.diff_input, args.generated_on),
+            "base_commit": resolve_base_commit(args.diff_input),
+            "summary": summary,
+            "changed_files": changed_files,
+            "intent_check": intent_check,
+            "sensitive_zone_check": {
+                "status": sensitive_check["status"],
+                "frozen_touched": sensitive_check["frozen_touched"],
+                "protected_touched": sensitive_check["protected_touched"],
+                "watched_touched": sensitive_check["watched_touched"],
+            },
+            "blast_radius": {
+                "shared_modules_changed": [],
+                "importers_count": None,
+            },
+            "verdict": verdict,
+            "reasons": build_reasons(intent_check, sensitive_check),
+            "reviewer_required": reviewers_for_files(files, routing_policy),
+        }
+    }
+    return evidence, exit_code
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Generate a change-evidence YAML audit card for a diff."
+    )
+    parser.add_argument("diff_input", help="git diff ref (base..head) or name-status file")
+    parser.add_argument(
+        "--change-intent",
+        default="change-intent.yaml",
+        help="change-intent.yaml path",
+    )
+    parser.add_argument(
+        "--sensitive-zones",
+        default="policies/sensitive-zones.yaml",
+        help="policies/sensitive-zones.yaml path",
+    )
+    parser.add_argument(
+        "--approval-routing",
+        default="policies/approval-routing.yaml",
+        help="policies/approval-routing.yaml path",
+    )
+    parser.add_argument(
+        "--numstat-input",
+        help="optional git diff --numstat file when diff_input is a name-status file",
+    )
+    parser.add_argument(
+        "--generated-on",
+        help="override generated_on date for deterministic tests",
+    )
+    parser.add_argument("--output", help="write YAML to this file instead of stdout")
+    args = parser.parse_args()
+
+    try:
+        evidence, exit_code = build_evidence(args)
+    except Exception as error:
+        evidence = {
+            "change_evidence": {
+                "requirement_id": None,
+                "author": None,
+                "generated_on": args.generated_on or "1970-01-01",
+                "base_commit": "unknown",
+                "summary": {
+                    "files_changed": 0,
+                    "lines_added": 0,
+                    "lines_removed": 0,
+                },
+                "changed_files": [],
+                "intent_check": {
+                    "status": "fail",
+                    "out_of_scope_paths": [],
+                    "forbidden_touched": [],
+                },
+                "sensitive_zone_check": {
+                    "status": "blocked",
+                    "frozen_touched": [],
+                    "protected_touched": [],
+                    "watched_touched": [],
+                },
+                "blast_radius": {
+                    "shared_modules_changed": [],
+                    "importers_count": None,
+                },
+                "verdict": "blocked",
+                "reasons": [str(error)],
+                "reviewer_required": [],
+            }
+        }
+        exit_code = BLOCKED
+
+    output = yaml.safe_dump(evidence, allow_unicode=True, sort_keys=False)
+    if args.output:
+        with open(args.output, "w", encoding="utf-8") as stream:
+            stream.write(output)
+    else:
+        print(output, end="")
+    return exit_code
+
+
+if __name__ == "__main__":
+    sys.exit(main())
