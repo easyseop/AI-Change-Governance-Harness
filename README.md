@@ -38,12 +38,11 @@ PROJECT.md · TASKS.md · CLAUDE.md · AGENTS.md
 - **Claude** = 판단/정책/리스크/리뷰 · **Codex** = 구현/테스트/게이트.
 - 직접 대화 없이 Git 파일(`PROJECT.md`·`collab/`)로 비동기 협업. 상세 `docs/collab-protocol.md`.
 
-## 실행 방법 (MVP-0, 게이트 구현 후)
+## 실행 방법 (MVP-0)
 ```bash
-# (Codex 가 게이트 구현·테스트 작성 후 채워질 절)
-python3 .harness/gates/check-change-intent.py    <base>..<head> policies/change-intent.example.yaml
-python3 .harness/gates/check-sensitive-zones.py  <base>..<head> policies/sensitive-zones.yaml
-python3 .harness/gates/generate-change-evidence.py <base>..<head>
+python3 .harness/gates/check-change-intent.py <base>..<head> change-intent.yaml
+python3 .harness/gates/check-sensitive-zones.py <base>..<head> policies/sensitive-zones.yaml
+python3 .harness/gates/generate-change-evidence.py <base>..<head> --change-intent change-intent.yaml
 bash tests/run-tests.sh
 ```
 
