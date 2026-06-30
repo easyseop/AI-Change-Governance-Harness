@@ -54,6 +54,60 @@
 
 ---
 
+# MVP-1 (Python 함수 단위) — 계획
+
+> 목적: 경로 단위(MVP-0) → **Python 함수/클래스 단위**로 정밀화. AST로 "어느 함수가 바뀌었나"를 자동 추출하고, 민감 함수 주석·신규 능력 도입을 감지한다.
+> ⚠️ MVP-0과 달리 **언어 의존(Python 우선)** + **AST 사용**. 입력은 name-status 가 아니라 **git refs(base..head)** — before/after 두 버전을 `git show` 로 파싱.
+> 전체 9태스크(4단계). **Phase A(005~007)만 먼저 확정**, B/C/D 는 A 완료 후 수용기준 정밀화.
+
+## Phase A — 함수 변경 추출 (핵심)
+
+### TASK-005 ☐ 함수/클래스 인벤토리 추출  (Codex)
+**목적**: 단일 Python 파일을 AST 파싱해 함수/클래스 목록을 만든다.
+**입력**: `.py` 파일(또는 소스 문자열)
+**수용기준**:
+1. 모든 함수/클래스의 **정규화 이름**(`Class.method`, 중첩 `outer.inner`)·**시작/끝 라인범위**·데코레이터 목록 추출.
+2. `async def`·메서드·중첩 함수·데코레이터 함수 모두 포함.
+3. 파싱 실패(문법오류) 시 **예외 없이** 빈 인벤토리 + 오류표시 반환(fail-safe).
+4. 결정적 + `--json` 출력.
+
+### TASK-006 ☐ diff 헝크 ↔ 함수 매핑  (Codex)
+**목적**: 변경된 라인범위가 **어느 함수에 속하는지** 매핑.
+**입력**: `base..head` (git refs) + TASK-005 인벤토리
+**수용기준**:
+1. `git diff` 변경 라인범위(헝크) ↔ 함수 라인범위 **교집합**으로 "닿은 함수" 판정.
+2. 한 헝크가 여러 함수에 걸치면 전부, 함수 밖(모듈 레벨) 변경은 `<module>` 로 표기.
+3. after 기준 라인범위 사용(추가/삭제 오프셋 정확).
+4. 결정적 + `--json`.
+
+### TASK-007 ☐ before/after 함수 변경 분류  (Codex)
+**목적**: 함수 단위로 **added/modified/deleted** 분류.
+**입력**: `base..head` (양 버전 `git show`)
+**수용기준**:
+1. before/after 인벤토리 비교 → 함수별 `added`/`deleted`/`modified` 판정.
+2. **시그니처 변경 vs 본문만 변경** 구분 표시.
+3. 비-`.py`·파싱실패·신규/삭제 파일은 **파일 단위 fallback**(안전 스킵, 표시).
+4. 결정적(2회 동일) + `--json`. 종료코드는 보고용(0) — 판정은 후속 게이트(Phase B).
+
+## Phase B — 민감 함수 주석  *(A 완료 후 수용기준 확정)*
+- **TASK-008** `@gov` 주석 규약+파서+검증 (Claude 설계 → Codex)
+- **TASK-009** 변경함수 ↔ 주석 → level 게이트(0/1/2, policy 재사용)
+
+## Phase C — 신규 능력 감지  *(A 완료 후)*
+- **TASK-010** `sensitive-capabilities` catalog 설계 + 능력 추출 (Claude 설계 → Codex)
+- **TASK-011** before/after 능력 diff → 신규 도입만 승인요구
+
+## Phase D — 통합·테스트  *(A 완료 후)*
+- **TASK-012** 감사카드 통합 (`changed_functions[]` + verdict 반영)
+- **TASK-013** Python before/after fixtures + 러너 확장
+
+## MVP-1 공통 (MVP-0 공통 규칙에 더해)
+- **Python AST 허용** (MVP-0의 "AST 금지"는 MVP-0 한정). 단 LLM·추정은 여전히 금지(결정적).
+- 입력은 **git refs**(before/after 필요). fixtures 도 before/after 두 버전으로.
+- 2층(능력) 판정은 **자동 차단 금지 → 승인요구만** (D-004).
+
+---
+
 ## 공통 규칙 (Codex)
 - 언어: Python3 + pyyaml (기존 킷과 통일). 외부 의존 최소.
 - diff 파싱: `git diff --name-status` + `--numstat` 수준이면 MVP-0 충분 (AST·내용분석 금지 = MVP-1).
