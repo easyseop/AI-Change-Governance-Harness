@@ -16,6 +16,7 @@ GATES = {
     "check-change-intent": ".harness/gates/check-change-intent.py",
     "check-sensitive-zones": ".harness/gates/check-sensitive-zones.py",
     "generate-change-evidence": ".harness/gates/generate-change-evidence.py",
+    "extract-python-inventory": ".harness/gates/extract-python-inventory.py",
 }
 
 
@@ -76,6 +77,14 @@ def case_command(case):
             command.extend(["--numstat-input", data["numstat"]])
         return command
 
+    if gate == "extract-python-inventory":
+        return [
+            "python3",
+            script,
+            data["source_file"],
+            "--json",
+        ]
+
     raise ValueError(f"unsupported gate: {gate}")
 
 
@@ -128,6 +137,22 @@ def validate_evidence(case, result, exit_code):
     return errors
 
 
+def validate_inventory(case, result, exit_code):
+    expect = case["expect"]
+    errors = []
+    assert_equal(errors, "exit_code", exit_code, expect["exit_code"])
+
+    if expect.get("parse_error_present"):
+        if not result.get("parse_error"):
+            errors.append("parse_error: expected a parse error, got none")
+    elif "parse_error" in expect:
+        assert_equal(errors, "parse_error", result.get("parse_error"), expect["parse_error"])
+
+    if "items" in expect:
+        assert_equal(errors, "items", result.get("items"), expect["items"])
+    return errors
+
+
 def main():
     with open("tests/cases.yaml", "r", encoding="utf-8") as stream:
         cases = yaml.safe_load(stream)["cases"]
@@ -142,6 +167,8 @@ def main():
             result = load_output(case["gate"], completed.stdout)
             if case["gate"] == "generate-change-evidence":
                 errors = validate_evidence(case, result, completed.returncode)
+            elif case["gate"] == "extract-python-inventory":
+                errors = validate_inventory(case, result, completed.returncode)
             else:
                 errors = validate_json_gate(case, result, completed.returncode)
         except Exception as error:
