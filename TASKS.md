@@ -33,7 +33,7 @@
 5. `defaults.block_levels/approve_levels/warn_levels` 를 코드에 하드코딩하지 말고 policy 에서 읽을 것.
 6. 한 변경이 여러 level 에 걸리면 **가장 강한 것**(frozen>protected>watched) 채택.
 
-## TASK-003 ☐ `generate-change-evidence` 게이트  (Codex)
+## TASK-003 ☑ `generate-change-evidence` 게이트  (Codex)  — 리뷰통과 D-009 (f2ecb50)
 **목적**: 위 두 게이트 결과 + routing 으로 감사카드 생성.
 
 **입력**: diff + TASK-001/002 결과 + `policies/approval-routing.yaml`
