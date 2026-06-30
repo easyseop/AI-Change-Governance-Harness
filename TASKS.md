@@ -71,7 +71,7 @@
 3. 파싱 실패(문법오류) 시 **예외 없이** 빈 인벤토리 + 오류표시 반환(fail-safe).
 4. 결정적 + `--json` 출력.
 
-### TASK-006 ☐ diff 헝크 ↔ 함수 매핑  (Codex)
+### TASK-006 ☑ diff 헝크 ↔ 함수 매핑  (Codex) — 리뷰통과·머지 (D-012, e5b4c2d)
 **목적**: 변경된 라인범위가 **어느 함수에 속하는지** 매핑.
 **입력**: `base..head` (git refs) + TASK-005 인벤토리
 **수용기준**:
@@ -101,6 +101,7 @@
 
 ## Phase D — 통합·테스트  *(A 완료 후)*
 - **TASK-012** 감사카드 통합 (`changed_functions[]` + verdict 반영)
+  - **🔴 AC 가드(TASK-006 리뷰 D-012 #1)**: 매핑/추출 게이트 출력의 `error`(top-level git 실패) 또는 파일별 `parse_error`(문법오류) 가 존재하면 **fail-closed** 로 처리(verdict = 최소 `approval_required`, 파괴적이면 `blocked`). **`files`/`changed_functions` 가 비었다고 "변경 없음(pass)" 으로 간주 금지.** 이유: TASK-006 은 보고용으로 하드 에러 시 exit 0 + `error` + `files:[]` 를 반환하므로(Phase A 설계), 통합측이 `error` 를 무시하면 git 실패가 *clean diff* 로 읽혀 민감 변경을 통째로 놓침(fail-open).
 - **TASK-013** Python before/after fixtures + 러너 확장
 
 ## MVP-1 공통 (MVP-0 공통 규칙에 더해)
