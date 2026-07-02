@@ -243,3 +243,45 @@ fresh git repo 에 ① **멀티라인 데코레이터** `@functools.lru_cache`+`
 3. **삭제 헝크 anchor 폴백**(`[new_start-1, new_start]`) 은 모듈레벨 삭제를 인접 함수에 **과대 귀속**할 수 있음 → 거버넌스상 **안전 방향(더 플래그)**. 삭제 함수의 added/deleted 분류는 TASK-007 책임 — 비차단.
 
 → #1 만 거버넌스 직접영향 → **TASK-012 AC 가드로 전환**(명시). #2·#3 은 후속 책임/안전방향 → 비차단. 본 태스크 AC 5/5 충족·논리 정합 → **머지 유지**.
+
+## TASK-007 `classify-python-function-changes` 리뷰 — **보정요청** (2026-07-02, D-013 / impl 0502589)
+
+> 심층·적대적 리뷰(CLAUDE.md §2B). 핵심 검증축: **🔴 AC5 동명 매칭 가드**(D-011 #5 가 신설) + 고정 적대 세트(데코레이터·동명 오버로드·조건부 def) + TASK-006 리뷰 #2 가 예고한 **status R 처리**.
+
+### 한 줄씩 읽은 핵심 로직
+- **매칭 키**(`assign_occurrence_keys`): `(정규화이름, sorted 데코레이터셋, 같은 (이름,데코셋) 그룹 내 등장순서)`. AC5 요구( 이름 단독 금지, `(이름,데코셋/라인순서)` )를 **둘 다 결합**해 충족 — property/setter 는 데코셋으로, `@overload` 다중·조건부 재정의는 순서로 분리.
+- **데코레이터 resolve**(`decorator_name`): Name/Attribute/Call/Subscript 재귀 — `@requires_auth("user")`와 `("admin")` 이 같은 키 `requires_auth` 로 유지되어 **매칭은 성립**하고, 인자 차이는 `signature_dump`(전체 `ast.dump`) 가 잡아 `signature_changed=True`. 매칭키(느슨)/변경감지(엄밀) 분리가 정확한 설계.
+- **시그니처 vs 본문**(AC2): 함수 = `(args, decorator_list dump, returns, type_comment)`, 클래스 = `(bases, keywords, decorators)` / 본문 = `body` dump. `include_attributes=False` 로 라인번호 이동은 무시(순수 위치이동 ≠ modified). 올바름.
+- **분류**(`classify_inventory_changes`): before−after 키차 = deleted, after−before = added, 교집합 중 dump 다름 = modified. 출력 정렬 고정 + `sort_keys=True` → 결정적.
+- **fallback**(AC3): 비-`.py` / status A·D / before·after parse_error → 파일 단위 `file_fallback` 레코드 + 사유 표시. `_match_key` 등 내부 필드는 `public_item` 으로 출력에서 차단(깔끔).
+- **러너**: `prepare_function_mapping_fixture` 공유 헬퍼에 "head 반영 전 work_dir 클리어 + `add -u`" 추가 — 진짜 파일삭제(D) fixture 를 위해 필요. **기존 TASK-006 케이스에 영향 없음을 10/10 PASS 로 확인.**
+
+### 적대적 검증 (픽스처 밖 fresh repo ×3 — rigged 차단)
+- **① 데코레이터 인자만 변경** `@requires_auth("user"→"admin")` → `transfer` **modified `signature_changed=True`**. ✅ 권한 상향이 함수 단위로 잡힘(거버넌스 핵심).
+- **② `@overload` 동명 3연속**(overload×2+구현): 2번째 overload 의 타입만 변경 → 해당 occurrence 만 modified(sig=True), 구현·1번째는 무변경으로 침묵. ✅
+- **③ 조건부 동명 def**(if/else 각각 `handler`): if쪽만 변경 → modified 1건만. ✅
+- **④ property/setter**(픽스처): setter 본문만 변경 → `Account.balance` modified 1건(setter)만 + 둘러싼 class modified. getter 오판 없음. ✅
+- **⑤ 결정성**: 2회 실행 md5 byte-identical. ✅
+- **⑥ 음성 검증**: `cases.yaml` 의 `signature_change` 기대 `signature_changed: true→false` 변조 → `FAIL function-classification` + `Summary: 9/10` + 러너 exit 1, 원복 10/10. ✅ 항상-PASS 아님.
+- **⑦ 불량 ref** → exit 0 + `error`+`files:[]` (TASK-006 과 동일 Phase A 설계, TASK-012 fail-closed 가드 대상). ✅
+- **⑧ 🔴 리네임(R)** — **깨짐. 아래 R-1.**
+
+### 🔴 R-1 (보정요청 사유): 리네임 1건 → 전체 리포트 소실 + 환경 의존
+fresh repo: `payments.py`→`settlement.py` 리네임+수정(`* 1.0`→`* 0.99` — 정산 로직!) + 무관한 `other.py` M 수정(`charge_fee` 도입). `git diff --name-status` = `M other.py` + `R066 payments.py settlement.py`.
+→ 게이트 출력: **`{"error": "fatal: path 'settlement.py' exists on disk, but not in '<base>'", "files": []}`** — R 레코드가 새 경로만 남긴 채 `git show base:<새경로>` 를 시도해 top-level 예외 → **`other.py` 의 분류까지 통째 소실**.
+- AC1·AC2 위반(분석 가능한 형제 M 파일 미보고), AC3 취지 위반(파일 단위 안전 스킵이 아닌 전역 붕괴), **AC4 결정성 위반**(`diff.renames` host config 에 따라 같은 입력이 정상(A+D fallback)/전체 error 로 갈림 — git 2.9+ 기본 on 이라 대부분 환경에서 발병).
+- fail-open 은 아님(top-level `error` 는 TASK-012 가드로 fail-closed) — 그러나 리네임은 흔한 입력이라 매번 감사카드가 빈손 = 게이트 목적 무력화. TASK-006 리뷰 #2 에서 "TASK-007 에서 R 별도 처리 권장" 예고까지 있었음. → **비차단으로 흘리지 않고 보정요청**(`collab/answers/A-0001.md`): `--no-renames` 명시 또는 R/C 파일 단위 fallback + 형제 파일 보존 + 회귀 픽스처.
+
+### 비차단 관찰
+1. **모듈레벨 변경 비가시**: `ADMIN_ROLE = "user"→"admin"` 만 바뀐 파일 → `function_changes: []` (fallback 아님·표식 없음). 함수 분류기의 설계상 범위 밖이고 TASK-006 이 `<module>` 매핑으로 잡는 구조 — 단 **TASK-012 가 TASK-007 출력 단독으로 "함수변경 0 = clean" 으로 읽으면 fail-open** → 거버넌스 직접영향이므로 비차단으로 흘리지 않고 **TASK-012 AC 가드 보강**(TASKS.md): 함수분류 단독 판정 금지, TASK-006 `<module>` 매핑과 병합 필수 + `fallback:true` 파일은 함수 불가시니 보수 취급.
+2. **데코레이터 전면 교체**(`@public`→`@requires_admin`) → 매칭키가 달라져 modified 아닌 **deleted+added 쌍**으로 보고. 가시성 유지(added 에 새 데코레이터 노출) → fail-open 아님. TASK-009 는 added 함수도 modified 와 동일 강도로 판정하면 자연 해소 — 관찰만.
+3. **동명 중복 첫 정의 삭제 시 귀속 모호**(occurrence-shift): before `dup#0(v1)`+`dup#1(v2)` → after `dup(v2)` 만 남으면 "`#1` deleted + `#0` modified" 로 귀속(실제는 #0 삭제·#1 생존). 위치 매칭의 본질적 모호성 — **변경 사실 자체는 절대 안 놓침(보수 방향)**. 관찰만.
+4. **`type_comment`**: `ast.parse` 가 `type_comments=True` 없이 호출되어 항상 None — signature_dump 의 dead field. 무해. 관찰만.
+5. **three-dot(`a...b`) 입력** → `split("..")` 이 `.b` 를 만들어 error(fail-closed). usage 안내 개선 여지 — 관찰만.
+
+### 보수적 개발 평가축 (COMMON-RULES §1)
+- 건드린 파일: Codex 소유 `.harness/gates/classify-python-function-changes.py`(신규 363) + `tests/*`(케이스·fixture·러너 분기 **추가만**, 공유 헬퍼 수정은 D-fixture 에 필요·기존 케이스 green) + Codex 소유 README 2곳(+3줄 목록/사용법) + 허용된 `handoff-log`·`summaries`. **Claude 소유 policy/docs/templates 무수정.**
+- 무관 리팩터·포맷 노이즈 없음. **scope-creep / over-reach 없음.**
+
+### 판정
+AC2·AC5(🔴)·결정성·fallback·음성검증 모두 실증 통과 — 구현 품질은 높다. 그러나 **R-1 이 AC1/AC3/AC4 를 흔한 입력(리네임)에서 위반**하고 형제 파일 증거까지 소실시키므로 "능동적으로 깨보려 했더니 깨졌다" = **보정요청, 머지 보류**. 국소 수정(+회귀 픽스처) 후 재제출 시 신속 재리뷰.
