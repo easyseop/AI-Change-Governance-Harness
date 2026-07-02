@@ -7,6 +7,7 @@ cd "$ROOT_DIR" || exit 1
 python3 - <<'PY'
 import json
 import os
+import shutil
 import subprocess
 import sys
 
@@ -19,6 +20,7 @@ GATES = {
     "generate-change-evidence": ".harness/gates/generate-change-evidence.py",
     "extract-python-inventory": ".harness/gates/extract-python-inventory.py",
     "map-diff-to-functions": ".harness/gates/map-diff-to-functions.py",
+    "classify-python-function-changes": ".harness/gates/classify-python-function-changes.py",
 }
 ROOT_DIR = os.getcwd()
 
@@ -42,8 +44,17 @@ def prepare_function_mapping_fixture(fixture_dir):
     run_command(["git", "-C", work_dir, "add", "."])
     run_command(["git", "-C", work_dir, "commit", "-qm", "base"])
     base = run_command(["git", "-C", work_dir, "rev-parse", "HEAD"]).stdout.strip()
+    for entry in os.listdir(work_dir):
+        if entry == ".git":
+            continue
+        entry_path = os.path.join(work_dir, entry)
+        if os.path.isdir(entry_path):
+            shutil.rmtree(entry_path)
+        else:
+            os.remove(entry_path)
     subprocess.run(["cp", "-R", f"{fixture_dir}/head/.", work_dir], check=True)
     run_command(["git", "-C", work_dir, "add", "."])
+    run_command(["git", "-C", work_dir, "add", "-u"])
     run_command(["git", "-C", work_dir, "commit", "-qm", "head"])
     head = run_command(["git", "-C", work_dir, "rev-parse", "HEAD"]).stdout.strip()
     return work_dir, f"{base}..{head}"
@@ -105,6 +116,17 @@ def case_command(case):
         ]
 
     if gate == "map-diff-to-functions":
+        work_dir, rev_range = prepare_function_mapping_fixture(data["fixture_dir"])
+        return [
+            "python3",
+            f"{ROOT_DIR}/{script}",
+            rev_range,
+            "--repo",
+            work_dir,
+            "--json",
+        ]
+
+    if gate == "classify-python-function-changes":
         work_dir, rev_range = prepare_function_mapping_fixture(data["fixture_dir"])
         return [
             "python3",
@@ -210,6 +232,39 @@ def validate_function_mapping(case, result, exit_code):
     return errors
 
 
+def validate_function_classification(case, result, exit_code):
+    expect = case["expect"]
+    errors = []
+    assert_equal(errors, "exit_code", exit_code, expect["exit_code"])
+    if result.get("error"):
+        errors.append(f"unexpected error: {result['error']}")
+        return errors
+
+    actual_files = []
+    for file_record in result.get("files", []):
+        actual_files.append(
+            {
+                "path": file_record.get("path"),
+                "status": file_record.get("status"),
+                "fallback": file_record.get("fallback"),
+                "fallback_reason": file_record.get("fallback_reason"),
+                "parse_error_present": bool(file_record.get("parse_error")),
+                "function_changes": [
+                    {
+                        "name": change.get("name"),
+                        "type": change.get("type"),
+                        "change_type": change.get("change_type"),
+                        "signature_changed": change.get("signature_changed"),
+                        "body_changed": change.get("body_changed"),
+                    }
+                    for change in file_record.get("function_changes", [])
+                ],
+            }
+        )
+    assert_equal(errors, "files", actual_files, expect["files"])
+    return errors
+
+
 def main():
     with open("tests/cases.yaml", "r", encoding="utf-8") as stream:
         cases = yaml.safe_load(stream)["cases"]
@@ -228,6 +283,8 @@ def main():
                 errors = validate_inventory(case, result, completed.returncode)
             elif case["gate"] == "map-diff-to-functions":
                 errors = validate_function_mapping(case, result, completed.returncode)
+            elif case["gate"] == "classify-python-function-changes":
+                errors = validate_function_classification(case, result, completed.returncode)
             else:
                 errors = validate_json_gate(case, result, completed.returncode)
         except Exception as error:
