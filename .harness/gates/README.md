@@ -10,5 +10,8 @@ MVP-0 에서 만들 게이트:
 | `check-change-intent.py` | TASK-001 | diff 가 change-intent 의도 범위 밖/forbidden 을 건드렸나 |
 | `check-sensitive-zones.py` | TASK-002 | diff 가 민감 경로(frozen/protected/watched)를 건드렸나 |
 | `generate-change-evidence.py` | TASK-003 | 위 결과+routing 으로 변경 감사카드 생성 |
+| `extract-python-inventory.py` | TASK-005 | Python 함수/클래스 인벤토리 추출 |
+| `map-diff-to-functions.py` | TASK-006 | git diff 헝크를 after 버전 함수/클래스에 매핑 |
+| `classify-python-function-changes.py` | TASK-007 | before/after 함수 변경을 added/modified/deleted 로 분류 |
 
 종료코드 약속: **0 통과 / 1 차단 / 2 승인필요**. 결정적(추정·LLM 금지).
