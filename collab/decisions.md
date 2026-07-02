@@ -121,3 +121,19 @@ D-005 의 운영 세부. **Codex 는 개발만**(자기 머지 금지). main 머
 보수성: 델타가 A-0001 요구에 정확히 국소. Claude 소유 무수정, scope-creep/over-reach 없음.
 **머지 판정(D-007)**: 분석 전용 게이트(verdict·차단 없음, exit 0 보고용)·테스트 하네스 — 정산·인증/인가·암호화·DB migration·infra 미접촉 → **비민감**(TASK-005/006 동일 범주). 구현자(Codex)≠머지자(Claude) → **Claude 가 main 머지·push.**
 상세: `review-notes.md` TASK-007 재리뷰 절.
+
+## D-015 (2026-07-02) TASK-013 분류 회귀 가드 — **보정요청** (map 게이트 비-UTF8 격리 미달), 머지 보류
+대상 impl: `fb7a098`(브랜치 `codex/2026-07-02-task013-classification-regressions`, 헤드 `824502d`). D-014 에서 신설한 AC 가드 2건(순수 리네임 회귀 + 파일 단위 오류 격리) 구현. **보정요청 → `collab/answers/A-0002.md`. 머지 보류.**
+**통과 실증 (classify 측 — 재검증 불요)**:
+- 스위트 **10/10 PASS**·exit 0(브랜치 워크트리 실측).
+- **AC 가드 #1 (pure-rename) 유효**: `pure_rename_source↔target` byte-identical(`def renamed_only`) 확인 → 게이트 `--no-renames` 제거 시 `R100` 단일 레코드 붕괴(host `diff.renames` unset=git 기본 on) → **스위트 9/10 FAIL**(음성검증 성립). 구 `renamed_*` 픽스처는 --no-renames 제거해도 D+A 유지(=무력) → 새 pure-rename 만이 실효 가드임 실증.
+- **classify 비-UTF8 격리 유효**(픽스처 밖 fresh repo, `sibling.py` 정상 M + `bad.py` latin-1 `0xe9` M): **구 게이트(main)=`error`+`files:[]` 붕괴 재현 / 신 게이트=`sibling transfer:modified` 보존 + `bad→fallback:unreadable`, 전역 error 없음.** classify 는 전범위 패치 미독해(name-status+per-file `show`)라 `:276/285` 감싼 위치 정확.
+**🔴 R-1 (보정 사유) — map 게이트 비-UTF8 붕괴 잔존 (AC 가드 #2 미달)**:
+- 브랜치는 `map-diff-to-functions.py:260` `source_at_ref(head,...)` 를 감쌌으나, 비-UTF8 M 파일 붕괴는 **그 이전 `:238` `git diff --unified=0`(전범위 패치)** 에서 발생 — 패치 본문의 `0xe9` 바이트 → `run_git`(text=True strict) `UnicodeDecodeError` → per-file 루프 진입 전 top-level except → **`error`+`files:[]` 전역 붕괴.** `:260` wrap 은 도달 불가 = 死코드. **map 은 fix 전후 동작 무변화**(fresh repo 실측: classify `files=2` 보존 / map `error, files=0`).
+- **`:238` 만 바이트-관용(surrogateescape) 디코드로 바꾸면 붕괴 해소 실증**: `sibling→transfer` 보존 + `bad→parse_error`+`<module>`(이 경우 `:260` wrap 가 파일 단위로 정상 격리). → 결함 근원이 `:238` 임 확정.
+- **거버넌스 직접 구멍**: 단일 비-UTF8 `.py` 하나가 map 리포트 전체 `files:[]` → 형제 파일(인증/정산 함수 포함 가능) 함수 매핑 전량 소실 = D-013 R-1 동류. §2B 필수 질문 → 비차단 불가.
+- **테스트 위양성**: `function-mapping` 픽스처는 `sample.py`(UTF-8) 하나뿐 → map 가드 **미실행**. 비-UTF8 케이스는 `function-classification` 픽스처에만 추가됨. 10/10 은 map 가드를 증명 못 함.
+**요구 수정(최소)**: ① `:238`(필요 시 `:237`) 전범위 diff 읽기 바이트-관용화(surrogateescape/replace) **또는** 파일 단위 `diff -- <path>` + 파일별 try/except → 형제 매핑 보존·실패 파일만 `<module>` 격리. ② `function-mapping` 픽스처에 비-UTF8+동반 정상 M 회귀 케이스 추가 + "격리 제거→FAIL" 음성검증(가드 미검증 방지).
+보수성: 델타는 AC 가드 요구에 국소, Claude 소유 무수정, scope-creep 없음 — 품질 자체는 양호하나 map 한 곳 국소 결함으로 반려.
+**머지 판정(D-007): 보류** — 보정요청이므로 머지 안 함. (변경 자체는 분석 전용 게이트로 비민감 범주 — 보정 후 통과 시 Claude 머지 예정.)
+상세: `collab/answers/A-0002.md`, `review-notes.md` TASK-013 절.
