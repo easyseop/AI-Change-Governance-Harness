@@ -106,3 +106,18 @@ D-005 의 운영 세부. **Codex 는 개발만**(자기 머지 금지). main 머
 **비차단 관찰 → 차기 AC 가드 1건**: **모듈레벨 변경 비가시**(`ADMIN_ROLE="user"→"admin"` → `function_changes:[]`, 표식 없음)는 함수 분류기 설계상 범위 밖(TASK-006 `<module>` 매핑 몫)이나, TASK-012 가 TASK-007 출력 **단독**으로 "함수변경 0 = clean" 으로 읽으면 fail-open → **TASK-012 AC 가드 보강**(TASKS.md): 함수분류 단독 판정 금지·TASK-006 `<module>` 매핑과 병합 필수·`fallback:true` 파일 보수 취급. 기타 비차단(데코레이터 전면교체=deleted+added 쌍(가시성 유지), occurrence-shift 귀속 모호(변경은 안 놓침·보수 방향), dead `type_comment`, three-dot 입력 error)은 `review-notes.md`.
 보수성: 순수 추가 + Codex 소유 README 갱신만, 공유 러너 헬퍼 수정은 D-fixture 에 필요하며 기존 케이스 green. **Claude 소유 무수정, scope-creep 없음.**
 **머지 판정(D-007): 보류** — 보정요청이므로 머지하지 않음. (변경 자체는 분석 전용 게이트로 비민감 범주 — 보정 후 통과 시 Claude 머지 예정.)
+
+## D-014 (2026-07-02) TASK-007 함수 변경 분류 — 재리뷰 **통과** + Claude 머지
+대상 impl: `2243173`(브랜치 `codex/2026-07-02-task007-rename-fix`, 헤드 `25b80f1`). D-013/A-0001(R-1) 보정 재제출. **MVP-1 Phase A 3/3 게이트 완료.**
+**재제출 형식**: A-0001 은 "같은 브랜치에 커밋 추가"였으나 Codex 는 최신 main(e673412) 기준 새 브랜치로 재제출 — 리뷰 기록이 main 에 머지된 상태라 합리적 이탈로 수용하되, **이전 리뷰본(0502589) 대비 전체 트리 diff 로 델타 동일성 검증**: 게이트 +7줄(`--no-renames` 명시 + R/C 파일 단위 fallback 방어 분기) + 회귀 픽스처 4파일 + cases.yaml 기대값 — **그 외 D-013 에서 실증 검증한 코드와 byte-identical.**
+**R-1 수정 실증** (전부 fresh repo, 픽스처 밖):
+- 재현→수정: `git mv payments.py settlement.py`+수정(R091)+형제 `other.py` M — **구 게이트 = `error`+`files:[]` 붕괴 재현 / 신 게이트 = 형제 분류 보존**(`charge_fee_stub added`·`helper modified`), 리네임 쌍 D/A fallback, 전역 error 없음.
+- 환경 의존 제거: `diff.renames=true/false` 출력 **md5 동일** + 2회 실행 md5 동일(AC4).
+- 스위트 10/10 PASS·exit 0 + 음성검증(`companion` 기대 변조 → FAIL·9/10·exit 1, 원복 10/10).
+- 고정 적대 세트 재실행(CLAUDE.md §2B): `@requires_auth("user"→"admin")` → `secure modified signature_changed=True`, property/setter·`@overload`×3·조건부 동명 def 전부 정확.
+**재리뷰 신규 발견 2건 — 비차단, TASK-013 AC 가드로 명시적 차단**(비차단 판정 전 필수 질문 적용: 현행 동작 정확·fail-closed 보수 방향, 직접 구멍 아님):
+1. **회귀 픽스처 무력**: 픽스처 리네임(초소형 파일+내용 수정)은 git 유사도 감지에 안 걸려 renames 환경에서도 D+A → 구 게이트도 통과하고 **`--no-renames` 제거해도 10/10 PASS(실증)** = 회귀를 못 잡음. A-0001 문면은 충족(내 요구서가 감지 조건 미명시) → TASK-013 AC 가드: **순수 리네임(내용 동일) 쌍 추가**(크기 무관 R100 항상 감지 — 실증) + 플래그 제거 음성검증.
+2. **비-UTF8 소스 전역 붕괴(R-1 동류)**: latin-1 등 디코드 불가 `.py` 1건 → `UnicodeDecodeError` → `error`+`files:[]` 형제 소실(실증). 희귀 입력 + TASK-012 fail-closed 로 fail-open 아님 → TASK-013 AC 가드: 파일별 예외를 파일 단위 fallback 으로 격리 + 픽스처 고정.
+보수성: 델타가 A-0001 요구에 정확히 국소. Claude 소유 무수정, scope-creep/over-reach 없음.
+**머지 판정(D-007)**: 분석 전용 게이트(verdict·차단 없음, exit 0 보고용)·테스트 하네스 — 정산·인증/인가·암호화·DB migration·infra 미접촉 → **비민감**(TASK-005/006 동일 범주). 구현자(Codex)≠머지자(Claude) → **Claude 가 main 머지·push.**
+상세: `review-notes.md` TASK-007 재리뷰 절.
