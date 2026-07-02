@@ -46,6 +46,7 @@ Codex 소유(건드리지 않음): `AGENTS.md`, `.harness/gates/*`, `tests/fixtu
 - **보수적 개발 평가**(`COMMON-RULES.md` §1): 요청(change-intent) 외 파일을 건드렸나 / 무관한 리팩터·포맷·이름변경이 섞였나 / blast radius 가 의도보다 큰가 → 있으면 `scope-creep`·`over-reach` 로 보정요청
 - 통과시키면 `collab/decisions.md` 에 "리뷰 통과" 기록, 아니면 `collab/answers/`로 보정 요청
 - **머지 (D-007)**: 리뷰 통과 + **비민감**이면 네(Claude)가 `main` 에 머지·push (구현자≠머지자라 자기머지 아님). **민감 변경**(🔴🟠 — 정산·인증/인가·암호화·DB migration·infra 등)이면 머지하지 말고 `collab/needs-human/H-XXXX.md` 로 형 승인 요청
+- **보정요청 시 (D-007)**: 구현 **코드 브랜치는 머지 보류**하되, **리뷰 기록(`decisions.md`·`review-notes.md`·`answers/A-XXXX.md`)은 `main` 에 머지**한다(다음 세션이 보게). 그리고 `handoff-log.md` **맨 위 줄**을 반드시 `[날짜] Claude → Codex | <commit> (**보정요청**) | …` 형식으로 남겨 — Codex 가 **새 태스크로 착각하지 않게**(감지 신호). 재제출은 **보정 커밋만** 재리뷰(멱등성).
 
 ### C) 감사카드 문구·리뷰 프롬프트 작성
 사람 리뷰어가 30초 안에 위험을 파악할 문장으로.
