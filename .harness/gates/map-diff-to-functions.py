@@ -18,18 +18,19 @@ def normalize_path(path):
     return str(PurePosixPath(path.replace("\\", "/")))
 
 
-def run_git(args, repo="."):
+def run_git(args, repo=".", errors="strict"):
     result = subprocess.run(
         ["git", *args],
         check=False,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        text=True,
         cwd=repo,
     )
+    stdout = result.stdout.decode("utf-8", errors=errors)
+    stderr = result.stderr.decode("utf-8", errors="replace")
     if result.returncode != 0:
-        raise RuntimeError(result.stderr.strip() or f"git {' '.join(args)} failed")
-    return result.stdout
+        raise RuntimeError(stderr.strip() or f"git {' '.join(args)} failed")
+    return stdout
 
 
 def split_rev_range(rev_range):
@@ -235,7 +236,9 @@ def map_diff_to_functions(rev_range, repo="."):
     base_commit = run_git(["rev-parse", base], repo).strip()
     head_commit = run_git(["rev-parse", head], repo).strip()
     status_by_path = parse_name_status(run_git(["diff", "--name-status", rev_range], repo))
-    hunks_by_path = parse_diff_hunks(run_git(["diff", "--unified=0", rev_range], repo))
+    hunks_by_path = parse_diff_hunks(
+        run_git(["diff", "--unified=0", rev_range], repo, errors="surrogateescape")
+    )
 
     files = []
     for path in sorted(status_by_path):
@@ -257,7 +260,14 @@ def map_diff_to_functions(rev_range, repo="."):
             files.append(file_record)
             continue
 
-        inventory = extract_inventory(source_at_ref(head, path, repo), path)
+        try:
+            inventory = extract_inventory(source_at_ref(head, path, repo), path)
+        except (RuntimeError, UnicodeDecodeError, UnicodeEncodeError) as error:
+            inventory = {
+                "source": path,
+                "items": [],
+                "parse_error": f"unreadable source: {error}",
+            }
         file_record["parse_error"] = inventory["parse_error"]
         touched_for_file = []
         for hunk in hunks_by_path.get(path, []):
