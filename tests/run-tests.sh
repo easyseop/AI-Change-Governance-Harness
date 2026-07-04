@@ -21,6 +21,7 @@ GATES = {
     "extract-python-inventory": ".harness/gates/extract-python-inventory.py",
     "map-diff-to-functions": ".harness/gates/map-diff-to-functions.py",
     "classify-python-function-changes": ".harness/gates/classify-python-function-changes.py",
+    "extract-gov-annotations": ".harness/gates/extract-gov-annotations.py",
 }
 ROOT_DIR = os.getcwd()
 
@@ -108,6 +109,14 @@ def case_command(case):
         return command
 
     if gate == "extract-python-inventory":
+        return [
+            "python3",
+            script,
+            data["source_file"],
+            "--json",
+        ]
+
+    if gate == "extract-gov-annotations":
         return [
             "python3",
             script,
@@ -265,6 +274,46 @@ def validate_function_classification(case, result, exit_code):
     return errors
 
 
+def annotation_summary(annotation):
+    return {
+        "name": annotation.get("name"),
+        "type": annotation.get("type"),
+        "order_key": annotation.get("order_key"),
+        "level": annotation.get("level"),
+        "effective_level": annotation.get("effective_level"),
+        "errors": annotation.get("errors"),
+        "unresolved": annotation.get("unresolved"),
+        "decorators": annotation.get("decorators"),
+    }
+
+
+def validate_gov_annotations(case, result, exit_code):
+    expect = case["expect"]
+    errors = []
+    assert_equal(errors, "exit_code", exit_code, expect["exit_code"])
+
+    if "parse_error_present" in expect:
+        assert_equal(errors, "parse_error_present", bool(result.get("parse_error")), expect["parse_error_present"])
+    if "unreadable_present" in expect:
+        assert_equal(errors, "unreadable_present", bool(result.get("unreadable")), expect["unreadable_present"])
+    if "module" in expect:
+        assert_equal(errors, "module", result.get("module"), expect["module"])
+
+    if expect.get("deterministic_md5"):
+        first = run_command(case_command(case)).stdout
+        second = run_command(case_command(case)).stdout
+        assert_equal(errors, "deterministic_stdout", first, second)
+
+    if "annotations" in expect:
+        actual = [annotation_summary(annotation) for annotation in result.get("annotations", [])]
+        assert_equal(errors, "annotations", actual, expect["annotations"])
+
+    if "annotation_count" in expect:
+        assert_equal(errors, "annotation_count", len(result.get("annotations", [])), expect["annotation_count"])
+
+    return errors
+
+
 def main():
     with open("tests/cases.yaml", "r", encoding="utf-8") as stream:
         cases = yaml.safe_load(stream)["cases"]
@@ -285,6 +334,8 @@ def main():
                 errors = validate_function_mapping(case, result, completed.returncode)
             elif case["gate"] == "classify-python-function-changes":
                 errors = validate_function_classification(case, result, completed.returncode)
+            elif case["gate"] == "extract-gov-annotations":
+                errors = validate_gov_annotations(case, result, completed.returncode)
             else:
                 errors = validate_json_gate(case, result, completed.returncode)
         except Exception as error:
