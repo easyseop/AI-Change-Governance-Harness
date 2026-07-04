@@ -92,6 +92,28 @@ def source_at_ref(ref, path, repo):
     return run_git(["show", f"{ref}:{path}"], repo)
 
 
+def path_exists_at_ref(ref, path, repo):
+    result = subprocess.run(
+        ["git", "cat-file", "-e", f"{ref}:{path}"],
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        cwd=repo,
+    )
+    return result.returncode == 0
+
+
+def absent_annotation_result(path):
+    return {
+        "path": path,
+        "module": None,
+        "annotations": [],
+        "parse_error": False,
+        "unreadable": None,
+        "absent": True,
+    }
+
+
 def extract_annotations_at_ref(ref, path, repo):
     try:
         source = source_at_ref(ref, path, repo)
@@ -305,12 +327,12 @@ def evaluate_candidate(candidate, base_result, head_result, policy):
     return records
 
 
-def fail_closed_record(path, reason, level="protected"):
+def fail_closed_record(path, reason, level="protected", side="head"):
     return {
         "path": path,
         "name": "<file>",
         "level": level,
-        "side": "head",
+        "side": side,
         "reason": reason,
         "errors": ["fail_closed"],
     }
@@ -386,6 +408,7 @@ def check_function_gov_level(rev_range, sensitive_zones, repo="."):
         errors.append(
             {"gate": "classify-python-function-changes", "error": classification["error"]}
         )
+    upstream_errors = list(errors)
 
     candidates = unique_candidates(
         changed_candidates_from_map(mapping) + changed_candidates_from_classification(classification)
@@ -394,10 +417,20 @@ def check_function_gov_level(rev_range, sensitive_zones, repo="."):
     records = []
 
     for path in paths:
-        base_result = extract_annotations_at_ref(base, path, repo)
-        head_result = extract_annotations_at_ref(head, path, repo)
+        base_exists = path_exists_at_ref(base, path, repo)
+        head_exists = path_exists_at_ref(head, path, repo)
+        base_result = (
+            extract_annotations_at_ref(base, path, repo)
+            if base_exists
+            else absent_annotation_result(path)
+        )
+        head_result = (
+            extract_annotations_at_ref(head, path, repo)
+            if head_exists
+            else absent_annotation_result(path)
+        )
 
-        if parse_failed(base_result):
+        if base_exists and parse_failed(base_result):
             errors.append(
                 {
                     "path": path,
@@ -405,7 +438,14 @@ def check_function_gov_level(rev_range, sensitive_zones, repo="."):
                     "error": base_result.get("parse_error") or base_result.get("unreadable"),
                 }
             )
-        if parse_failed(head_result):
+            records.append(
+                fail_closed_record(
+                    path,
+                    "base file could not be parsed before the change",
+                    side="base",
+                )
+            )
+        if head_exists and parse_failed(head_result):
             errors.append(
                 {
                     "path": path,
@@ -413,12 +453,30 @@ def check_function_gov_level(rev_range, sensitive_zones, repo="."):
                     "error": head_result.get("parse_error") or head_result.get("unreadable"),
                 }
             )
-            if sensitive_levels_in_result(base_result, policy):
-                base_level = strongest_level(sensitive_levels_in_result(base_result, policy), policy)
+            base_sensitive_levels = sensitive_levels_in_result(base_result, policy)
+            base_level = strongest_level(base_sensitive_levels, policy)
+            records.append(
+                fail_closed_record(
+                    path,
+                    "head file could not be parsed after the change",
+                    level=base_level or "protected",
+                )
+            )
+        if not head_exists:
+            base_sensitive_levels = sensitive_levels_in_result(base_result, policy)
+            if base_sensitive_levels:
+                base_level = strongest_level(base_sensitive_levels, policy)
+                errors.append(
+                    {
+                        "path": path,
+                        "side": "head",
+                        "error": "file absent after the change",
+                    }
+                )
                 records.append(
                     fail_closed_record(
                         path,
-                        "base had frozen/protected @gov annotation but head could not be parsed",
+                        "base had frozen/protected @gov annotation but head file is absent",
                         level=base_level or "protected",
                     )
                 )
@@ -426,7 +484,7 @@ def check_function_gov_level(rev_range, sensitive_zones, repo="."):
         for candidate in [item for item in candidates if item["path"] == path]:
             records.extend(evaluate_candidate(candidate, base_result, head_result, policy))
 
-    if errors and not records:
+    if upstream_errors:
         records.append(fail_closed_record("<unknown>", "upstream function analysis failed"))
 
     verdict, exit_code, frozen_touched, protected_touched, watched_touched = classify_records(
