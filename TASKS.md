@@ -113,6 +113,7 @@
 - **🔴 AC 가드(D-017 #2) — fail-closed 연동**: base 에 frozen/protected 주석 있던 파일이 head 에서 `parse_error`/`unreadable` → 최소 `approval_required` (TASK-012 "빈 결과 ≠ clean" 가드와 정합).
 - 변경 함수에 invalid/`unresolved` 주석 → 최소 `approval_required` (조용히 pass 금지). errors 비어있지 않은 주석(`duplicate` 포함)도 동일 취급.
 - **join 키 주의(D-018 관찰 #5)**: TASK-008 `order_key`(같은 이름 내 전 def 등장순서)와 TASK-007 `_match_key` occurrence(`(이름, 데코셋)` 내 순서)는 **동일하지 않다**(setter 실측: 전자 1, 후자 0). order_key 끼리 join 금지 — **`(path, name, TASK-008 def_line ↔ TASK-007 after start_line)`** 으로 join 한다.
+- **🔴 AC 가드(D-020/A-0005) — 분석-불능 파일 per-path fail-closed (동반 레코드에 꺼지면 안 됨)**: ① head 에 **존재하는** 변경 `.py` 가 `parse_error`/`unreadable` → **다른 레코드 유무와 무관하게** 그 파일에 fail-closed 레코드(base 민감 시 base 최강 레벨, 아니면 `protected`) — 전역 "errors 있고 records 없을 때만" 조건 금지(watched 1건 동반으로 pass 세탁 실증). ② base 에 **존재했던** 변경 `.py` 의 base 측 불능(head 가독 여부 무관) → 최소 `protected` fail-closed(base 주석 은닉 → head 재인코딩·주석 제거 세탁 실증). ③ head **부재**(삭제/리네임 소스)는 구분: base 가독·비민감 → 통과 허용(과차단 방지), base 가독·민감 → base 최강 레벨(D-017 #2), base 불능 → `protected`. 존재/부재 판별은 결정적으로(에러 메시지 문자열 파싱 금지). ④ map/classify top-level `error` → records 유무 무관 최소 `approval_required`. 회귀 픽스처: unreadable-head/base-laundering(watched 동반 → approval)·plain-delete-pass + "fail-closed 무력화 → FAIL" 음성검증.
 
 ## Phase C — 신규 능력 감지  *(A 완료 후)*
 - **TASK-010** `sensitive-capabilities` catalog 설계 + 능력 추출 (Claude 설계 → Codex)
