@@ -59,6 +59,11 @@ def duplicate_gov():
     return True
 
 
+@gov(level="frozen", level="watched", reason="duplicate field")
+def duplicate_field_gov():
+    return True
+
+
 @gov(level="critical", reason="bad level")
 def invalid_level_case():
     return True

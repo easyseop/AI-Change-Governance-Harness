@@ -415,6 +415,14 @@ cases:
           errors: [duplicate]
           unresolved: false
           decorators: [gov, gov]
+        - name: duplicate_field_gov
+          type: function
+          order_key: 0
+          level: frozen
+          effective_level: frozen
+          errors: [duplicate]
+          unresolved: false
+          decorators: [gov]
         - name: invalid_level_case
           type: function
           order_key: 0
@@ -469,6 +477,69 @@ cases:
         errors: []
       annotations:
         - name: module_touched
+          type: function
+          order_key: 0
+          level: null
+          effective_level: protected
+          errors: []
+          unresolved: false
+          decorators: []
+
+  - name: gov-annotations-module-duplicate
+    gate: extract-gov-annotations
+    input:
+      source_file: tests/fixtures/gov-annotations/module_duplicate.py
+    expect:
+      exit_code: 0
+      module:
+        level: frozen
+        reason: duplicate level field
+        line: 1
+        errors: [invalid_module_gov]
+      annotations:
+        - name: module_duplicate_touched
+          type: function
+          order_key: 0
+          level: null
+          effective_level: frozen
+          errors: []
+          unresolved: false
+          decorators: []
+
+  - name: gov-annotations-module-annassign
+    gate: extract-gov-annotations
+    input:
+      source_file: tests/fixtures/gov-annotations/module_annassign.py
+    expect:
+      exit_code: 0
+      module:
+        level: frozen
+        reason: annotated module gov
+        line: 1
+        errors: []
+      annotations:
+        - name: module_annassign_touched
+          type: function
+          order_key: 0
+          level: null
+          effective_level: frozen
+          errors: []
+          unresolved: false
+          decorators: []
+
+  - name: gov-annotations-module-invalid-binding
+    gate: extract-gov-annotations
+    input:
+      source_file: tests/fixtures/gov-annotations/module_invalid_binding.py
+    expect:
+      exit_code: 0
+      module:
+        level: protected
+        reason: null
+        line: 2
+        errors: [invalid_module_gov]
+      annotations:
+        - name: module_invalid_binding_touched
           type: function
           order_key: 0
           level: null

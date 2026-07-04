@@ -77,6 +77,8 @@ def parse_gov_call(decorator):
         parsed["unresolved"] = True
 
     seen_fields = set()
+    level_values = []
+    level_field_seen = False
     for keyword in call.keywords:
         if keyword.arg is None:
             parsed["errors"].append("invalid_syntax")
@@ -84,12 +86,12 @@ def parse_gov_call(decorator):
             continue
 
         field = keyword.arg
+        if field == "level":
+            level_field_seen = True
         value = literal_string(keyword.value)
         if value is None:
             parsed["errors"].append("unresolved")
             parsed["unresolved"] = True
-            if field == "level":
-                parsed["level"] = DEFAULT_INVALID_LEVEL
             continue
 
         if field in seen_fields:
@@ -99,18 +101,21 @@ def parse_gov_call(decorator):
         if field == "level":
             if value not in LEVEL_RANK:
                 parsed["errors"].append("invalid_level")
-                parsed["level"] = DEFAULT_INVALID_LEVEL
             else:
-                parsed["level"] = value
+                level_values.append(value)
         elif field == "reason":
-            parsed["reason"] = value
+            if parsed["reason"] is None:
+                parsed["reason"] = value
         elif field == "owner":
-            parsed["owner"] = value
+            if parsed["owner"] is None:
+                parsed["owner"] = value
         else:
             parsed["errors"].append("unknown_field")
 
+    parsed["level"] = strongest_level(level_values)
     if parsed["level"] is None:
-        parsed["errors"].append("missing_level")
+        if not level_field_seen:
+            parsed["errors"].append("missing_level")
         parsed["level"] = DEFAULT_INVALID_LEVEL
 
     if not parsed["reason"]:
@@ -177,6 +182,9 @@ def parse_module_gov_value(value, line):
         parsed["level"] = DEFAULT_INVALID_LEVEL
         return parsed
 
+    seen_fields = set()
+    level_values = []
+    level_field_seen = False
     for key_node, value_node in zip(value.keys, value.values):
         key = dict_string_value(key_node)
         val = dict_string_value(value_node)
@@ -185,20 +193,28 @@ def parse_module_gov_value(value, line):
             parsed["unresolved"] = True
             continue
         if key == "level":
+            level_field_seen = True
+        if key in seen_fields:
+            parsed["errors"].append("invalid_module_gov")
+        seen_fields.add(key)
+        if key == "level":
             if val in LEVEL_RANK:
-                parsed["level"] = val
+                level_values.append(val)
             else:
                 parsed["errors"].append("invalid_level")
-                parsed["level"] = DEFAULT_INVALID_LEVEL
         elif key == "reason":
-            parsed["reason"] = val
+            if parsed["reason"] is None:
+                parsed["reason"] = val
         elif key == "owner":
-            parsed["owner"] = val
+            if parsed["owner"] is None:
+                parsed["owner"] = val
         else:
             parsed["errors"].append("unknown_field")
 
+    parsed["level"] = strongest_level(level_values)
     if parsed["level"] is None:
-        parsed["errors"].append("missing_level")
+        if not level_field_seen:
+            parsed["errors"].append("missing_level")
         parsed["level"] = DEFAULT_INVALID_LEVEL
     if not parsed["reason"]:
         parsed["errors"].append("missing_reason")
@@ -206,21 +222,64 @@ def parse_module_gov_value(value, line):
     return parsed
 
 
+def target_contains_module_gov(target):
+    if isinstance(target, ast.Name):
+        return target.id == "__gov__"
+    if isinstance(target, (ast.Tuple, ast.List)):
+        return any(target_contains_module_gov(element) for element in target.elts)
+    return False
+
+
+def is_formal_module_gov_statement(statement):
+    if isinstance(statement, ast.Assign):
+        return (
+            len(statement.targets) == 1
+            and isinstance(statement.targets[0], ast.Name)
+            and statement.targets[0].id == "__gov__"
+        )
+    if isinstance(statement, ast.AnnAssign):
+        return (
+            statement.value is not None
+            and isinstance(statement.target, ast.Name)
+            and statement.target.id == "__gov__"
+        )
+    return False
+
+
 def module_gov(tree):
     assignments = []
+    formal_statement_ids = set()
+    invalid_binding_lines = []
     for statement in tree.body:
-        if not isinstance(statement, ast.Assign):
-            continue
-        if len(statement.targets) != 1:
-            continue
-        target = statement.targets[0]
-        if isinstance(target, ast.Name) and target.id == "__gov__":
+        if is_formal_module_gov_statement(statement):
+            formal_statement_ids.add(id(statement))
             assignments.append(parse_module_gov_value(statement.value, statement.lineno))
+
+    for node in ast.walk(tree):
+        if id(node) in formal_statement_ids:
+            continue
+        if isinstance(node, ast.Assign):
+            if any(target_contains_module_gov(target) for target in node.targets):
+                invalid_binding_lines.append(node.lineno)
+        elif isinstance(node, ast.AnnAssign):
+            if target_contains_module_gov(node.target):
+                invalid_binding_lines.append(node.lineno)
+        elif isinstance(node, ast.AugAssign):
+            if target_contains_module_gov(node.target):
+                invalid_binding_lines.append(node.lineno)
+        elif isinstance(node, ast.NamedExpr):
+            if target_contains_module_gov(node.target):
+                invalid_binding_lines.append(node.lineno)
+
+    for line in invalid_binding_lines:
+        invalid = empty_annotation(line, ["invalid_module_gov"])
+        invalid["level"] = DEFAULT_INVALID_LEVEL
+        assignments.append(invalid)
 
     if not assignments:
         return None
     merged = merge_gov_annotations(assignments)
-    if len(assignments) > 1:
+    if len(assignments) > 1 or invalid_binding_lines:
         merged["errors"].append("invalid_module_gov")
         merged["errors"] = sorted(set(merged["errors"]))
     return merged
