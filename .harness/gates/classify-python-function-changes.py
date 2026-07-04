@@ -17,12 +17,13 @@ def run_git(args, repo="."):
         check=False,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        text=True,
         cwd=repo,
     )
+    stdout = result.stdout.decode("utf-8")
+    stderr = result.stderr.decode("utf-8", errors="replace")
     if result.returncode != 0:
-        raise RuntimeError(result.stderr.strip() or f"git {' '.join(args)} failed")
-    return result.stdout
+        raise RuntimeError(stderr.strip() or f"git {' '.join(args)} failed")
+    return stdout
 
 
 def split_rev_range(rev_range):
@@ -273,7 +274,15 @@ def classify_file(path, status, base, head, repo):
     if status.startswith(("R", "C")):
         return fallback_file(path, status, "renamed_or_copied")
 
-    before_inventory = extract_inventory(source_at_ref(base, path, repo), path)
+    try:
+        before_inventory = extract_inventory(source_at_ref(base, path, repo), path)
+    except (RuntimeError, UnicodeDecodeError, UnicodeEncodeError) as error:
+        return fallback_file(
+            path,
+            status,
+            "unreadable",
+            {"before": str(error), "after": None},
+        )
     if before_inventory["parse_error"]:
         return fallback_file(
             path,
@@ -282,7 +291,15 @@ def classify_file(path, status, base, head, repo):
             {"before": before_inventory["parse_error"], "after": None},
         )
 
-    after_inventory = extract_inventory(source_at_ref(head, path, repo), path)
+    try:
+        after_inventory = extract_inventory(source_at_ref(head, path, repo), path)
+    except (RuntimeError, UnicodeDecodeError, UnicodeEncodeError) as error:
+        return fallback_file(
+            path,
+            status,
+            "unreadable",
+            {"before": None, "after": str(error)},
+        )
     if after_inventory["parse_error"]:
         return fallback_file(
             path,
