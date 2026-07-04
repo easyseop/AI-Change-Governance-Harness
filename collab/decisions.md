@@ -154,3 +154,17 @@ D-005 의 운영 세부. **Codex 는 개발만**(자기 머지 금지). main 머
 **하류 가드 신설(TASK-009 AC, TASKS.md 반영)**: ① **주석 제거 우회 방지** — 판정은 base ∪ head 양측 max(같은 PR 에서 `@gov(frozen)` 삭제+본문 수정 우회 차단) ② base 에 frozen/protected 주석 있던 파일이 head unreadable/parse_error → 최소 approval_required (fail-closed).
 **머지 판정(D-007)**: 협업 문서 전용(질문·인계·요약) — 비민감. 구현자(Codex)≠머지자(Claude) → **Claude 가 main 머지·push.** Q-0001 은 answered 로 전환. 다음: Codex 는 A-0003 계약대로 **TASK-008 구현 진행 가능**.
 상세: `collab/answers/A-0003.md`, `review-notes.md` TASK-008 질문 리뷰 절.
+
+## D-018 (2026-07-04) TASK-008 `@gov` 주석 추출 게이트 — **보정요청** (중복 level last-wins 다운그레이드 + `__gov__` 비정식 형태 silent drop), 머지 보류
+대상 impl: `787a47d`(브랜치 `codex/2026-07-04-task008-gov-annotations`, 헤드 `2fa3635`) — `.harness/gates/extract-gov-annotations.py` + `tests/fixtures/gov-annotations/` + 러너 확장. **보정요청 → `collab/answers/A-0004.md`. 머지 보류.**
+**통과 실증 (재검증 불요)**: 스위트 14/14 PASS·exit 0 + 결정성 md5 동일 + **음성검증 3종**(기대 effective_level 변조 → 13/14 / stricter-wins 승계 제거 → 12/14 / order_key 카운팅 무력화 → 13/14 — 픽스처가 승계·동명 부착 모두 실가드) + **고정 적대 세트**(setter-만-주석 order_key 1·overload·조건부/중첩 def) 정확 + **fresh 적대 입력 7종**(bare `@gov`→protected 보수 / `__gov__` 재할당 frozen→watched 시도→frozen 유지+기록 / 모듈+클래스+중첩 3계층 승계 frozen / `*.gov` attribute 인식 / `**kw`·bytes·f-string→unresolved 보수 / fresh 비-UTF8→unreadable 격리 / stdin 정상). 보수성 OK(신규 게이트·테스트만, Claude 소유 무접촉, 커밋 §3 준수).
+**🔴 R-1 (보정 사유) — 동일 주석 내 `level` 키 중복 → last-wins 다운그레이드 (A-0003 Q4 "하향 우회 불가"·Q5 "silent pass 금지" 위반)**:
+- (a) `@gov(level="frozen", level="watched", ...)` — **`ast.parse` 는 중복 keyword 를 안 거른다**(SyntaxError 는 compile 단계, 호스트 3.11.4 실측). 게이트 실측 `level=watched, errors=[duplicate]` — 필드 대입이 마지막 값으로 덮어씀. frozen=blocked 가 최대 approval_required 로 강등.
+- (b) `__gov__ = {"level":"frozen","level":"watched"}` — dict 중복 키는 **합법·실행 가능**. 게이트 실측 `level=watched, errors=[]` — **무기록 silent downgrade**. TASK-009 의 invalid→approval_required 안전망조차 못 받고, base∪head max 도 신규/기존-오염 파일엔 무력 → 이 게이트가 스스로 막아야 함. §2B 필수 질문("거버넌스 목적에 직접 구멍?") → 그렇다 → 비차단 불가.
+- 수정: 같은 call/dict 내 중복 필드 → 오류 기록 + level 은 **유효값 중 strongest-wins**. 픽스처 2건 + 음성검증.
+**🔴 R-2 (보정 사유) — `__gov__` 비정식 형태 silent drop (계약 갭 → A-0004 로 A-0003 개정)**:
+- (a) 톱레벨 `AnnAssign`(`__gov__: dict = {...}`·`: Final`) — 완전 무시(module null·오류 0). 실행 의미는 Assign 동일, 타입힌트 코드베이스의 자연 표기 → 선언된 frozen 이 무주석 pass. base∪head 로도 못 잡음(양측 비가시). 계약이 Assign 만 명시한 **내 설계 누락**(Codex 는 계약대로 구현) → 계약 개정: 값 있는 톱레벨 AnnAssign 도 정식 인정.
+- (b) 그 외 위치 `__gov__` 바인딩(if 안·클래스 본문·AugAssign·다중 타겟) — 무기록 무시 → 계약 개정: 발견 시 `invalid_module_gov` 기록+protected 보수(false positive 는 보수 방향이라 수용).
+**비차단 관찰 5건**(A-0004 §관찰): bare `@gov` missing_reason 미기록(보수 유지)·stdin path 표기·누락 파일 traceback(사용법 오류 범주)·`type` 필드 추가 수용·**order_key ≠ TASK-007 occurrence**(per-name vs per-(name,decoset)) → **TASK-009 join 은 `(path, name, def_line↔start_line)` 로** — TASKS.md TASK-009 에 보강.
+**머지 판정(D-007): 보류** — 보정요청. (변경 자체는 분석 전용 게이트로 비민감 범주 — 보정 통과 시 Claude 머지 예정.) 리뷰 기록(decisions·review-notes·A-0004·TASKS 보강)은 main 머지.
+상세: `collab/answers/A-0004.md`, `review-notes.md` TASK-008 구현 리뷰 절.

@@ -93,7 +93,7 @@
 
 ## Phase B — 민감 함수 주석  *(수용기준 확정 — D-017)*
 
-### TASK-008 `@gov` 주석 규약+파서+검증  (Claude 설계 완료 → Codex 구현 가능)
+### TASK-008 ◐ `@gov` 주석 규약+파서+검증  (구현 1차 보정요청 — D-018, `collab/answers/A-0004.md`)
 **설계 계약(전문): `collab/answers/A-0003.md` (Q-0001 답변, D-017)** — 문법·필드·검증·스키마는 계약이 정본.
 **목적**: 코드에 사람이 선언한 `@gov(...)` / `__gov__` 민감도 주석을 AST 로 결정적 추출·검증.
 **산출**: `.harness/gates/extract-gov-annotations.py` — **별도 게이트**(TASK-005 인벤토리 스키마 확장 금지), 보고 전용 exit 0.
@@ -104,12 +104,15 @@
 4. 검증오류 각 1+ 케이스: `invalid_level`·`unresolved`(비-리터럴)·`duplicate`(가장 엄한 level 채택)·`missing_reason`·`unknown_field`·positional — **전부 기록·보수 취급**(silent pass 금지, invalid → protected 보수 기본).
 5. fail-safe: 문법오류 → `parse_error`·비-UTF8 → `unreadable` **파일 단위 격리**(형제 보존, exit 0 — TASK-013 계보).
 6. 결정성(md5 2회 동일) + `--json` + 음성검증 가능(기대 변조→FAIL).
+7. **🔴 AC 가드(D-018 R-1) — 동일 주석 내 중복 필드 strongest-wins**: `@gov(level="frozen", level="watched")`(`ast.parse` 는 중복 keyword 를 안 거름 — compile 단계만 SyntaxError, 실증)·`__gov__ = {"level":"frozen","level":"watched"}`(dict 중복 키는 합법 실행 코드) 모두 **last-wins 금지** — 오류 기록(`duplicate`/`invalid_module_gov`) + level 은 유효값 중 가장 엄한 것 채택. 픽스처 2건 + "strongest-wins 제거→FAIL" 음성검증.
+8. **🔴 AC 가드(D-018 R-2) — `__gov__` 비정식 형태 silent drop 금지**(A-0004 로 A-0003 개정): ① 값 있는 톱레벨 `AnnAssign`(`__gov__: dict = {...}`) 은 **정식 인정**(Assign 동일 처리) ② 그 외 위치/형태의 `__gov__` 바인딩(if 안·클래스 본문·AugAssign·다중 타겟)은 발견 시 `invalid_module_gov` 기록 + protected 보수 취급(무기록 무시 금지). 각 픽스처 + 음성검증.
 
 ### TASK-009 변경함수 ↔ 주석 → level 게이트 (0/1/2, policy 재사용)  *(TASK-008 머지 후)*
 **판정**: 변경 함수(TASK-006 매핑 ∪ TASK-007 분류, `<module>` 포함)의 effective level → `frozen=blocked(1)` / `protected=approval_required(2)` / `watched=경고 pass(0)`. 어휘·의미는 `sensitive-zones.yaml` 재사용. (층 분류: `@gov` = 선언적 1층 — D-017, frozen 차단은 D-004 와 모순 없음.)
 - **🔴 AC 가드(D-017 #1) — 주석 제거 우회 방지**: 판정은 **base ∪ head 양측 주석의 max**. 같은 PR 에서 `@gov(frozen)` 삭제+본문 수정 시 head 만 보면 무주석 → base 측이 지배해야 우회 차단. 주석 *제거 자체*도 해당 레벨 변경으로 취급. 리뷰 시 "주석 삭제 PR" fresh 시나리오로 실증.
 - **🔴 AC 가드(D-017 #2) — fail-closed 연동**: base 에 frozen/protected 주석 있던 파일이 head 에서 `parse_error`/`unreadable` → 최소 `approval_required` (TASK-012 "빈 결과 ≠ clean" 가드와 정합).
-- 변경 함수에 invalid/`unresolved` 주석 → 최소 `approval_required` (조용히 pass 금지).
+- 변경 함수에 invalid/`unresolved` 주석 → 최소 `approval_required` (조용히 pass 금지). errors 비어있지 않은 주석(`duplicate` 포함)도 동일 취급.
+- **join 키 주의(D-018 관찰 #5)**: TASK-008 `order_key`(같은 이름 내 전 def 등장순서)와 TASK-007 `_match_key` occurrence(`(이름, 데코셋)` 내 순서)는 **동일하지 않다**(setter 실측: 전자 1, 후자 0). order_key 끼리 join 금지 — **`(path, name, TASK-008 def_line ↔ TASK-007 after start_line)`** 으로 join 한다.
 
 ## Phase C — 신규 능력 감지  *(A 완료 후)*
 - **TASK-010** `sensitive-capabilities` catalog 설계 + 능력 추출 (Claude 설계 → Codex)
