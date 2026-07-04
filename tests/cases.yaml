@@ -334,3 +334,163 @@ cases:
               change_type: file_fallback
               signature_changed: false
               body_changed: false
+
+  - name: gov-annotations
+    gate: extract-gov-annotations
+    input:
+      source_file: tests/fixtures/gov-annotations/valid.py
+    expect:
+      exit_code: 0
+      deterministic_md5: true
+      annotations:
+        - name: audit_async
+          type: async_function
+          order_key: 0
+          level: watched
+          effective_level: watched
+          errors: []
+          unresolved: false
+          decorators: [gov]
+        - name: LedgerWriter
+          type: class
+          order_key: 0
+          level: frozen
+          effective_level: frozen
+          errors: []
+          unresolved: false
+          decorators: [gov]
+        - name: LedgerWriter.commit
+          type: function
+          order_key: 0
+          level: watched
+          effective_level: frozen
+          errors: []
+          unresolved: false
+          decorators: [gov]
+        - name: LedgerWriter.inherited
+          type: function
+          order_key: 0
+          level: null
+          effective_level: frozen
+          errors: []
+          unresolved: false
+          decorators: []
+        - name: Account.balance
+          type: function
+          order_key: 1
+          level: protected
+          effective_level: protected
+          errors: []
+          unresolved: false
+          decorators: [balance.setter, gov]
+        - name: parse
+          type: function
+          order_key: 0
+          level: watched
+          effective_level: watched
+          errors: []
+          unresolved: false
+          decorators: [overload, gov]
+        - name: conditional
+          type: function
+          order_key: 0
+          level: protected
+          effective_level: protected
+          errors: []
+          unresolved: false
+          decorators: [gov]
+        - name: outer.inner
+          type: function
+          order_key: 0
+          level: protected
+          effective_level: protected
+          errors: []
+          unresolved: false
+          decorators: [gov]
+        - name: duplicate_gov
+          type: function
+          order_key: 0
+          level: frozen
+          effective_level: frozen
+          errors: [duplicate]
+          unresolved: false
+          decorators: [gov, gov]
+        - name: invalid_level_case
+          type: function
+          order_key: 0
+          level: protected
+          effective_level: protected
+          errors: [invalid_level]
+          unresolved: false
+          decorators: [gov]
+        - name: unresolved_case
+          type: function
+          order_key: 0
+          level: protected
+          effective_level: protected
+          errors: [unresolved]
+          unresolved: true
+          decorators: [gov]
+        - name: missing_reason_case
+          type: function
+          order_key: 0
+          level: protected
+          effective_level: protected
+          errors: [missing_reason]
+          unresolved: false
+          decorators: [gov]
+        - name: unknown_field_case
+          type: function
+          order_key: 0
+          level: protected
+          effective_level: protected
+          errors: [unknown_field]
+          unresolved: false
+          decorators: [gov]
+        - name: positional_case
+          type: function
+          order_key: 0
+          level: protected
+          effective_level: protected
+          errors: [invalid_syntax, missing_level]
+          unresolved: true
+          decorators: [gov]
+
+  - name: gov-annotations-module
+    gate: extract-gov-annotations
+    input:
+      source_file: tests/fixtures/gov-annotations/module.py
+    expect:
+      exit_code: 0
+      module:
+        level: protected
+        reason: module constants
+        line: 1
+        errors: []
+      annotations:
+        - name: module_touched
+          type: function
+          order_key: 0
+          level: null
+          effective_level: protected
+          errors: []
+          unresolved: false
+          decorators: []
+
+  - name: gov-annotations-parse-error
+    gate: extract-gov-annotations
+    input:
+      source_file: tests/fixtures/gov-annotations/invalid.py
+    expect:
+      exit_code: 0
+      parse_error_present: true
+      annotation_count: 0
+
+  - name: gov-annotations-unreadable
+    gate: extract-gov-annotations
+    input:
+      source_file: tests/fixtures/function-classification/base/app/non_utf8.py
+    expect:
+      exit_code: 0
+      unreadable_present: true
+      annotation_count: 0
