@@ -145,3 +145,12 @@ D-005 의 운영 세부. **Codex 는 개발만**(자기 머지 금지). main 머
 보수성: 델타가 A-0002 요구에 정확히 국소, Codex 소유 파일만, scope-creep 없음.
 **머지 판정(D-007)**: 분석 전용 게이트·테스트 픽스처 — 비민감(TASK-005/006/007 동일 범주). 구현자(Codex)≠머지자(Claude) → **Claude 가 main 머지·push.** MVP-1 Phase A 회귀 가드 완결 — 다음은 Phase B TASK-008(`@gov` 규약, Claude 설계 선행).
 상세: `review-notes.md` TASK-013 재리뷰 절.
+
+## D-017 (2026-07-04) TASK-008 설계질문(Q-0001) 인계 리뷰 **통과**·머지 + `@gov` 설계 계약 확정 (A-0003)
+대상: `codex/2026-07-04-task008-design-question`(`5ea0b79`·헤드 `775e145`) — **코드 없는 문서 인계**: `collab/questions/Q-0001.md`(TASK-008 `@gov` 규약 설계 요청, blocking) + handoff-log + summaries.
+**리뷰 실증**: ① 보수성 — diff 3파일 전부 추가만(질문·인계·요약), 구현/픽스처/Claude 소유 무접촉, `collab/questions/` 는 COMMON-RULES §1 명시 경로 ② 커밋 2건 모두 §3 상세 형식 준수 ③ "테스트 green" 주장 실증 — 스위트 10/10 PASS·exit 0 재확인 ④ 내용 정확성 — TASKS.md `:95` "Claude 설계 선행" 인용 정확, 질문 7항이 계약에 필요한 결정을 빠짐없이 커버(문법·필드·심각도·scope·검증실패·스키마·테스트 AC). **Codex 가 정책 의미를 임의 구현하지 않고 차단 질문으로 멈춘 것 = 역할 경계 준수(모범 사례).**
+**설계 답변**: `collab/answers/A-0003.md` — ⑴ 문법: `@gov(level=,reason=,[owner=])` 데코레이터(AST 리터럴만) + 모듈 `__gov__` dict, 주석/독스트링 마커는 명시 거부 ⑵ 어휘: sensitive-zones 와 동일 frozen/protected/watched (TASK-009 policy 재사용) ⑶ **엄격 승계(stricter-wins)** — 내부 주석으로 레벨 하향 우회 불가 ⑷ 검증실패는 기록+보수 취급(invalid→protected), 파일 단위 격리(TASK-013 계보) ⑸ 출력은 **별도 게이트**(TASK-005 스키마 확장 금지 — 하류 계약 보호) ⑹ 테스트 AC 7항(고정 적대 세트 포함).
+**층 분류 정책 결정**: `@gov` 주석은 사람이 명시 선언한 규칙 → **1층(선언적) 범주** — D-004 "2·3층 자동 차단 금지"는 추론 기반 층 대상이므로 TASK-009 `frozen=blocked(1)` 와 모순 없음(TASKS.md 기존 "0/1/2" 명세와 정합). 형 override 가능.
+**하류 가드 신설(TASK-009 AC, TASKS.md 반영)**: ① **주석 제거 우회 방지** — 판정은 base ∪ head 양측 max(같은 PR 에서 `@gov(frozen)` 삭제+본문 수정 우회 차단) ② base 에 frozen/protected 주석 있던 파일이 head unreadable/parse_error → 최소 approval_required (fail-closed).
+**머지 판정(D-007)**: 협업 문서 전용(질문·인계·요약) — 비민감. 구현자(Codex)≠머지자(Claude) → **Claude 가 main 머지·push.** Q-0001 은 answered 로 전환. 다음: Codex 는 A-0003 계약대로 **TASK-008 구현 진행 가능**.
+상세: `collab/answers/A-0003.md`, `review-notes.md` TASK-008 질문 리뷰 절.
