@@ -137,3 +137,11 @@ D-005 의 운영 세부. **Codex 는 개발만**(자기 머지 금지). main 머
 보수성: 델타는 AC 가드 요구에 국소, Claude 소유 무수정, scope-creep 없음 — 품질 자체는 양호하나 map 한 곳 국소 결함으로 반려.
 **머지 판정(D-007): 보류** — 보정요청이므로 머지 안 함. (변경 자체는 분석 전용 게이트로 비민감 범주 — 보정 후 통과 시 Claude 머지 예정.)
 상세: `collab/answers/A-0002.md`, `review-notes.md` TASK-013 절.
+
+## D-016 (2026-07-04) TASK-013 분류 회귀 가드 — 재리뷰 **통과** + Claude 머지
+대상 impl: `0aaadcc`(브랜치 `codex/2026-07-04-task013-map-nonutf8-fix`, 헤드 `bfbc1e8`). D-015/A-0002 보정 재제출 — 새 브랜치(main `fbc2490` 기준) 재제출은 D-014 전례대로 수용하되 **구 리뷰본(`824502d`) 대비 게이트 직접 diff 로 델타 검증**: map `git diff --unified=0` 읽기 surrogateescape 화(+ 死코드 wrap 을 extract_inventory 포함 try 로 교체), classify except 협소화(기능 동등), function-mapping 픽스처 신설(비-UTF8 0xe9 + sibling), pure_rename blob 동일(`f7a18b4` = byte-identical → R100 보장).
+**실증(워크트리·fresh)**: 스위트 10/10 PASS·exit 0(실패 시 exit 1 확인) + **음성검증 5종 전부 성립** — 기대 변조 / surrogateescape 제거(A-0002 "격리 제거→FAIL") / `--no-renames` 제거(AC 가드#1) / classify·map 격리 except 무력화 → 각각 해당 케이스만 9/10 FAIL, 원복 10/10. **R-1 해소 fresh 실증**: `sibling.py` M + `bad.py`(0xe9) M — 구 게이트 `error`+`files=0` 붕괴 ↔ 신 map `files=2`·`transfer` 보존·`bad→<module>`+parse_error / 신 classify 형제 보존·`bad→unreadable`. **적대 입력**: NUL 바이트 `.py` → host 3.11.4 `SyntaxError` → parse_error 격리·전역 붕괴 없음·형제 보존, base-측만 비-UTF8 → head 기준 정상 매핑(classify 는 보수 폴백), 반복 실행 md5 동일(결정성).
+**AC 가드#1·#2 (D-014 신설분) 모두 충족.** 비차단 관찰 3건(`review-notes.md` TASK-013 재리뷰 절): ① map `parse_error`+헝크 부재 시 `touched_functions:[]` — TASK-012 AC 가드(D-012 #1)가 이미 fail-closed 강제 → 구멍 아님, AC 문구에 "빈 touched_functions ≠ clean" 명시 보강(TASKS.md, 이번 커밋) ② 격리 except 에 `ValueError` 미포함 — 호스트 3.11.4 실증상 안전, 차기 강건화 권고 ③ 비-UTF8 파일명은 APFS 상 재현 불가, 기록만.
+보수성: 델타가 A-0002 요구에 정확히 국소, Codex 소유 파일만, scope-creep 없음.
+**머지 판정(D-007)**: 분석 전용 게이트·테스트 픽스처 — 비민감(TASK-005/006/007 동일 범주). 구현자(Codex)≠머지자(Claude) → **Claude 가 main 머지·push.** MVP-1 Phase A 회귀 가드 완결 — 다음은 Phase B TASK-008(`@gov` 규약, Claude 설계 선행).
+상세: `review-notes.md` TASK-013 재리뷰 절.
