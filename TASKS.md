@@ -118,7 +118,7 @@
 ## Phase C — 신규 능력 감지  *(A 완료 후)*  *(설계 확정: `docs/capability-catalog-design.md`, D-022)*
 > **2층 불변식(D-004·설계 §3)**: 능력 감지는 **추론** → **절대 blocked 금지, `approval_required` 가 상한**. catalog `level ∈ {protected, watched}`, `frozen` 오면 검증오류+protected clamp.
 
-### TASK-010 `sensitive-capabilities` catalog + 능력 추출기 `extract-python-capabilities.py`  *(Claude 설계 완료 → Codex)*
+### TASK-010 ☑ `sensitive-capabilities` catalog + 능력 추출기 `extract-python-capabilities.py`  *(Claude 설계 완료 → Codex)* — 리뷰통과 D-024 (1ed4222)
 **판정**: 단일 `.py` → 카탈로그(`policies/sensitive-capabilities.yaml`) 신호로 파일의 민감 **능력 집합** 추출. **보고 전용·exit 0**(판정 없음 — TASK-008 대응). 계약 전문: `docs/capability-catalog-design.md`.
 - **신호 3종**: `imports`(모듈 import 자체가 신호) / `calls`(별칭·from-import 해소한 점표기 전체이름 일치) / `builtins`(무-import 내장 `eval`/`exec` 등).
 - **🔴 AC 가드 — import-레벨 backstop**: 호출 해석은 별칭·`getattr`·재대입으로 우회 가능 → **import 신호가 최종 방어선**. `os` 등 흔한 모듈은 import 무신호(특정 호출만), `subprocess`·`pickle`·`requests` 등은 import 자체가 신호.
@@ -133,6 +133,7 @@
 - **🔴 AC 가드 — fail-closed(계약 Q6, A-0005 교훈)**: head 존재+`parse_error`/`unreadable` 변경 `.py` → **다른 결과 유무 무관** per-path `approval_required`(전역 "errors and not records" 조건 **금지** — D-020 세탁 재발 방지). base 존재+불능 → `base_caps` 빈 집합(head 능력 신규화 approval). 존재/부재는 `git cat-file -e` 결정적(문자열 파싱 금지). upstream error → records 무관 최소 approval. 회귀 픽스처 `new-cap-unreadable-head`(신규 불능+무관 동반→approval) + "fail-closed 무력화→FAIL" 음성검증.
 - 출력: `{gate,verdict,new_capabilities:[{path,id,level,reason,reviewer,signals}],warned_capabilities,fail_closed,errors,exit_code}`.
 - **하류(TASK-012)**: `errors`/`fail_closed` 비면 아님 → 통합측 최소 approval(D-021 원칙). 능력 게이트는 `@gov`·zone 과 독립, TASK-012 가 병합.
+- **🟠 AC 가드 — call-only 모듈 동적 우회(D-024 리뷰 발견, 비차단→차기 가드)**: TASK-010 추출기는 `imports` 목록 밖 **call-only 모듈**(예: `os` — 잡음 이유로 import 무신호)에 대해 `getattr(os,"system")(cmd)`·재대입 별칭(`z=os; z.system()`)을 **놓친다**(import backstop 부재). 직접 `os.system(cmd)`·`import os as o; o.system()` 은 잡힘. 계약 Q4 세트(subprocess 기반)는 전부 잡히므로 **비차단**이나, 능력 도입 은닉 경로다. TASK-011/추출기 강화 시: `getattr(<바인딩된-모듈>, "<문자열 리터럴>")(...)` 를 점표기 호출로 해소해 call-only 모듈 동적 우회를 닫거나, catalog 에 문서화된 수용 잔여로 명시. (참고: subprocess 등 import-신호 모듈은 이미 backstop 으로 커버 — 주 실행 벡터는 안전.)
 
 ## Phase D — 통합·테스트  *(A 완료 후)*
 - **TASK-012** ☑ 감사카드 통합 (`changed_functions[]` + verdict 반영) — 리뷰통과·머지 (D-023, impl 81147f5). 경로-clean + 함수-frozen → blocked 격리 실증·parse_error→approval fail-closed·음성검증 3종. 비차단 관찰 4건(errors 분기 중복방어 미테스트·name-status 입력 함수분석 스킵[git-ref 필수 문서권고]·예외→blocked·changed_functions 중복표기) → `review-notes.md`.
