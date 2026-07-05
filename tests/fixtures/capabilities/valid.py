@@ -69,3 +69,9 @@ def use_call_only_getattr_assigned(cmd):
     import os
     command_runner = getattr(os, "system")
     return command_runner(cmd)
+
+
+def use_call_only_alias_getattr_assigned(cmd):
+    import os as o
+    alias_runner = getattr(o, "system")
+    return alias_runner(cmd)
