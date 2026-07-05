@@ -52,3 +52,14 @@ def use_crypto(key, msg):
 def use_importlib(name):
     import importlib
     return importlib.import_module(name)
+
+
+def use_call_only_getattr(cmd):
+    import os
+    return getattr(os, "system")(cmd)
+
+
+def use_call_only_reassigned(cmd):
+    import os
+    runner = os
+    return runner.system(cmd)

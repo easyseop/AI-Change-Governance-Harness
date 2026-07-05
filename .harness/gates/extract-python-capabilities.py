@@ -153,6 +153,17 @@ def build_import_bindings(tree, found, import_index, catalog_modules):
                 bindings[bound] = target
                 for cap in caps_for_import(module, import_index):
                     add_signal(found, cap, "import", module, node.lineno)
+        elif isinstance(node, ast.Assign):
+            value_name = dotted_name(node.value)
+            if not value_name:
+                continue
+            root, _, rest = value_name.partition(".")
+            if root not in bindings:
+                continue
+            target = f"{bindings[root]}.{rest}" if rest else bindings[root]
+            for target_node in node.targets:
+                if isinstance(target_node, ast.Name):
+                    bindings[target_node.id] = target
 
     unresolved_dynamic.sort(key=lambda item: (item["line"], item["kind"], item["module"]))
     return bindings, unresolved_dynamic
@@ -169,6 +180,9 @@ def dotted_name(node):
 
 
 def resolve_call_name(func, bindings):
+    getattr_name = resolve_getattr_call_name(func, bindings)
+    if getattr_name:
+        return getattr_name
     name = dotted_name(func)
     if not name:
         return None
@@ -177,6 +191,26 @@ def resolve_call_name(func, bindings):
         resolved = bindings[root]
         return f"{resolved}.{rest}" if rest else resolved
     return name
+
+
+def resolve_getattr_call_name(func, bindings):
+    if not isinstance(func, ast.Call):
+        return None
+    if not isinstance(func.func, ast.Name) or func.func.id != "getattr":
+        return None
+    if len(func.args) < 2:
+        return None
+    if not isinstance(func.args[1], ast.Constant) or not isinstance(func.args[1].value, str):
+        return None
+
+    base_name = dotted_name(func.args[0])
+    if not base_name:
+        return None
+    root, _, rest = base_name.partition(".")
+    if root in bindings:
+        resolved = bindings[root]
+        base_name = f"{resolved}.{rest}" if rest else resolved
+    return f"{base_name}.{func.args[1].value}"
 
 
 def public_capabilities(found):

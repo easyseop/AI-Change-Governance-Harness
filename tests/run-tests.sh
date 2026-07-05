@@ -24,6 +24,7 @@ GATES = {
     "extract-gov-annotations": ".harness/gates/extract-gov-annotations.py",
     "check-function-gov-level": ".harness/gates/check-function-gov-level.py",
     "extract-python-capabilities": ".harness/gates/extract-python-capabilities.py",
+    "check-new-capabilities": ".harness/gates/check-new-capabilities.py",
 }
 ROOT_DIR = os.getcwd()
 
@@ -187,6 +188,19 @@ def case_command(case):
             work_dir,
             "--json",
         ]
+
+    if gate == "check-new-capabilities":
+        work_dir, rev_range = prepare_function_mapping_fixture(data["fixture_dir"])
+        command = [
+            "python3",
+            f"{ROOT_DIR}/{script}",
+            rev_range,
+            f"{ROOT_DIR}/{data.get('policy', 'policies/sensitive-capabilities.yaml')}",
+            "--repo",
+            work_dir,
+            "--json",
+        ]
+        return command
 
     raise ValueError(f"unsupported gate: {gate}")
 
@@ -449,6 +463,62 @@ def validate_python_capabilities(case, result, exit_code):
     return errors
 
 
+def capability_diff_summary(records):
+    return [
+        {
+            "path": record.get("path"),
+            "id": record.get("id"),
+            "level": record.get("level"),
+            "reviewer": record.get("reviewer"),
+            "signal_names": [signal.get("name") for signal in record.get("signals", [])],
+        }
+        for record in records
+    ]
+
+
+def validate_new_capabilities(case, result, exit_code):
+    expect = case["expect"]
+    errors = []
+    assert_equal(errors, "exit_code", exit_code, expect["exit_code"])
+    assert_equal(errors, "verdict", result.get("verdict"), expect["verdict"])
+
+    if "new_capabilities" in expect:
+        assert_equal(
+            errors,
+            "new_capabilities",
+            capability_diff_summary(result.get("new_capabilities", [])),
+            expect["new_capabilities"],
+        )
+    if "warned_capabilities" in expect:
+        assert_equal(
+            errors,
+            "warned_capabilities",
+            capability_diff_summary(result.get("warned_capabilities", [])),
+            expect["warned_capabilities"],
+        )
+    if "fail_closed" in expect:
+        assert_equal(errors, "fail_closed", result.get("fail_closed"), expect["fail_closed"])
+    if "errors_present" in expect:
+        assert_equal(errors, "errors_present", bool(result.get("errors")), expect["errors_present"])
+
+    if expect.get("deterministic_stdout"):
+        work_dir, rev_range = prepare_function_mapping_fixture(case["input"]["fixture_dir"])
+        command = [
+            "python3",
+            f"{ROOT_DIR}/{GATES['check-new-capabilities']}",
+            rev_range,
+            f"{ROOT_DIR}/{case['input'].get('policy', 'policies/sensitive-capabilities.yaml')}",
+            "--repo",
+            work_dir,
+            "--json",
+        ]
+        first = run_command(command).stdout
+        second = run_command(command).stdout
+        assert_equal(errors, "deterministic_stdout", first, second)
+
+    return errors
+
+
 def main():
     with open("tests/cases.yaml", "r", encoding="utf-8") as stream:
         cases = yaml.safe_load(stream)["cases"]
@@ -475,6 +545,8 @@ def main():
                 errors = validate_function_gov_level(case, result, completed.returncode)
             elif case["gate"] == "extract-python-capabilities":
                 errors = validate_python_capabilities(case, result, completed.returncode)
+            elif case["gate"] == "check-new-capabilities":
+                errors = validate_new_capabilities(case, result, completed.returncode)
             else:
                 errors = validate_json_gate(case, result, completed.returncode)
         except Exception as error:
