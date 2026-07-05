@@ -565,3 +565,165 @@ cases:
       exit_code: 0
       unreadable_present: true
       annotation_count: 0
+
+  - name: function-gov-frozen-removal
+    gate: check-function-gov-level
+    input:
+      fixture_dir: tests/fixtures/function-gov-level/frozen-removal
+    expect:
+      verdict: blocked
+      exit_code: 1
+      frozen_touched:
+        - path: app/service.py
+          name: ledger_write
+          level: frozen
+          side: base
+          errors: []
+
+  - name: function-gov-protected-invalid
+    gate: check-function-gov-level
+    input:
+      fixture_dir: tests/fixtures/function-gov-level/protected-invalid
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      protected_touched:
+        - path: app/service.py
+          name: check_auth
+          level: protected
+          side: base
+          errors: []
+        - path: app/service.py
+          name: check_auth
+          level: protected
+          side: head
+          errors: []
+        - path: app/service.py
+          name: invalid_annotation
+          level: protected
+          side: base
+          errors: [missing_reason]
+        - path: app/service.py
+          name: invalid_annotation
+          level: protected
+          side: head
+          errors: [missing_reason]
+      watched_touched:
+        - path: app/service.py
+          name: invalid_annotation
+          level: watched
+          side: base
+          errors: [missing_reason]
+        - path: app/service.py
+          name: invalid_annotation
+          level: watched
+          side: head
+          errors: [missing_reason]
+
+  - name: function-gov-watched-pass
+    gate: check-function-gov-level
+    input:
+      fixture_dir: tests/fixtures/function-gov-level/watched-pass
+    expect:
+      verdict: pass
+      exit_code: 0
+      deterministic_stdout: true
+      watched_touched:
+        - path: app/service.py
+          name: normalize
+          level: watched
+          side: base
+          errors: []
+        - path: app/service.py
+          name: normalize
+          level: watched
+          side: head
+          errors: []
+
+  - name: function-gov-module-protected
+    gate: check-function-gov-level
+    input:
+      fixture_dir: tests/fixtures/function-gov-level/module-protected
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      protected_touched:
+        - path: app/settings.py
+          name: <module>
+          level: protected
+          side: base
+          errors: []
+        - path: app/settings.py
+          name: <module>
+          level: protected
+          side: head
+          errors: []
+
+  - name: function-gov-fail-closed
+    gate: check-function-gov-level
+    input:
+      fixture_dir: tests/fixtures/function-gov-level/fail-closed
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      errors_present: true
+      protected_touched:
+        - path: app/service.py
+          name: <file>
+          level: protected
+          side: head
+          errors: [fail_closed]
+
+  - name: function-gov-deleted-frozen
+    gate: check-function-gov-level
+    input:
+      fixture_dir: tests/fixtures/function-gov-level/deleted-frozen
+    expect:
+      verdict: blocked
+      exit_code: 1
+      errors_present: true
+      frozen_touched:
+        - path: app/service.py
+          name: <file>
+          level: frozen
+          side: head
+          errors: [fail_closed]
+
+  - name: function-gov-unreadable-head-laundering
+    gate: check-function-gov-level
+    input:
+      fixture_dir: tests/fixtures/function-gov-level/unreadable-head-laundering
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      errors_present: true
+      protected_touched:
+        - path: app/mystery.py
+          name: <file>
+          level: protected
+          side: head
+          errors: [fail_closed]
+
+  - name: function-gov-unreadable-base-laundering
+    gate: check-function-gov-level
+    input:
+      fixture_dir: tests/fixtures/function-gov-level/unreadable-base-laundering
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      errors_present: true
+      protected_touched:
+        - path: app/legacy.py
+          name: <file>
+          level: protected
+          side: base
+          errors: [fail_closed]
+
+  - name: function-gov-plain-delete-pass
+    gate: check-function-gov-level
+    input:
+      fixture_dir: tests/fixtures/function-gov-level/plain-delete-pass
+    expect:
+      verdict: pass
+      exit_code: 0
+      errors_present: false
