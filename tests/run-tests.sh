@@ -23,6 +23,7 @@ GATES = {
     "classify-python-function-changes": ".harness/gates/classify-python-function-changes.py",
     "extract-gov-annotations": ".harness/gates/extract-gov-annotations.py",
     "check-function-gov-level": ".harness/gates/check-function-gov-level.py",
+    "extract-python-capabilities": ".harness/gates/extract-python-capabilities.py",
 }
 ROOT_DIR = os.getcwd()
 
@@ -141,6 +142,17 @@ def case_command(case):
             data["source_file"],
             "--json",
         ]
+
+    if gate == "extract-python-capabilities":
+        command = [
+            "python3",
+            script,
+            data["source_file"],
+        ]
+        if data.get("policy"):
+            command.append(data["policy"])
+        command.append("--json")
+        return command
 
     if gate == "map-diff-to-functions":
         work_dir, rev_range = prepare_function_mapping_fixture(data["fixture_dir"])
@@ -402,6 +414,41 @@ def validate_function_gov_level(case, result, exit_code):
     return errors
 
 
+def capability_summary(result):
+    return [
+        {
+            "id": capability.get("id"),
+            "level": capability.get("level"),
+            "signals": capability.get("signals"),
+        }
+        for capability in result.get("capabilities", [])
+    ]
+
+
+def validate_python_capabilities(case, result, exit_code):
+    expect = case["expect"]
+    errors = []
+    assert_equal(errors, "exit_code", exit_code, expect["exit_code"])
+
+    if "parse_error_present" in expect:
+        assert_equal(errors, "parse_error_present", bool(result.get("parse_error")), expect["parse_error_present"])
+    if "unreadable_present" in expect:
+        assert_equal(errors, "unreadable_present", bool(result.get("unreadable")), expect["unreadable_present"])
+    if "capabilities" in expect:
+        assert_equal(errors, "capabilities", capability_summary(result), expect["capabilities"])
+    if "unresolved_dynamic" in expect:
+        assert_equal(errors, "unresolved_dynamic", result.get("unresolved_dynamic"), expect["unresolved_dynamic"])
+    if "errors" in expect:
+        assert_equal(errors, "errors", result.get("errors"), expect["errors"])
+
+    if expect.get("deterministic_stdout"):
+        first = run_command(case_command(case)).stdout
+        second = run_command(case_command(case)).stdout
+        assert_equal(errors, "deterministic_stdout", first, second)
+
+    return errors
+
+
 def main():
     with open("tests/cases.yaml", "r", encoding="utf-8") as stream:
         cases = yaml.safe_load(stream)["cases"]
@@ -426,6 +473,8 @@ def main():
                 errors = validate_gov_annotations(case, result, completed.returncode)
             elif case["gate"] == "check-function-gov-level":
                 errors = validate_function_gov_level(case, result, completed.returncode)
+            elif case["gate"] == "extract-python-capabilities":
+                errors = validate_python_capabilities(case, result, completed.returncode)
             else:
                 errors = validate_json_gate(case, result, completed.returncode)
         except Exception as error:
