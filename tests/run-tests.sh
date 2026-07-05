@@ -22,6 +22,7 @@ GATES = {
     "map-diff-to-functions": ".harness/gates/map-diff-to-functions.py",
     "classify-python-function-changes": ".harness/gates/classify-python-function-changes.py",
     "extract-gov-annotations": ".harness/gates/extract-gov-annotations.py",
+    "check-function-gov-level": ".harness/gates/check-function-gov-level.py",
 }
 ROOT_DIR = os.getcwd()
 
@@ -141,6 +142,18 @@ def case_command(case):
             "python3",
             f"{ROOT_DIR}/{script}",
             rev_range,
+            "--repo",
+            work_dir,
+            "--json",
+        ]
+
+    if gate == "check-function-gov-level":
+        work_dir, rev_range = prepare_function_mapping_fixture(data["fixture_dir"])
+        return [
+            "python3",
+            f"{ROOT_DIR}/{script}",
+            rev_range,
+            f"{ROOT_DIR}/policies/sensitive-zones.yaml",
             "--repo",
             work_dir,
             "--json",
@@ -314,6 +327,47 @@ def validate_gov_annotations(case, result, exit_code):
     return errors
 
 
+def validate_function_gov_level(case, result, exit_code):
+    expect = case["expect"]
+    errors = []
+    assert_equal(errors, "exit_code", exit_code, expect["exit_code"])
+    assert_equal(errors, "verdict", result.get("verdict"), expect["verdict"])
+
+    for key in ("frozen_touched", "protected_touched", "watched_touched"):
+        if key in expect:
+            actual = [
+                {
+                    "path": item.get("path"),
+                    "name": item.get("name"),
+                    "level": item.get("level"),
+                    "side": item.get("side"),
+                    "errors": item.get("errors"),
+                }
+                for item in result.get(key, [])
+            ]
+            assert_equal(errors, key, actual, expect[key])
+
+    if "errors_present" in expect:
+        assert_equal(errors, "errors_present", bool(result.get("errors")), expect["errors_present"])
+
+    if expect.get("deterministic_stdout"):
+        work_dir, rev_range = prepare_function_mapping_fixture(case["input"]["fixture_dir"])
+        command = [
+            "python3",
+            f"{ROOT_DIR}/{GATES['check-function-gov-level']}",
+            rev_range,
+            f"{ROOT_DIR}/policies/sensitive-zones.yaml",
+            "--repo",
+            work_dir,
+            "--json",
+        ]
+        first = run_command(command).stdout
+        second = run_command(command).stdout
+        assert_equal(errors, "deterministic_stdout", first, second)
+
+    return errors
+
+
 def main():
     with open("tests/cases.yaml", "r", encoding="utf-8") as stream:
         cases = yaml.safe_load(stream)["cases"]
@@ -336,6 +390,8 @@ def main():
                 errors = validate_function_classification(case, result, completed.returncode)
             elif case["gate"] == "extract-gov-annotations":
                 errors = validate_gov_annotations(case, result, completed.returncode)
+            elif case["gate"] == "check-function-gov-level":
+                errors = validate_function_gov_level(case, result, completed.returncode)
             else:
                 errors = validate_json_gate(case, result, completed.returncode)
         except Exception as error:

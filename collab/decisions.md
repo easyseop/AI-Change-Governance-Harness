@@ -188,3 +188,15 @@ D-005 의 운영 세부. **Codex 는 개발만**(자기 머지 금지). main 머
 **비차단 관찰 4건**(A-0005 §관찰): protected 리터럴 하드코딩·added/deleted 반대편 라인 재사용·`<unknown>` path 소실(R-1 로 자연 해소)·**frozen 신규 도입도 blocked = 정책 확정**(선언 도입은 인간 확인 — 형 override 가능).
 **머지 판정(D-007): 보류** — 보정요청. (변경 자체는 분석 전용 판정 게이트 — 보정 통과 시 Claude 머지 예정.) 리뷰 기록(decisions·review-notes·A-0005·TASKS 보강)은 main 머지.
 상세: `collab/answers/A-0005.md`, `review-notes.md` TASK-009 리뷰 절.
+
+## D-021 (2026-07-05) TASK-009 변경함수↔`@gov` level 게이트 — 보정 재리뷰 **통과** + Claude 머지 (MVP-1 Phase B 완결)
+대상: 보정 커밋 `aacdfe9`(브랜치 `codex/2026-07-05-task009-function-gov-level`, 헤드 `d8a777c`) — D-020/A-0005 R-1·R-2 보정 재제출. 멱등성 준수: `2a41a7e`·`e42c87f` 재처리 안 함, **보정 델타만 재리뷰**(게이트 +78/-10 + 픽스처 3세트 + cases 3건 한 줄씩).
+**R-1 해소 실증**: `git cat-file -e` 기반 존재 판별 신설(에러 문자열 파싱 아님 — 계약 준수) + head 존재·분석-불능 → **records 유무 무관** per-path fail-closed(base 민감 시 그 레벨, 아니면 protected) + 전역 `errors and not records` → **`upstream_errors` 스냅샷 무조건 발동**으로 교체(AC ④). 픽스처 `unreadable-head-laundering`(watched 동반 → approval) 고정.
+**R-2 해소 실증**: base 존재·불능 → head 가독 여부 무관 per-path protected fail-closed(`side=base`). 픽스처 `unreadable-base-laundering` 고정. base 불능+head 삭제 조합도 동일 블록이 잡음(F3 fresh).
+**과차단 정상화**: 무주석·가독 base `.py` 삭제 단독 → pass(`plain-delete-pass`, A-0005 §요구 3 의 동작 변경 명시대로).
+**실증(워크트리)**: 26/26 PASS·exit 0 + md5 결정성 + **음성검증 4종**(head 무조건 레코드 → 구 조건 원복 FAIL / base측 제거 FAIL / **존재판별 무력화 → plain-delete-pass FAIL** — 존재판별이 과차단 방지 실가드 / 기대 변조 FAIL, 각 원복 26/26) + **fresh 적대 6종**(F1 head 문법오류+동반 → approval — parse_error 경로도 세탁 불가 / F2 양측 불능 / F3 base-불능+삭제 / F4 불능 파일 순수 리네임 renames ON — 양경로 fail-closed / F5 가독 무주석 리네임 단독 → pass / F6 신규 불능 단독 → approval — 전역 조건 교체 무회귀).
+**보수성(COMMON-RULES §1)**: 델타 국소·무관 리팩터 없음·Claude 소유 무접촉·커밋 §3 준수.
+**비차단 관찰 4건**(`review-notes.md` 재리뷰 절): AC ④ 픽스처 부재(결정적 재현 곤란 — 코드 검토·F6 으로 확인, TASK-012 때 옵션)·양측 불능 레코드 2건(보수 방향)·`absent` 필드 정보성·D-020 관찰 3·5 해소 확인.
+**머지 판정(D-007)**: 분석 전용 판정 게이트·픽스처 — **비민감**(TASK-005~008·013 동일 범주). 구현자(Codex)≠머지자(Claude) → **Claude 가 main 머지·push.** TASK-009 완료 = **MVP-1 Phase B 완결**(TASK-008+009).
+**하류 반영**: TASKS.md TASK-012 AC 가드에 "TASK-009 `errors` 비어있지 않으면 통합측도 최소 approval(중복 방어선)" 한 줄 보강. 다음: **TASK-012(감사카드 통합) 진행 가능**(Phase D — AC 가드 3건 준수). Phase C TASK-010 은 Claude catalog 설계 선행 — Codex 대기.
+상세: `review-notes.md` TASK-009 보정 재리뷰 절.
