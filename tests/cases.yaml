@@ -889,6 +889,15 @@ cases:
             - kind: call
               line: 18
               name: subprocess.run
+            - kind: call
+              line: 22
+              name: subprocess.run
+            - kind: call
+              line: 59
+              name: os.system
+            - kind: call
+              line: 65
+              name: os.system
         - id: unsafe_deserialization
           level: protected
           signals:
@@ -957,3 +966,81 @@ cases:
       exit_code: 0
       unreadable_present: true
       capabilities: []
+
+  - name: new-capabilities-new-only
+    gate: check-new-capabilities
+    input:
+      fixture_dir: tests/fixtures/new-capabilities/new-only
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      deterministic_stdout: true
+      new_capabilities:
+        - path: app/new_client.py
+          id: outbound_network
+          level: protected
+          reviewer: security-reviewer
+          signal_names: [requests]
+      warned_capabilities: []
+      fail_closed: []
+
+  - name: new-capabilities-delete-only
+    gate: check-new-capabilities
+    input:
+      fixture_dir: tests/fixtures/new-capabilities/delete-only
+    expect:
+      verdict: pass
+      exit_code: 0
+      new_capabilities: []
+      warned_capabilities: []
+      fail_closed: []
+
+  - name: new-capabilities-unreadable-head
+    gate: check-new-capabilities
+    input:
+      fixture_dir: tests/fixtures/new-capabilities/unreadable-head
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      new_capabilities: []
+      warned_capabilities: []
+      fail_closed:
+        - path: app/bad.py
+          level: protected
+          reason: head file could not be parsed after the change
+      errors_present: true
+
+  - name: new-capabilities-unreadable-base
+    gate: check-new-capabilities
+    input:
+      fixture_dir: tests/fixtures/new-capabilities/unreadable-base
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      new_capabilities:
+        - path: app/bad.py
+          id: outbound_network
+          level: protected
+          reviewer: security-reviewer
+          signal_names: [requests]
+      warned_capabilities: []
+      fail_closed: []
+      errors_present: true
+
+  - name: new-capabilities-frozen-policy
+    gate: check-new-capabilities
+    input:
+      fixture_dir: tests/fixtures/new-capabilities/frozen-policy
+      policy: tests/fixtures/capabilities/frozen-policy.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      new_capabilities:
+        - path: app/run.py
+          id: forbidden_test
+          level: protected
+          reviewer: security-reviewer
+          signal_names: [subprocess]
+      warned_capabilities: []
+      fail_closed: []
+      errors_present: true

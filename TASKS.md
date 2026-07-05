@@ -126,7 +126,7 @@
 - 값 추정 금지(`yaml.load` 는 항상 신호·`open` 쓰기판별 제외), 파일 단위 fail-safe(parse_error/unreadable 격리·형제 보존·exit 0), 결정성 md5.
 - 출력: `{path, capabilities:[{id,level,signals:[{kind,name,line}]}], unresolved_dynamic, errors, parse_error, unreadable}`. TASK-005 인벤토리 스키마 확장 금지(별도 게이트).
 
-### TASK-011 before/after 능력 diff `check-new-capabilities.py` → 신규 도입만 승인요구  *(TASK-010 후)*
+### TASK-011 ☑ before/after 능력 diff `check-new-capabilities.py` → 신규 도입만 승인요구  *(TASK-010 후)* — 리뷰통과 D-025 (1aa88d8·헤드 c3425cf)
 **판정**: `base..head` → 파일별 **`head − base` 신규 능력**만 verdict. 능력 *제거*는 안전(경고 안 함), *신규 도입*만 approval. (TASK-009 의 `base∪head max` 와 **정반대** — 주의.)
 - **🔴 AC 가드 — 신규만(계약 Q5)**: 능력 id 가 base·head **양쪽**이면 미감지 / head 만이면 감지 / 신규 파일(base 부재)→능력 전부 신규 / 삭제 파일(head 부재)→신규 없음. **음성검증**: base 무시 head-only 로 바꾸면 이미-있던 능력 오검출→FAIL(base∪head 아님을 고정). 판정 단위=파일별 능력 id 집합(형 override 가능).
 - **🔴 AC 가드 — never-blocked 불변식(계약 Q2)**: verdict 는 `approval_required(2)` 상한 / watched 만이면 경고+`pass(0)` / 없으면 pass. **`blocked`·exit 1 절대 없음.** 음성검증: catalog 에 `frozen` 넣어도 protected clamp(clamp 제거 시 blocked → FAIL 로 잡히게).
@@ -134,6 +134,8 @@
 - 출력: `{gate,verdict,new_capabilities:[{path,id,level,reason,reviewer,signals}],warned_capabilities,fail_closed,errors,exit_code}`.
 - **하류(TASK-012)**: `errors`/`fail_closed` 비면 아님 → 통합측 최소 approval(D-021 원칙). 능력 게이트는 `@gov`·zone 과 독립, TASK-012 가 병합.
 - **🟠 AC 가드 — call-only 모듈 동적 우회(D-024 리뷰 발견, 비차단→차기 가드)**: TASK-010 추출기는 `imports` 목록 밖 **call-only 모듈**(예: `os` — 잡음 이유로 import 무신호)에 대해 `getattr(os,"system")(cmd)`·재대입 별칭(`z=os; z.system()`)을 **놓친다**(import backstop 부재). 직접 `os.system(cmd)`·`import os as o; o.system()` 은 잡힘. 계약 Q4 세트(subprocess 기반)는 전부 잡히므로 **비차단**이나, 능력 도입 은닉 경로다. TASK-011/추출기 강화 시: `getattr(<바인딩된-모듈>, "<문자열 리터럴>")(...)` 를 점표기 호출로 해소해 call-only 모듈 동적 우회를 닫거나, catalog 에 문서화된 수용 잔여로 명시. (참고: subprocess 등 import-신호 모듈은 이미 backstop 으로 커버 — 주 실행 벡터는 안전.)
+  - **[D-025 검수 결과]** 위 🟠 가드가 명시한 **두 형태(인라인 `getattr(os,"system")(cmd)` + 재대입 `z=os; z.system()`)는 둘 다 폐쇄·회귀픽스처(`valid.py`) 완료 = AC 충족.** ☑
+- **🟠 AC 가드 — 분리대입 getattr 잔여(D-025 리뷰 신규 발견, 비차단→차기 가드)**: D-024 폐쇄 후에도 **제3 변형** `fn = getattr(os,"system"); fn(c)` (getattr 결과를 변수에 담아 별도 호출)는 call-only 모듈(os 계열)에서 **여전히 미감지**(fresh 실증: `caps=[]`·`unresolved_dynamic` 마커 전무). 원인: `build_import_bindings` 의 `ast.Assign` 핸들러가 value=`getattr(...)`(Call)을 `dotted_name` 로 해소 못 해 `fn` 미바인딩. import-신호 모듈(주 실행벡터)은 backstop 으로 무영향·2층 approval 상한이라 비차단이나 능력 은닉 잔여. 추출기 강화 시: `<var> = getattr(<모듈>,"<리터럴>")` 를 바인딩표에 callable 로 전파해 후속 `<var>(...)` 호출을 해소하거나, **catalog 에 문서화된 수용 잔여로 명시**. (참고: 완전폐쇄엔 지역 dataflow 추적 필요 — §2B 대규모 리팩터 강요 금지 하에 차기 가드로 이월.)
 
 ## Phase D — 통합·테스트  *(A 완료 후)*
 - **TASK-012** ☑ 감사카드 통합 (`changed_functions[]` + verdict 반영) — 리뷰통과·머지 (D-023, impl 81147f5). 경로-clean + 함수-frozen → blocked 격리 실증·parse_error→approval fail-closed·음성검증 3종. 비차단 관찰 4건(errors 분기 중복방어 미테스트·name-status 입력 함수분석 스킵[git-ref 필수 문서권고]·예외→blocked·changed_functions 중복표기) → `review-notes.md`.

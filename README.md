@@ -49,6 +49,7 @@ python3 .harness/gates/classify-python-function-changes.py <base>..<head> --json
 python3 .harness/gates/extract-gov-annotations.py path/to/file.py --json
 python3 .harness/gates/check-function-gov-level.py <base>..<head> policies/sensitive-zones.yaml --json
 python3 .harness/gates/extract-python-capabilities.py path/to/file.py policies/sensitive-capabilities.yaml --json
+python3 .harness/gates/check-new-capabilities.py <base>..<head> policies/sensitive-capabilities.yaml --json
 bash tests/run-tests.sh
 ```
 
