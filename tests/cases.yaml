@@ -898,6 +898,9 @@ cases:
             - kind: call
               line: 65
               name: os.system
+            - kind: call
+              line: 71
+              name: os.system
         - id: unsafe_deserialization
           level: protected
           signals:
@@ -992,6 +995,22 @@ cases:
       verdict: pass
       exit_code: 0
       new_capabilities: []
+      warned_capabilities: []
+      fail_closed: []
+
+  - name: new-capabilities-getattr-assignment
+    gate: check-new-capabilities
+    input:
+      fixture_dir: tests/fixtures/new-capabilities/getattr-assignment
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      new_capabilities:
+        - path: app/run.py
+          id: subprocess_exec
+          level: protected
+          reviewer: security-reviewer
+          signal_names: [os.system]
       warned_capabilities: []
       fail_closed: []
 
