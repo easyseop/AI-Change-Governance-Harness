@@ -154,15 +154,15 @@ def build_import_bindings(tree, found, import_index, catalog_modules):
                 for cap in caps_for_import(module, import_index):
                     add_signal(found, cap, "import", module, node.lineno)
         elif isinstance(node, ast.Assign):
-            value_name = resolve_getattr_call_name(node.value, bindings)
-            if not value_name:
+            target = resolve_getattr_call_name(node.value, bindings, require_bound_base=True)
+            if not target:
                 value_name = dotted_name(node.value)
-            if not value_name:
-                continue
-            root, _, rest = value_name.partition(".")
-            if root not in bindings:
-                continue
-            target = f"{bindings[root]}.{rest}" if rest else bindings[root]
+                if not value_name:
+                    continue
+                root, _, rest = value_name.partition(".")
+                if root not in bindings:
+                    continue
+                target = f"{bindings[root]}.{rest}" if rest else bindings[root]
             for target_node in node.targets:
                 if isinstance(target_node, ast.Name):
                     bindings[target_node.id] = target
@@ -195,7 +195,7 @@ def resolve_call_name(func, bindings):
     return name
 
 
-def resolve_getattr_call_name(func, bindings):
+def resolve_getattr_call_name(func, bindings, require_bound_base=False):
     if not isinstance(func, ast.Call):
         return None
     if not isinstance(func.func, ast.Name) or func.func.id != "getattr":
@@ -212,6 +212,8 @@ def resolve_getattr_call_name(func, bindings):
     if root in bindings:
         resolved = bindings[root]
         base_name = f"{resolved}.{rest}" if rest else resolved
+    elif require_bound_base:
+        return None
     return f"{base_name}.{func.args[1].value}"
 
 
