@@ -815,3 +815,145 @@ cases:
       verdict: pass
       exit_code: 0
       errors_present: false
+
+  - name: python-capabilities
+    gate: extract-python-capabilities
+    input:
+      source_file: tests/fixtures/capabilities/valid.py
+    expect:
+      exit_code: 0
+      deterministic_stdout: true
+      unresolved_dynamic:
+        - kind: star_import
+          module: subprocess
+          line: 3
+      errors: []
+      capabilities:
+        - id: crypto_primitive
+          level: protected
+          signals:
+            - kind: import
+              line: 7
+              name: ssl
+            - kind: import
+              line: 8
+              name: hmac
+            - kind: call
+              line: 48
+              name: hmac.new
+            - kind: call
+              line: 49
+              name: ssl.wrap_socket
+        - id: dynamic_code_exec
+          level: protected
+          signals:
+            - kind: builtin
+              line: 26
+              name: __import__
+            - kind: builtin
+              line: 30
+              name: exec
+            - kind: builtin
+              line: 31
+              name: eval
+            - kind: call
+              line: 54
+              name: importlib.import_module
+        - id: outbound_network
+          level: protected
+          signals:
+            - kind: import
+              line: 6
+              name: requests
+            - kind: call
+              line: 44
+              name: urllib.request.urlopen
+        - id: subprocess_exec
+          level: protected
+          signals:
+            - kind: import
+              line: 1
+              name: subprocess
+            - kind: import
+              line: 2
+              name: subprocess
+            - kind: star_import
+              line: 3
+              name: subprocess
+            - kind: import
+              line: 4
+              name: subprocess
+            - kind: call
+              line: 14
+              name: subprocess.run
+            - kind: call
+              line: 18
+              name: subprocess.run
+        - id: unsafe_deserialization
+          level: protected
+          signals:
+            - kind: import
+              line: 5
+              name: pickle
+            - kind: import
+              line: 35
+              name: pickle
+            - kind: call
+              line: 36
+              name: pickle.loads
+            - kind: call
+              line: 40
+              name: yaml.load
+
+  - name: python-capabilities-invalid-policy
+    gate: extract-python-capabilities
+    input:
+      source_file: tests/fixtures/capabilities/valid.py
+      policy: tests/fixtures/capabilities/frozen-policy.yaml
+    expect:
+      exit_code: 0
+      unresolved_dynamic:
+        - kind: star_import
+          module: subprocess
+          line: 3
+      errors:
+        - error: invalid_capability_level
+          id: forbidden_test
+          level: frozen
+        - error: unknown_signal_kind
+          id: forbidden_test
+          kind: mystery
+      capabilities:
+        - id: forbidden_test
+          level: protected
+          signals:
+            - kind: import
+              line: 1
+              name: subprocess
+            - kind: import
+              line: 2
+              name: subprocess
+            - kind: star_import
+              line: 3
+              name: subprocess
+            - kind: import
+              line: 4
+              name: subprocess
+
+  - name: python-capabilities-parse-error
+    gate: extract-python-capabilities
+    input:
+      source_file: tests/fixtures/capabilities/invalid.py
+    expect:
+      exit_code: 0
+      parse_error_present: true
+      capabilities: []
+
+  - name: python-capabilities-unreadable
+    gate: extract-python-capabilities
+    input:
+      source_file: tests/fixtures/function-classification/base/app/non_utf8.py
+    expect:
+      exit_code: 0
+      unreadable_present: true
+      capabilities: []
