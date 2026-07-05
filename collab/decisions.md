@@ -200,3 +200,16 @@ D-005 의 운영 세부. **Codex 는 개발만**(자기 머지 금지). main 머
 **머지 판정(D-007)**: 분석 전용 판정 게이트·픽스처 — **비민감**(TASK-005~008·013 동일 범주). 구현자(Codex)≠머지자(Claude) → **Claude 가 main 머지·push.** TASK-009 완료 = **MVP-1 Phase B 완결**(TASK-008+009).
 **하류 반영**: TASKS.md TASK-012 AC 가드에 "TASK-009 `errors` 비어있지 않으면 통합측도 최소 approval(중복 방어선)" 한 줄 보강. 다음: **TASK-012(감사카드 통합) 진행 가능**(Phase D — AC 가드 3건 준수). Phase C TASK-010 은 Claude catalog 설계 선행 — Codex 대기.
 상세: `review-notes.md` TASK-009 보정 재리뷰 절.
+
+## D-022 (2026-07-05) TASK-010/011 능력 카탈로그 설계 확정 (선제 — 2층 신규 능력 감지)
+Codex 질문 없이 Claude 가 먼저 낸 설계(TASK-010 = "Claude 설계 선행"). 계약 전문: `docs/capability-catalog-design.md`, 카탈로그 draft: `policies/sensitive-capabilities.yaml`.
+**층·불변식**: 능력은 **추론 2층**(설계 §3) — `@gov`(선언 1층, D-017)와 달리 **자동 차단 금지, `approval_required` 가 상한**(D-004). catalog `level ∈ {protected, watched}`, `frozen` 오면 검증오류+protected clamp. 차단이 필요하면 2층이 아니라 1층(`@gov frozen`/zone)에서 사람이 선언.
+**게이트 분리(A-0003 패턴)**: TASK-010 `extract-python-capabilities.py`(추출·보고 전용·exit 0) / TASK-011 `check-new-capabilities.py`(판정). TASK-005 인벤토리 스키마 확장 금지.
+**감지 신호(결정적 AST)**: `imports`(모듈 import 자체가 신호) / `calls`(별칭·from-import 해소한 점표기 전체이름) / `builtins`(무-import `eval`/`exec`). **핵심 방어 = import-레벨 backstop**: 호출 해석은 별칭·`getattr`·재대입·star-import 로 우회 가능하나 import 는 정적으로 잡힘 → 우회해도 import 신호가 능력 포착. `__import__`/`getattr` 동적 경로는 `dynamic_code_exec`·import backstop 이 받음. 값 추정 금지(`yaml.load` 항상 신호, `open` 쓰기판별 제외).
+**신규 판정 = `head − base`(파일별 능력 id 차집합)**: TASK-009 `base∪head max` 와 **정반대** — 능력 제거는 안전(무경고), 신규 도입만 approval. 신규 파일 전부 신규, 삭제 파일 무신규.
+**fail-closed(A-0005 교훈 반영)**: head 존재+분석불능 → per-path 무조건 approval(전역 `errors and not records` 조건 금지 — D-020 세탁 재발 차단). base 불능 → base_caps 빈 집합(head 능력 신규화 approval). 존재판별 `git cat-file -e`(문자열 파싱 금지).
+**시작 카탈로그(🟡 조직 채움)**: subprocess_exec·dynamic_code_exec·unsafe_deserialization·outbound_network·crypto_primitive. **자격증명·PII 취급은 명시 이연**(값·데이터흐름 분석 필요 — 잡음 폭증 방지, 설계 §3 "정밀도 우선").
+**정책 선택 4건(형 override 가능·비차단)**: A. 판정단위=파일별 능력 id 집합(기존 능력 추가사용 무경고) B. import-of-민감모듈=도입 간주 C. 시작 카탈로그 내용 D. 자격증명/PII 이연.
+**테스트 AC**: 고정 적대 세트 7종(별칭·from-별칭·star·getattr·`__import__`·내장·함수내 import) 상설 픽스처 + 신규만/never-blocked/fail-closed 3대 음성검증.
+**머지 판정(D-007)**: 이 설계 산출물(정책 draft·설계 문서·TASKS AC·기록)은 문서 전용·비민감 — 단 형 지시대로 **다음 리뷰 사이클에서 그 리뷰 기록과 함께 main 에 번들 머지**(지금 단독 푸시 안 함). Codex 는 main 반입 후 TASK-010 구현 착수 가능(브랜치 `codex/<날짜>-task010-capabilities`).
+상세: `docs/capability-catalog-design.md`.
