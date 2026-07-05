@@ -1,11 +1,24 @@
 #!/usr/bin/env bash
 # Codex 작업 시작 런처 — 최신 main 받고 → Codex 무인(full-auto 동등) 실행
 # 사용: 클론한 repo 폴더 안에서   ./scripts/start-codex.sh
-# 무인 조합: -a never(승인 안 물음) + -s workspace-write(작업폴더 쓰기) +
-#            network_access=true(git push 되도록 네트워크 허용).
+# 무인 조합: -a never(승인 안 물음) + 아래 sandbox 모드.
 # 이 codex 버전엔 --full-auto 플래그가 없어 위 조합으로 대체.
+#
+# ── sandbox 모드 (2026-07-04 수정) ────────────────────────────
+# 기본값 danger-full-access. 이유: -s workspace-write 가 .git 을 읽기전용으로
+# 열어 Codex 내부의 브랜치 생성·fetch·commit(refs/…lock, FETCH_HEAD 쓰기)을
+# 막는 문제가 있었다. 자기 repo 무인 자동화(-a never)라 전체 접근을 허용해
+# git 이 항상 되게 한다(full-access 는 네트워크도 포함 → 별도 network 플래그 불요).
+# 더 강한 격리를 원하면:  ACGH_SANDBOX=workspace-write ./scripts/start-codex.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."          # repo 루트로 이동 (스크립트 위치 기준)
+
+SANDBOX="${ACGH_SANDBOX:-danger-full-access}"
+if [ "$SANDBOX" = "workspace-write" ]; then
+  SBOX_ARGS=(--sandbox workspace-write -c sandbox_workspace_write.network_access=true)
+else
+  SBOX_ARGS=(--sandbox danger-full-access)
+fi
 
 echo "▶ 최신 상태 확인..."
 git fetch origin --quiet 2>/dev/null || true
@@ -26,9 +39,8 @@ else
   MODE="새태스크"
 fi
 
-echo "▶ Codex 실행 (무인: -a never -s workspace-write +network) · 모드=$MODE"
-exec codex --ask-for-approval never --sandbox workspace-write \
-  -c sandbox_workspace_write.network_access=true \
+echo "▶ Codex 실행 (무인: -a never -s $SANDBOX) · 모드=$MODE"
+exec codex --ask-for-approval never "${SBOX_ARGS[@]}" \
   "먼저 collab/handoff-log.md 맨 위(최신) 줄을 확인해라. \
 (A) 맨 위 줄이 '보정요청'이면: main 으로 새 브랜치를 만들지 말고, 그 줄이 가리키는 작업 브랜치를 checkout 해서 collab/answers/A-XXXX.md 의 지시대로 보정하고 tests/run-tests.sh 전체 green 확인 후 같은 브랜치에 상세 커밋·push(재인계). 워킹트리에 커밋 안 된 변경이 있으면 먼저 확인해 살릴지 판단. \
 (B) 그 외(리뷰통과·done·새 태스크)면: START-HERE.md → COMMON-RULES.md → AGENTS.md → TASKS.md 읽고 오늘 날짜 브랜치(codex/$(date +%F)-<주제>)를 최신 main 기준으로 만들어 다음 할 일을 진행해. \
