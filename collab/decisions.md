@@ -200,3 +200,26 @@ D-005 의 운영 세부. **Codex 는 개발만**(자기 머지 금지). main 머
 **머지 판정(D-007)**: 분석 전용 판정 게이트·픽스처 — **비민감**(TASK-005~008·013 동일 범주). 구현자(Codex)≠머지자(Claude) → **Claude 가 main 머지·push.** TASK-009 완료 = **MVP-1 Phase B 완결**(TASK-008+009).
 **하류 반영**: TASKS.md TASK-012 AC 가드에 "TASK-009 `errors` 비어있지 않으면 통합측도 최소 approval(중복 방어선)" 한 줄 보강. 다음: **TASK-012(감사카드 통합) 진행 가능**(Phase D — AC 가드 3건 준수). Phase C TASK-010 은 Claude catalog 설계 선행 — Codex 대기.
 상세: `review-notes.md` TASK-009 보정 재리뷰 절.
+
+## D-022 (2026-07-05) TASK-010/011 능력 카탈로그 설계 확정 (선제 — 2층 신규 능력 감지)
+Codex 질문 없이 Claude 가 먼저 낸 설계(TASK-010 = "Claude 설계 선행"). 계약 전문: `docs/capability-catalog-design.md`, 카탈로그 draft: `policies/sensitive-capabilities.yaml`.
+**층·불변식**: 능력은 **추론 2층**(설계 §3) — `@gov`(선언 1층, D-017)와 달리 **자동 차단 금지, `approval_required` 가 상한**(D-004). catalog `level ∈ {protected, watched}`, `frozen` 오면 검증오류+protected clamp. 차단이 필요하면 2층이 아니라 1층(`@gov frozen`/zone)에서 사람이 선언.
+**게이트 분리(A-0003 패턴)**: TASK-010 `extract-python-capabilities.py`(추출·보고 전용·exit 0) / TASK-011 `check-new-capabilities.py`(판정). TASK-005 인벤토리 스키마 확장 금지.
+**감지 신호(결정적 AST)**: `imports`(모듈 import 자체가 신호) / `calls`(별칭·from-import 해소한 점표기 전체이름) / `builtins`(무-import `eval`/`exec`). **핵심 방어 = import-레벨 backstop**: 호출 해석은 별칭·`getattr`·재대입·star-import 로 우회 가능하나 import 는 정적으로 잡힘 → 우회해도 import 신호가 능력 포착. `__import__`/`getattr` 동적 경로는 `dynamic_code_exec`·import backstop 이 받음. 값 추정 금지(`yaml.load` 항상 신호, `open` 쓰기판별 제외).
+**신규 판정 = `head − base`(파일별 능력 id 차집합)**: TASK-009 `base∪head max` 와 **정반대** — 능력 제거는 안전(무경고), 신규 도입만 approval. 신규 파일 전부 신규, 삭제 파일 무신규.
+**fail-closed(A-0005 교훈 반영)**: head 존재+분석불능 → per-path 무조건 approval(전역 `errors and not records` 조건 금지 — D-020 세탁 재발 차단). base 불능 → base_caps 빈 집합(head 능력 신규화 approval). 존재판별 `git cat-file -e`(문자열 파싱 금지).
+**시작 카탈로그(🟡 조직 채움)**: subprocess_exec·dynamic_code_exec·unsafe_deserialization·outbound_network·crypto_primitive. **자격증명·PII 취급은 명시 이연**(값·데이터흐름 분석 필요 — 잡음 폭증 방지, 설계 §3 "정밀도 우선").
+**정책 선택 4건(형 override 가능·비차단)**: A. 판정단위=파일별 능력 id 집합(기존 능력 추가사용 무경고) B. import-of-민감모듈=도입 간주 C. 시작 카탈로그 내용 D. 자격증명/PII 이연.
+**테스트 AC**: 고정 적대 세트 7종(별칭·from-별칭·star·getattr·`__import__`·내장·함수내 import) 상설 픽스처 + 신규만/never-blocked/fail-closed 3대 음성검증.
+**머지 판정(D-007)**: 이 설계 산출물(정책 draft·설계 문서·TASKS AC·기록)은 문서 전용·비민감 — 단 형 지시대로 **다음 리뷰 사이클에서 그 리뷰 기록과 함께 main 에 번들 머지**(지금 단독 푸시 안 함). Codex 는 main 반입 후 TASK-010 구현 착수 가능(브랜치 `codex/<날짜>-task010-capabilities`).
+상세: `docs/capability-catalog-design.md`.
+
+## D-023 (2026-07-05) TASK-012 감사카드 통합 (`generate-change-evidence` ← 함수 gov) — 리뷰 **통과** + Claude 머지 (+ TASK-010 설계 번들 반입)
+대상: impl `81147f5`(브랜치 `codex/2026-07-05-task012-evidence-integration`, 헤드 `20067e8`) — `generate-change-evidence.py` + 통합 테스트 3종 + evidence-integration change-intent 픽스처.
+**통합 구조(정합)**: evidence 게이트가 `check-function-gov-level`(TASK-009)를 `importlib` 로 로드해 git-ref 입력에서 실행 → `changed_functions` 를 감사카드에 싣고, `combine_verdicts` 로 경로판정(intent∪zone)과 함수판정을 합성. TASK-009 가 내부적으로 TASK-006 map ∪ TASK-007 classify(`<module>` 포함)를 이미 병합하므로 D-013 "TASK-007 단독 판정 금지·모듈레벨 병합" 이 자연 충족. 상류 error 는 TASK-009 `errors`+fail-closed 레코드로 전달돼 승격.
+**핵심 실증(경로-clean인데 함수-frozen → blocked, fresh 격리)**: 신규 repo 에서 intent=pass·sensitive=pass(경로상 어떤 zone·forbidden 도 아님)인데 `@gov(frozen)` 함수 본문만 수정 → **최종 verdict=blocked**. 경로판정은 frozen zone 이 아니면 최대 approval 이므로 blocked 는 오직 함수-gov 가 만든 것 = MVP-1 의 핵심 갭(경로에 안 보이는 민감 함수)이 감사카드에서 실제로 막힘. + parse_error 신규 `.py`(경로-clean) → approval_required(`function_analysis_error` reason, "빈 결과 ≠ clean" 실증) / 무주석 함수 변경 → 함수 reason 없이 경로대로 pass(과차단 없음) / name-status 파일 입력 → 함수분석 스킵·MVP-0 호환.
+**음성검증 3종**: ① `combine_verdicts` 를 경로판정만으로 되돌림 → frozen·module-protected·fail-closed **3 픽스처 전부 FAIL**(통합 실가드) ② frozen 기대 pass 변조 → FAIL ③ (M2) `or function_gov.get("errors")` 제거 → **변화 없음**(비차단 관찰 1 참조). 29/29 PASS·md5 결정성. exit 경로: 최상위 try/except 가 어떤 예외든 blocked fail-closed(bad ref 등 — 기존 MVP-0 핸들러).
+**보수성(COMMON-RULES §1)**: 변경 = `generate-change-evidence.py` + tests(cases·run-tests·픽스처 change-intent)만. **Claude 소유 무접촉**(docs/policies/templates/CLAUDE/decisions/answers/review-notes), scope-creep 없음. `git diff --check`·`py_compile` PASS, 커밋 §3 준수.
+**비차단 관찰 4건**(`review-notes.md`): ① `or function_gov.errors` 분기는 중복 방어선이나 독립 테스트 픽스처 없음(post-D-021 TASK-009 는 errors 있으면 항상 verdict≥approval → 현재 단독 발화 불가·死코드 아님) ② name-status 파일 입력은 함수분석 조용히 스킵 — canonical 호출은 git-ref(README 확인)라 운영 갭 아님, 문서화 권고 ③ 일반 예외→blocked(AC "최소 approval" 보다 강함, 안전 방향·기존 핸들러) ④ `changed_functions` 가 base·head 후보를 중복 표기(TASK-009 출력 그대로, 결정적·감사용 무해).
+**머지 판정(D-007)**: 분석 전용 감사카드 생성 게이트 — **비민감**(TASK-005~009 동일 범주). 구현자(Codex)≠머지자(Claude) → **Claude 가 main 머지·push.** **번들**: 형 지시로 보류했던 **TASK-010/011 설계(D-022)를 이 리뷰 사이클에 함께 main 반입**. **MVP-1 Phase D(TASK-012) 통합 완료.** 다음: **TASK-010(능력 추출기) 진행 가능**(설계 계약 `docs/capability-catalog-design.md`). 멱등성: 81147f5·20067e8 재처리 금지.
+상세: `review-notes.md` TASK-012 리뷰 절.

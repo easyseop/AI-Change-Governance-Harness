@@ -115,12 +115,27 @@
 - **join 키 주의(D-018 관찰 #5)**: TASK-008 `order_key`(같은 이름 내 전 def 등장순서)와 TASK-007 `_match_key` occurrence(`(이름, 데코셋)` 내 순서)는 **동일하지 않다**(setter 실측: 전자 1, 후자 0). order_key 끼리 join 금지 — **`(path, name, TASK-008 def_line ↔ TASK-007 after start_line)`** 으로 join 한다.
 - **🔴 AC 가드(D-020/A-0005) — 분석-불능 파일 per-path fail-closed (동반 레코드에 꺼지면 안 됨)**: ① head 에 **존재하는** 변경 `.py` 가 `parse_error`/`unreadable` → **다른 레코드 유무와 무관하게** 그 파일에 fail-closed 레코드(base 민감 시 base 최강 레벨, 아니면 `protected`) — 전역 "errors 있고 records 없을 때만" 조건 금지(watched 1건 동반으로 pass 세탁 실증). ② base 에 **존재했던** 변경 `.py` 의 base 측 불능(head 가독 여부 무관) → 최소 `protected` fail-closed(base 주석 은닉 → head 재인코딩·주석 제거 세탁 실증). ③ head **부재**(삭제/리네임 소스)는 구분: base 가독·비민감 → 통과 허용(과차단 방지), base 가독·민감 → base 최강 레벨(D-017 #2), base 불능 → `protected`. 존재/부재 판별은 결정적으로(에러 메시지 문자열 파싱 금지). ④ map/classify top-level `error` → records 유무 무관 최소 `approval_required`. 회귀 픽스처: unreadable-head/base-laundering(watched 동반 → approval)·plain-delete-pass + "fail-closed 무력화 → FAIL" 음성검증.
 
-## Phase C — 신규 능력 감지  *(A 완료 후)*
-- **TASK-010** `sensitive-capabilities` catalog 설계 + 능력 추출 (Claude 설계 → Codex)
-- **TASK-011** before/after 능력 diff → 신규 도입만 승인요구
+## Phase C — 신규 능력 감지  *(A 완료 후)*  *(설계 확정: `docs/capability-catalog-design.md`, D-022)*
+> **2층 불변식(D-004·설계 §3)**: 능력 감지는 **추론** → **절대 blocked 금지, `approval_required` 가 상한**. catalog `level ∈ {protected, watched}`, `frozen` 오면 검증오류+protected clamp.
+
+### TASK-010 `sensitive-capabilities` catalog + 능력 추출기 `extract-python-capabilities.py`  *(Claude 설계 완료 → Codex)*
+**판정**: 단일 `.py` → 카탈로그(`policies/sensitive-capabilities.yaml`) 신호로 파일의 민감 **능력 집합** 추출. **보고 전용·exit 0**(판정 없음 — TASK-008 대응). 계약 전문: `docs/capability-catalog-design.md`.
+- **신호 3종**: `imports`(모듈 import 자체가 신호) / `calls`(별칭·from-import 해소한 점표기 전체이름 일치) / `builtins`(무-import 내장 `eval`/`exec` 등).
+- **🔴 AC 가드 — import-레벨 backstop**: 호출 해석은 별칭·`getattr`·재대입으로 우회 가능 → **import 신호가 최종 방어선**. `os` 등 흔한 모듈은 import 무신호(특정 호출만), `subprocess`·`pickle`·`requests` 등은 import 자체가 신호.
+- **🔴 AC 가드 — 고정 적대(우회) 세트 상설 픽스처**(§2B, 계약 Q4): ① `import subprocess as sp` 별칭 ② `from subprocess import run as r` from-별칭 ③ `from subprocess import *` star-import ④ `getattr(subprocess,"run")` 동적접근(import backstop) ⑤ `__import__("subprocess")`(→dynamic_code_exec) ⑥ 무-import `exec`/`eval` ⑦ 함수 내부 import(walk 전수). 각 "신호 제거→미감지 FAIL" 음성검증.
+- 값 추정 금지(`yaml.load` 는 항상 신호·`open` 쓰기판별 제외), 파일 단위 fail-safe(parse_error/unreadable 격리·형제 보존·exit 0), 결정성 md5.
+- 출력: `{path, capabilities:[{id,level,signals:[{kind,name,line}]}], unresolved_dynamic, errors, parse_error, unreadable}`. TASK-005 인벤토리 스키마 확장 금지(별도 게이트).
+
+### TASK-011 before/after 능력 diff `check-new-capabilities.py` → 신규 도입만 승인요구  *(TASK-010 후)*
+**판정**: `base..head` → 파일별 **`head − base` 신규 능력**만 verdict. 능력 *제거*는 안전(경고 안 함), *신규 도입*만 approval. (TASK-009 의 `base∪head max` 와 **정반대** — 주의.)
+- **🔴 AC 가드 — 신규만(계약 Q5)**: 능력 id 가 base·head **양쪽**이면 미감지 / head 만이면 감지 / 신규 파일(base 부재)→능력 전부 신규 / 삭제 파일(head 부재)→신규 없음. **음성검증**: base 무시 head-only 로 바꾸면 이미-있던 능력 오검출→FAIL(base∪head 아님을 고정). 판정 단위=파일별 능력 id 집합(형 override 가능).
+- **🔴 AC 가드 — never-blocked 불변식(계약 Q2)**: verdict 는 `approval_required(2)` 상한 / watched 만이면 경고+`pass(0)` / 없으면 pass. **`blocked`·exit 1 절대 없음.** 음성검증: catalog 에 `frozen` 넣어도 protected clamp(clamp 제거 시 blocked → FAIL 로 잡히게).
+- **🔴 AC 가드 — fail-closed(계약 Q6, A-0005 교훈)**: head 존재+`parse_error`/`unreadable` 변경 `.py` → **다른 결과 유무 무관** per-path `approval_required`(전역 "errors and not records" 조건 **금지** — D-020 세탁 재발 방지). base 존재+불능 → `base_caps` 빈 집합(head 능력 신규화 approval). 존재/부재는 `git cat-file -e` 결정적(문자열 파싱 금지). upstream error → records 무관 최소 approval. 회귀 픽스처 `new-cap-unreadable-head`(신규 불능+무관 동반→approval) + "fail-closed 무력화→FAIL" 음성검증.
+- 출력: `{gate,verdict,new_capabilities:[{path,id,level,reason,reviewer,signals}],warned_capabilities,fail_closed,errors,exit_code}`.
+- **하류(TASK-012)**: `errors`/`fail_closed` 비면 아님 → 통합측 최소 approval(D-021 원칙). 능력 게이트는 `@gov`·zone 과 독립, TASK-012 가 병합.
 
 ## Phase D — 통합·테스트  *(A 완료 후)*
-- **TASK-012** 감사카드 통합 (`changed_functions[]` + verdict 반영)
+- **TASK-012** ☑ 감사카드 통합 (`changed_functions[]` + verdict 반영) — 리뷰통과·머지 (D-023, impl 81147f5). 경로-clean + 함수-frozen → blocked 격리 실증·parse_error→approval fail-closed·음성검증 3종. 비차단 관찰 4건(errors 분기 중복방어 미테스트·name-status 입력 함수분석 스킵[git-ref 필수 문서권고]·예외→blocked·changed_functions 중복표기) → `review-notes.md`.
   - **🔴 AC 가드(TASK-006 리뷰 D-012 #1)**: 매핑/추출 게이트 출력의 `error`(top-level git 실패) 또는 파일별 `parse_error`(문법오류) 가 존재하면 **fail-closed** 로 처리(verdict = 최소 `approval_required`, 파괴적이면 `blocked`). **`files`/`changed_functions` 가 비었다고 "변경 없음(pass)" 으로 간주 금지.** 이유: TASK-006 은 보고용으로 하드 에러 시 exit 0 + `error` + `files:[]` 를 반환하므로(Phase A 설계), 통합측이 `error` 를 무시하면 git 실패가 *clean diff* 로 읽혀 민감 변경을 통째로 놓침(fail-open). **보강(TASK-013 재리뷰 D-016)**: map 출력에서 `parse_error` 파일이 헝크 부재(git 바이너리 취급 — NUL 바이트 `.py` 실증)로 `touched_functions: []` 일 수 있다 — **빈 `touched_functions` ≠ clean**, `parse_error` 가 있으면 `<module>` touched 와 동등하게 보수 취급하라. **보강(TASK-009 재리뷰 D-021)**: TASK-009 `check-function-gov-level` 출력의 `errors` 가 비어있지 않으면 통합측도 **최소 `approval_required`** 로 취급(게이트 자체 fail-closed 의 중복 방어선 — R-1 류 재발 대비). 상류 top-level error 주입 픽스처(TASK-009 AC ④ 회귀 가드)도 이 태스크에서 추가 검토.
   - **🔴 AC 가드(TASK-007 리뷰 D-013 #1)**: **TASK-007 함수 분류 출력 단독으로 판정 금지.** 모듈레벨 변경(상수·import·톱레벨 문장 — 예: `ADMIN_ROLE = "user"→"admin"`)은 TASK-007 에 **아무 표식 없이 비가시**(`function_changes: []`)이므로, 반드시 TASK-006 헝크 매핑의 `<module>` touched 와 **병합**해 판정한다. 또한 `fallback: true` 파일(비-py·신규/삭제·parse_error·리네임)은 함수 단위가 안 보이므로 **파일 단위 보수 취급**(zone/intent 게이트 결과로 판정, "함수변경 0 = clean" 간주 금지).
 - **TASK-013** ☑ Python before/after fixtures + 러너 확장 — 재리뷰통과·머지 (D-016, impl 0aaadcc; 1차 보정요청 D-015)
