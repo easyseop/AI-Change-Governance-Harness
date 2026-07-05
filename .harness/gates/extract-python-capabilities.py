@@ -154,7 +154,9 @@ def build_import_bindings(tree, found, import_index, catalog_modules):
                 for cap in caps_for_import(module, import_index):
                     add_signal(found, cap, "import", module, node.lineno)
         elif isinstance(node, ast.Assign):
-            value_name = dotted_name(node.value)
+            value_name = resolve_getattr_call_name(node.value, bindings)
+            if not value_name:
+                value_name = dotted_name(node.value)
             if not value_name:
                 continue
             root, _, rest = value_name.partition(".")

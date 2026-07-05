@@ -63,3 +63,9 @@ def use_call_only_reassigned(cmd):
     import os
     runner = os
     return runner.system(cmd)
+
+
+def use_call_only_getattr_assigned(cmd):
+    import os
+    command_runner = getattr(os, "system")
+    return command_runner(cmd)
