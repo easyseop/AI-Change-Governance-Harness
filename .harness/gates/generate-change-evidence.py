@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 import argparse
 import fnmatch
+import importlib.util
+import json
 import os
 import subprocess
 import sys
+from pathlib import Path
 from pathlib import PurePosixPath
 
 import yaml
@@ -12,6 +15,21 @@ import yaml
 PASS = 0
 BLOCKED = 1
 APPROVAL_REQUIRED = 2
+
+
+GATE_DIR = Path(__file__).resolve().parent
+
+
+def load_gate_module(filename, module_name):
+    spec = importlib.util.spec_from_file_location(module_name, GATE_DIR / filename)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+function_gov_gate = load_gate_module(
+    "check-function-gov-level.py", "check_function_gov_level_gate"
+)
 
 
 def normalize_path(path):
@@ -44,24 +62,25 @@ def match_glob(path, pattern):
     return match_parts(0, 0)
 
 
-def run_git(args):
+def run_git(args, repo="."):
     result = subprocess.run(
         ["git"] + args,
         check=False,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        cwd=repo,
     )
     if result.returncode != 0:
         raise RuntimeError(result.stderr.strip() or "git command failed")
     return result.stdout
 
 
-def read_diff_lines(diff_input, mode):
+def read_diff_lines(diff_input, mode, repo="."):
     if os.path.exists(diff_input):
         with open(diff_input, "r", encoding="utf-8") as stream:
             return stream.read().splitlines()
-    return run_git(["diff", mode, diff_input]).splitlines()
+    return run_git(["diff", mode, diff_input], repo).splitlines()
 
 
 def parse_changed_files(name_status_lines):
@@ -113,21 +132,21 @@ def base_ref_from_diff_input(diff_input):
     return diff_input
 
 
-def resolve_base_commit(diff_input):
+def resolve_base_commit(diff_input, repo="."):
     base_ref = base_ref_from_diff_input(diff_input)
     if not base_ref:
         return "unknown"
-    return run_git(["rev-parse", base_ref]).strip()
+    return run_git(["rev-parse", base_ref], repo).strip()
 
 
-def resolve_generated_on(diff_input, generated_on):
+def resolve_generated_on(diff_input, generated_on, repo="."):
     if generated_on:
         return generated_on
 
     base_ref = base_ref_from_diff_input(diff_input)
     if not base_ref:
         return "1970-01-01"
-    return run_git(["show", "-s", "--format=%cs", base_ref]).strip()
+    return run_git(["show", "-s", "--format=%cs", base_ref], repo).strip()
 
 
 def load_intent(path):
@@ -320,6 +339,60 @@ def build_reasons(intent_check, sensitive_check):
     return reasons
 
 
+def can_run_function_gov(diff_input):
+    return not os.path.exists(diff_input) and ".." in diff_input
+
+
+def function_reason(prefix, item):
+    reason = item.get("reason") or ""
+    suffix = f":{reason}" if reason else ""
+    return f"{prefix}:{item.get('path')}::{item.get('name')}:{item.get('side')}{suffix}"
+
+
+def build_function_gov_result(diff_input, sensitive_zones, repo):
+    if not can_run_function_gov(diff_input):
+        return {
+            "verdict": "pass",
+            "changed_functions": [],
+            "reasons": [],
+            "errors": [],
+        }
+
+    result = function_gov_gate.check_function_gov_level(diff_input, sensitive_zones, repo)
+    reasons = []
+    for item in result.get("frozen_touched", []):
+        reasons.append(function_reason("function_frozen", item))
+    for item in result.get("protected_touched", []):
+        reasons.append(function_reason("function_protected", item))
+    for item in result.get("watched_touched", []):
+        reasons.append(function_reason("function_watched", item))
+    for error in result.get("errors", []):
+        encoded = json.dumps(error, ensure_ascii=False, sort_keys=True)
+        reasons.append(f"function_analysis_error:{encoded}")
+
+    return {
+        "verdict": result.get("verdict", "approval_required"),
+        "changed_functions": result.get("changed_functions", []),
+        "reasons": reasons,
+        "errors": result.get("errors", []),
+    }
+
+
+def combine_verdicts(intent_check, sensitive_check, function_gov):
+    verdict, exit_code = verdict_and_exit(intent_check, sensitive_check)
+    function_verdict = function_gov.get("verdict")
+
+    if verdict == "blocked" or function_verdict == "blocked":
+        return "blocked", BLOCKED
+    if (
+        verdict == "approval_required"
+        or function_verdict == "approval_required"
+        or function_gov.get("errors")
+    ):
+        return "approval_required", APPROVAL_REQUIRED
+    return "pass", PASS
+
+
 def verdict_and_exit(intent_check, sensitive_check):
     if intent_check["forbidden_touched"] or sensitive_check["frozen_touched"]:
         return "blocked", BLOCKED
@@ -333,20 +406,21 @@ def build_evidence(args):
     sensitive_policy = load_sensitive_policy(args.sensitive_zones)
     routing_policy = load_routing_policy(args.approval_routing)
 
-    name_status_lines = read_diff_lines(args.diff_input, "--name-status")
+    name_status_lines = read_diff_lines(args.diff_input, "--name-status", args.repo)
     if args.numstat_input:
         with open(args.numstat_input, "r", encoding="utf-8") as stream:
             numstat_lines = stream.read().splitlines()
     elif os.path.exists(args.diff_input):
         numstat_lines = []
     else:
-        numstat_lines = read_diff_lines(args.diff_input, "--numstat")
+        numstat_lines = read_diff_lines(args.diff_input, "--numstat", args.repo)
 
     files = parse_changed_files(name_status_lines)
     numstat = parse_numstat(numstat_lines)
     intent_check = intent_result(files, intent)
     sensitive_check = sensitive_result(files, sensitive_policy)
-    verdict, exit_code = verdict_and_exit(intent_check, sensitive_check)
+    function_gov = build_function_gov_result(args.diff_input, args.sensitive_zones, args.repo)
+    verdict, exit_code = combine_verdicts(intent_check, sensitive_check, function_gov)
 
     changed_files = []
     for path in files:
@@ -372,10 +446,11 @@ def build_evidence(args):
         "change_evidence": {
             "requirement_id": intent["requirement_id"],
             "author": intent["author"],
-            "generated_on": resolve_generated_on(args.diff_input, args.generated_on),
-            "base_commit": resolve_base_commit(args.diff_input),
+            "generated_on": resolve_generated_on(args.diff_input, args.generated_on, args.repo),
+            "base_commit": resolve_base_commit(args.diff_input, args.repo),
             "summary": summary,
             "changed_files": changed_files,
+            "changed_functions": function_gov["changed_functions"],
             "intent_check": intent_check,
             "sensitive_zone_check": {
                 "status": sensitive_check["status"],
@@ -388,7 +463,7 @@ def build_evidence(args):
                 "importers_count": None,
             },
             "verdict": verdict,
-            "reasons": build_reasons(intent_check, sensitive_check),
+            "reasons": build_reasons(intent_check, sensitive_check) + function_gov["reasons"],
             "reviewer_required": reviewers_for_files(files, routing_policy),
         }
     }
@@ -423,6 +498,7 @@ def main():
         "--generated-on",
         help="override generated_on date for deterministic tests",
     )
+    parser.add_argument("--repo", default=".", help="git repository to inspect")
     parser.add_argument("--output", help="write YAML to this file instead of stdout")
     args = parser.parse_args()
 

@@ -16,6 +16,94 @@ cases:
           zone_level: free
           in_allowed_paths: true
 
+  - name: evidence-function-frozen
+    gate: generate-change-evidence
+    input:
+      fixture_dir: tests/fixtures/function-gov-level/frozen-removal
+      change_intent: tests/fixtures/evidence-integration/change-intent.yaml
+    expect:
+      verdict: blocked
+      exit_code: 1
+      files_changed: 1
+      lines_added: 1
+      lines_removed: 2
+      changed_files:
+        - path: app/service.py
+          zone_level: free
+          in_allowed_paths: true
+      changed_functions:
+        - path: app/service.py
+          name: <module>
+          before_line: null
+          after_line: null
+          source: map
+        - path: app/service.py
+          name: ledger_write
+          before_line: null
+          after_line: 7
+          source: map
+        - path: app/service.py
+          name: ledger_write
+          before_line: 7
+          after_line: 7
+          source: classify_added
+        - path: app/service.py
+          name: ledger_write
+          before_line: 8
+          after_line: 8
+          source: classify_deleted
+      reasons_contain:
+        - function_frozen:app/service.py::ledger_write:base
+
+  - name: evidence-function-module-protected
+    gate: generate-change-evidence
+    input:
+      fixture_dir: tests/fixtures/function-gov-level/module-protected
+      change_intent: tests/fixtures/evidence-integration/change-intent.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      files_changed: 1
+      lines_added: 1
+      lines_removed: 1
+      changed_files:
+        - path: app/settings.py
+          zone_level: free
+          in_allowed_paths: true
+      changed_functions:
+        - path: app/settings.py
+          name: <module>
+          before_line: null
+          after_line: null
+          source: map
+      reasons_contain:
+        - function_protected:app/settings.py::<module>:base
+
+  - name: evidence-function-fail-closed
+    gate: generate-change-evidence
+    input:
+      fixture_dir: tests/fixtures/function-gov-level/fail-closed
+      change_intent: tests/fixtures/evidence-integration/change-intent.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      files_changed: 1
+      lines_added: 4
+      lines_removed: 1
+      changed_files:
+        - path: app/service.py
+          zone_level: free
+          in_allowed_paths: true
+      changed_functions:
+        - path: app/service.py
+          name: <module>
+          before_line: null
+          after_line: null
+          source: classify_fallback,map
+      reasons_contain:
+        - function_protected:app/service.py::<file>:head
+        - "function_analysis_error:"
+
   - name: out-of-scope
     gate: check-change-intent
     input:

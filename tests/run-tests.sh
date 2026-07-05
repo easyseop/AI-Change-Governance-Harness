@@ -92,6 +92,23 @@ def case_command(case):
         ]
 
     if gate == "generate-change-evidence":
+        if data.get("fixture_dir"):
+            work_dir, rev_range = prepare_function_mapping_fixture(data["fixture_dir"])
+            return [
+                "python3",
+                f"{ROOT_DIR}/{script}",
+                rev_range,
+                "--repo",
+                work_dir,
+                "--change-intent",
+                data["change_intent"],
+                "--sensitive-zones",
+                f"{ROOT_DIR}/policies/sensitive-zones.yaml",
+                "--approval-routing",
+                f"{ROOT_DIR}/policies/approval-routing.yaml",
+                "--generated-on",
+                "2026-06-30",
+            ]
         command = [
             "python3",
             script,
@@ -208,6 +225,23 @@ def validate_evidence(case, result, exit_code):
     assert_equal(errors, "summary.lines_added", evidence.get("summary", {}).get("lines_added"), expect["lines_added"])
     assert_equal(errors, "summary.lines_removed", evidence.get("summary", {}).get("lines_removed"), expect["lines_removed"])
     assert_equal(errors, "changed_files", evidence.get("changed_files"), expect["changed_files"])
+    if "changed_functions" in expect:
+        actual = [
+            {
+                "path": item.get("path"),
+                "name": item.get("name"),
+                "before_line": item.get("before_line"),
+                "after_line": item.get("after_line"),
+                "source": item.get("source"),
+            }
+            for item in evidence.get("changed_functions", [])
+        ]
+        assert_equal(errors, "changed_functions", actual, expect["changed_functions"])
+    if "reasons_contain" in expect:
+        reasons = evidence.get("reasons", [])
+        for expected_reason in expect["reasons_contain"]:
+            if not any(expected_reason in reason for reason in reasons):
+                errors.append(f"reasons: expected entry containing {expected_reason!r}, got {reasons!r}")
     return errors
 
 
