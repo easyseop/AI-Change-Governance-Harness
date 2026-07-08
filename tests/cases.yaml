@@ -1082,3 +1082,69 @@ cases:
       warned_capabilities: []
       fail_closed: []
       errors_present: true
+
+  - name: policy-change-loosening-level
+    gate: check-policy-change
+    input:
+      fixture_dir: tests/fixtures/policy-change/loosening
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      deterministic_stdout: true
+      policy_loosening_kinds:
+        - removed_required_approval
+        - weakened_zone_level
+      enforcement_bypass_kinds: []
+
+  - name: policy-change-strengthening
+    gate: check-policy-change
+    input:
+      fixture_dir: tests/fixtures/policy-change/strengthening
+    expect:
+      verdict: pass
+      exit_code: 0
+      policy_loosening_kinds: []
+      enforcement_bypass_kinds: []
+
+  - name: policy-change-comments-only
+    gate: check-policy-change
+    input:
+      fixture_dir: tests/fixtures/policy-change/comments-only
+    expect:
+      verdict: pass
+      exit_code: 0
+      policy_loosening_kinds: []
+      enforcement_bypass_kinds: []
+
+  - name: policy-change-rule-delete
+    gate: check-policy-change
+    input:
+      fixture_dir: tests/fixtures/policy-change/rule-delete
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      policy_loosening_kinds:
+        - removed_list_item
+      enforcement_bypass_kinds: []
+
+  - name: policy-change-runner-bypass
+    gate: check-policy-change
+    input:
+      fixture_dir: tests/fixtures/policy-change/runner-bypass
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      policy_loosening_kinds: []
+      enforcement_bypass_kinds:
+        - added_gate_bypass
+
+  - name: policy-change-runner-removal
+    gate: check-policy-change
+    input:
+      fixture_dir: tests/fixtures/policy-change/runner-removal
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      policy_loosening_kinds: []
+      enforcement_bypass_kinds:
+        - removed_gate_invocation
