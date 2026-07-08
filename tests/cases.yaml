@@ -1138,6 +1138,17 @@ cases:
       enforcement_bypass_kinds:
         - added_gate_bypass
 
+  - name: policy-change-runner-continue-on-error
+    gate: check-policy-change
+    input:
+      fixture_dir: tests/fixtures/policy-change/runner-continue-on-error
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      policy_loosening_kinds: []
+      enforcement_bypass_kinds:
+        - added_gate_bypass
+
   - name: policy-change-runner-removal
     gate: check-policy-change
     input:
@@ -1148,3 +1159,14 @@ cases:
       policy_loosening_kinds: []
       enforcement_bypass_kinds:
         - removed_gate_invocation
+
+  - name: policy-change-required-check-removal
+    gate: check-policy-change
+    input:
+      fixture_dir: tests/fixtures/policy-change/required-check-removal
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      policy_loosening_kinds: []
+      enforcement_bypass_kinds:
+        - removed_required_check

@@ -2,6 +2,7 @@
 import argparse
 import fnmatch
 import json
+import re
 import subprocess
 import sys
 from pathlib import PurePosixPath
@@ -353,10 +354,29 @@ def removed_and_added_diff_lines(base, head, path, repo):
     return removed, added
 
 
+def unquote_scalar(value):
+    stripped = value.strip()
+    if len(stripped) >= 2 and stripped[0] == stripped[-1] and stripped[0] in ("'", '"'):
+        return stripped[1:-1].strip()
+    return stripped
+
+
+def is_gate_bypass_line(line):
+    stripped = line.strip()
+    if re.search(r"\|\|\s*true\b", stripped):
+        return True
+    if ":" not in stripped:
+        return False
+    key, value = stripped.split(":", 1)
+    if key.strip() != "continue-on-error":
+        return False
+    return unquote_scalar(value).lower() in {"true", "yes", "on"}
+
+
 def detect_enforcement_bypass(base, head, path, repo):
     removed, added = removed_and_added_diff_lines(base, head, path, repo)
     findings = []
-    added_bypass_lines = [line.strip() for line in added if "|| true" in line or "continue-on-error: true" in line]
+    added_bypass_lines = [line.strip() for line in added if is_gate_bypass_line(line)]
     for line in removed:
         stripped = line.strip()
         if any(added_line.startswith(stripped) for added_line in added_bypass_lines):
