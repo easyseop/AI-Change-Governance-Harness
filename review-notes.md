@@ -701,3 +701,35 @@ R-3 코드 델타(`ab4447a`) = `check-policy-change.py`(14줄)+`cases.yaml`(1케
 
 ### 공정성 메모
 R-3 은 Codex 불이행 아님 — A-0006 계약 정확 이행. 인라인 주석 벡터는 내 A-0006 계약 누락이 적대 재검증서 노출. 산출물의 거버넌스-직결 결함이라 §2B 대로 머지 전 폐쇄(델타 국소·유한).
+
+---
+
+## TASK-019 감사카드 정직화 coverage statement — **보정요청** (2026-07-09, D-031)
+
+- 대상: `codex/2026-07-09-task019-coverage-statement` · impl `d8ad086` · 헤드 `195a957`
+- 파일: `.harness/gates/generate-change-evidence.py`(+71) · `templates/change-evidence.template.yaml` · `tests/cases.yaml` · `tests/run-tests.sh`(+28)
+- 결정: **D-031 보정요청** · 반려서 `collab/answers/A-0008.md`
+
+### 수용기준 대비 (정상 경로)
+| # | 기준 | 결과 | 검증 |
+|---|---|---|---|
+| 1 | pass 문구 통일·SAFE/안전 금지 | ✅ | `verdict pass → "no governance violation detected"`; `no_safe_text` 테스트가 `safe`/`안전` 부재 강제 |
+| 2 | coverage `checked`(실행 게이트 동적)+`not_checked`(고정) | ✅(정상)/🔴(오류경로 R-1) | `checked` 는 `can_run_function_gov` 술어 기반 — baseline 2게이트 vs function 3게이트 |
+| 3 | python(parser) 버전 기록 | ✅ | `python_version: sys.version.split()[0]` + `tool_version`·`policy_sha` |
+| 4 | 스키마 키==템플릿+음성검증 | ✅(정상)/🟠(오류경로 R-2) | `schema_keys_match_template`(정상 4픽스처만) |
+
+### 적대적 검증 (능동적으로 깨봄)
+- **음성검증 ①(동적성 실가드)**: `executed_gate_records` 의 `if can_run_function_gov(...)` → `if True` 로 변조 → **baseline 케이스 FAIL** (`coverage.checked.gates: expected ['check-change-intent','check-sensitive-zones'], got [...,'check-function-gov-level']`). 원복 49/49. → AC #2 동적성 가드는 항상-PASS 아님(실가드).
+- **음성검증 ②(정직성 실가드)**: pass 문구에 `(safe)` 주입 → `no_safe_text`("forbidden safe/안전 wording found") + `verdict_statement` 두 가드 동시 FAIL. → AC #1 정직성 가드 실가드.
+- **fresh 입력 ③(픽스처 밖)**: `generate-change-evidence.py HEAD~1..HEAD --change-intent /nonexistent.yaml` → **예외 카드** 재현. `policy_sha:{}`·`reasons:['의도 선언 누락…']`·게이트 0 실행인데 `coverage_statement.checked` 는 3게이트·`verdict_statement: governance violation detected` **위조** → R-1 근거. 동일 카드 top-level 16키(template 17키에서 `changed_functions` 누락) → R-2 근거.
+
+### 결함 (머지 전 폐쇄 요구)
+- **🔴 R-1**: 오류 카드가 실행 안 한 게이트를 `checked` 로 위조 + 입력오류를 "governance violation detected"로 오표기. 카드 정직화 태스크의 정직성 회귀(신규 coverage 블록이 도입). §2B 필수질문=그렇다(산출물=거버넌스 기능). 도달성 높음(기본호출·정책파손). **수정**: 오류경로 `checked:[]`(주변 empties 와 정합), 정상경로 무변경.
+- **🟠 R-2**: 오류 카드 `changed_functions` 누락 → template↔오류카드 스키마 드리프트. `schema_keys_match_template` 가 오류경로 미검사(거짓확신). **수정**: 오류카드 `changed_functions:[]` + 오류경로 픽스처로 가드 확장.
+
+### 비차단 관찰 (MVP-2)
+- **O-1**: `schema_keys_match_template` top-level 키만 비교 — 중첩 임의키 미포착(현재 coverage 단언이 사실상 커버). 차기 재귀 형상비교 옵션.
+- AC #8 policy bundle digest: `policy_sha`(sensitive-zones·approval-routing sha256)로 부분충족. 전체 판정정책 번들 해시 확장은 MVP-2.
+
+### 검증 로그
+`bash tests/run-tests.sh` 49/49 PASS · `git diff --check` clean · `python3 -m py_compile generate-change-evidence.py` OK — 전부 격리 worktree 재현. 음성검증 2종·fresh 입력 1종 직접 실행.
