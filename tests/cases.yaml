@@ -1149,6 +1149,17 @@ cases:
       enforcement_bypass_kinds:
         - added_gate_bypass
 
+  - name: policy-change-runner-continue-on-error-comment
+    gate: check-policy-change
+    input:
+      fixture_dir: tests/fixtures/policy-change/runner-continue-on-error-comment
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      policy_loosening_kinds: []
+      enforcement_bypass_kinds:
+        - added_gate_bypass
+
   - name: policy-change-runner-removal
     gate: check-policy-change
     input:

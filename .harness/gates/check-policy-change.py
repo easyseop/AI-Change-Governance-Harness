@@ -354,8 +354,18 @@ def removed_and_added_diff_lines(base, head, path, repo):
     return removed, added
 
 
-def unquote_scalar(value):
+def normalize_yaml_plain_scalar(value):
     stripped = value.strip()
+    quote = None
+    for index, char in enumerate(stripped):
+        if char in ("'", '"') and (index == 0 or stripped[index - 1] != "\\"):
+            if quote == char:
+                quote = None
+            elif quote is None:
+                quote = char
+        if char == "#" and quote is None and index > 0 and stripped[index - 1].isspace():
+            stripped = stripped[:index].strip()
+            break
     if len(stripped) >= 2 and stripped[0] == stripped[-1] and stripped[0] in ("'", '"'):
         return stripped[1:-1].strip()
     return stripped
@@ -370,7 +380,7 @@ def is_gate_bypass_line(line):
     key, value = stripped.split(":", 1)
     if key.strip() != "continue-on-error":
         return False
-    return unquote_scalar(value).lower() in {"true", "yes", "on"}
+    return normalize_yaml_plain_scalar(value).lower() in {"true", "yes", "on"}
 
 
 def detect_enforcement_bypass(base, head, path, repo):
