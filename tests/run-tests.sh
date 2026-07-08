@@ -25,6 +25,7 @@ GATES = {
     "check-function-gov-level": ".harness/gates/check-function-gov-level.py",
     "extract-python-capabilities": ".harness/gates/extract-python-capabilities.py",
     "check-new-capabilities": ".harness/gates/check-new-capabilities.py",
+    "check-policy-change": ".harness/gates/check-policy-change.py",
 }
 ROOT_DIR = os.getcwd()
 
@@ -201,6 +202,17 @@ def case_command(case):
             "--json",
         ]
         return command
+
+    if gate == "check-policy-change":
+        work_dir, rev_range = prepare_function_mapping_fixture(data["fixture_dir"])
+        return [
+            "python3",
+            f"{ROOT_DIR}/{script}",
+            rev_range,
+            "--repo",
+            work_dir,
+            "--json",
+        ]
 
     raise ValueError(f"unsupported gate: {gate}")
 
@@ -519,6 +531,38 @@ def validate_new_capabilities(case, result, exit_code):
     return errors
 
 
+def validate_policy_change(case, result, exit_code):
+    expect = case["expect"]
+    errors = []
+    assert_equal(errors, "exit_code", exit_code, expect["exit_code"])
+    assert_equal(errors, "verdict", result.get("verdict"), expect["verdict"])
+
+    if "policy_loosening_kinds" in expect:
+        actual = [item.get("kind") for item in result.get("policy_loosening", [])]
+        assert_equal(errors, "policy_loosening_kinds", actual, expect["policy_loosening_kinds"])
+    if "enforcement_bypass_kinds" in expect:
+        actual = [item.get("kind") for item in result.get("enforcement_bypass", [])]
+        assert_equal(errors, "enforcement_bypass_kinds", actual, expect["enforcement_bypass_kinds"])
+    if "errors_present" in expect:
+        assert_equal(errors, "errors_present", bool(result.get("errors")), expect["errors_present"])
+
+    if expect.get("deterministic_stdout"):
+        work_dir, rev_range = prepare_function_mapping_fixture(case["input"]["fixture_dir"])
+        command = [
+            "python3",
+            f"{ROOT_DIR}/{GATES['check-policy-change']}",
+            rev_range,
+            "--repo",
+            work_dir,
+            "--json",
+        ]
+        first = run_command(command).stdout
+        second = run_command(command).stdout
+        assert_equal(errors, "deterministic_stdout", first, second)
+
+    return errors
+
+
 def main():
     with open("tests/cases.yaml", "r", encoding="utf-8") as stream:
         cases = yaml.safe_load(stream)["cases"]
@@ -547,6 +591,8 @@ def main():
                 errors = validate_python_capabilities(case, result, completed.returncode)
             elif case["gate"] == "check-new-capabilities":
                 errors = validate_new_capabilities(case, result, completed.returncode)
+            elif case["gate"] == "check-policy-change":
+                errors = validate_policy_change(case, result, completed.returncode)
             else:
                 errors = validate_json_gate(case, result, completed.returncode)
         except Exception as error:
