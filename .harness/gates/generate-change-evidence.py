@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import fnmatch
+import hashlib
 import importlib.util
 import json
 import os
@@ -18,6 +19,16 @@ APPROVAL_REQUIRED = 2
 
 
 GATE_DIR = Path(__file__).resolve().parent
+TOOL_VERSION = "0.2-task019"
+
+
+NOT_CHECKED_STATEMENTS = [
+    "runtime execution paths",
+    "unregistered sensitive business logic",
+    "cross-commit cumulative risk",
+    "non-Python semantic analysis",
+    "complete dynamic obfuscation recovery",
+]
 
 
 def load_gate_module(filename, module_name):
@@ -147,6 +158,21 @@ def resolve_generated_on(diff_input, generated_on, repo="."):
     if not base_ref:
         return "1970-01-01"
     return run_git(["show", "-s", "--format=%cs", base_ref], repo).strip()
+
+
+def file_sha256(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def policy_sha(paths):
+    return {
+        Path(path).name: file_sha256(path)
+        for path in sorted(paths, key=lambda item: str(item))
+    }
 
 
 def load_intent(path):
@@ -343,6 +369,43 @@ def can_run_function_gov(diff_input):
     return not os.path.exists(diff_input) and ".." in diff_input
 
 
+def executed_gate_records(diff_input):
+    records = [
+        {
+            "gate": "check-change-intent",
+            "checked": "changed paths against declared allowed_paths and forbidden_paths",
+        },
+        {
+            "gate": "check-sensitive-zones",
+            "checked": "changed paths against sensitive-zones policy",
+        },
+    ]
+    if can_run_function_gov(diff_input):
+        records.append(
+            {
+                "gate": "check-function-gov-level",
+                "checked": "changed Python functions against @gov annotations",
+            }
+        )
+    return records
+
+
+def verdict_statement(verdict):
+    if verdict == "pass":
+        return "no governance violation detected"
+    if verdict == "approval_required":
+        return "governance review required"
+    return "governance violation detected"
+
+
+def coverage_statement(diff_input, verdict):
+    return {
+        "verdict_statement": verdict_statement(verdict),
+        "checked": executed_gate_records(diff_input),
+        "not_checked": NOT_CHECKED_STATEMENTS,
+    }
+
+
 def function_reason(prefix, item):
     reason = item.get("reason") or ""
     suffix = f":{reason}" if reason else ""
@@ -448,6 +511,9 @@ def build_evidence(args):
             "author": intent["author"],
             "generated_on": resolve_generated_on(args.diff_input, args.generated_on, args.repo),
             "base_commit": resolve_base_commit(args.diff_input, args.repo),
+            "tool_version": TOOL_VERSION,
+            "python_version": sys.version.split()[0],
+            "policy_sha": policy_sha([args.sensitive_zones, args.approval_routing]),
             "summary": summary,
             "changed_files": changed_files,
             "changed_functions": function_gov["changed_functions"],
@@ -463,6 +529,7 @@ def build_evidence(args):
                 "importers_count": None,
             },
             "verdict": verdict,
+            "coverage_statement": coverage_statement(args.diff_input, verdict),
             "reasons": build_reasons(intent_check, sensitive_check) + function_gov["reasons"],
             "reviewer_required": reviewers_for_files(files, routing_policy),
         }
@@ -511,6 +578,9 @@ def main():
                 "author": None,
                 "generated_on": args.generated_on or "1970-01-01",
                 "base_commit": "unknown",
+                "tool_version": TOOL_VERSION,
+                "python_version": sys.version.split()[0],
+                "policy_sha": {},
                 "summary": {
                     "files_changed": 0,
                     "lines_added": 0,
@@ -533,6 +603,7 @@ def main():
                     "importers_count": None,
                 },
                 "verdict": "blocked",
+                "coverage_statement": coverage_statement(args.diff_input, "blocked"),
                 "reasons": [str(error)],
                 "reviewer_required": [],
             }
