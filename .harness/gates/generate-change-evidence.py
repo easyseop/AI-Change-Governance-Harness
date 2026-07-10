@@ -398,10 +398,10 @@ def verdict_statement(verdict):
     return "governance violation detected"
 
 
-def coverage_statement(diff_input, verdict):
+def coverage_statement(diff_input, verdict, checked=None):
     return {
         "verdict_statement": verdict_statement(verdict),
-        "checked": executed_gate_records(diff_input),
+        "checked": executed_gate_records(diff_input) if checked is None else checked,
         "not_checked": NOT_CHECKED_STATEMENTS,
     }
 
@@ -587,6 +587,7 @@ def main():
                     "lines_removed": 0,
                 },
                 "changed_files": [],
+                "changed_functions": [],
                 "intent_check": {
                     "status": "fail",
                     "out_of_scope_paths": [],
@@ -603,7 +604,7 @@ def main():
                     "importers_count": None,
                 },
                 "verdict": "blocked",
-                "coverage_statement": coverage_statement(args.diff_input, "blocked"),
+                "coverage_statement": coverage_statement(args.diff_input, "blocked", checked=[]),
                 "reasons": [str(error)],
                 "reviewer_required": [],
             }

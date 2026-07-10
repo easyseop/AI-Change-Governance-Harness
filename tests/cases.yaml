@@ -159,6 +159,29 @@ cases:
       version_metadata_present: true
       schema_keys_match_template: true
 
+  - name: evidence-error-missing-intent
+    gate: generate-change-evidence
+    input:
+      name_status: tests/fixtures/good/name-status.txt
+      change_intent: tests/fixtures/evidence-error/missing-change-intent.yaml
+    expect:
+      verdict: blocked
+      exit_code: 1
+      files_changed: 0
+      lines_added: 0
+      lines_removed: 0
+      changed_files: []
+      changed_functions: []
+      coverage_checked_gates: []
+      coverage_not_checked:
+        - runtime execution paths
+        - unregistered sensitive business logic
+        - cross-commit cumulative risk
+        - non-Python semantic analysis
+        - complete dynamic obfuscation recovery
+      verdict_statement: governance violation detected
+      schema_keys_match_template: true
+
   - name: out-of-scope
     gate: check-change-intent
     input:
