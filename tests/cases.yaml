@@ -1423,8 +1423,8 @@ cases:
       previous: tests/fixtures/bootstrap-sensitive-zones/previous.yaml
     expect:
       exit_code: 0
-      candidate_count: 2
+      candidate_count: 1
+      suppressed_accepted: 1
       suppressed_rejected: 1
       candidate_paths:
-        - db/migrations/**
         - src/security/**
