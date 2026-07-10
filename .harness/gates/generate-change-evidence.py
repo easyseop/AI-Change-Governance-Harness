@@ -16,6 +16,7 @@ import yaml
 PASS = 0
 BLOCKED = 1
 APPROVAL_REQUIRED = 2
+VALID_MATURITY = {"enforcing", "shadow"}
 
 
 GATE_DIR = Path(__file__).resolve().parent
@@ -196,12 +197,31 @@ def load_sensitive_policy(path):
         data = yaml.safe_load(stream) or {}
 
     defaults = data.get("defaults") or {}
+    zones = []
+    errors = []
+    for index, zone in enumerate(data.get("zones") or []):
+        normalized = dict(zone)
+        maturity = normalized.get("maturity", "enforcing")
+        if maturity not in VALID_MATURITY:
+            errors.append(
+                {
+                    "error": "invalid_maturity",
+                    "index": index,
+                    "path": normalized.get("path"),
+                    "maturity": maturity,
+                }
+            )
+            maturity = "enforcing"
+        normalized["maturity"] = maturity
+        zones.append(normalized)
+
     return {
         "block_levels": defaults.get("block_levels") or [],
         "approve_levels": defaults.get("approve_levels") or [],
         "warn_levels": defaults.get("warn_levels") or [],
         "unlisted_level": defaults.get("unlisted_level") or "free",
-        "zones": data.get("zones") or [],
+        "zones": zones,
+        "errors": errors,
     }
 
 
@@ -238,6 +258,7 @@ def matching_zone_records(path, policy):
                 "level": level,
                 "reason": zone.get("reason", ""),
                 "required_approval": zone.get("required_approval"),
+                "maturity": zone.get("maturity", "enforcing"),
                 "strength": level_strength(level, policy),
             }
         )
@@ -261,6 +282,8 @@ def public_record(record):
     }
     if record["required_approval"]:
         result["required_approval"] = record["required_approval"]
+    if record.get("maturity") == "shadow":
+        result["maturity"] = "shadow"
     return result
 
 
@@ -288,12 +311,24 @@ def sensitive_result(files, policy):
     frozen_touched = []
     protected_touched = []
     watched_touched = []
+    shadow_hits = []
     zone_level_by_path = {}
 
     for path in files:
-        records = strongest_records(matching_zone_records(path, policy))
+        all_records = matching_zone_records(path, policy)
+        records = strongest_records(
+            [record for record in all_records if record.get("maturity") != "shadow"]
+        )
+        shadow_records = strongest_records(
+            [record for record in all_records if record.get("maturity") == "shadow"]
+        )
+        for record in shadow_records:
+            shadow_hits.append(public_record(record))
         if not records:
-            zone_level_by_path[path] = policy["unlisted_level"]
+            all_strongest = strongest_records(all_records)
+            zone_level_by_path[path] = (
+                all_strongest[0]["level"] if all_strongest else policy["unlisted_level"]
+            )
             continue
 
         zone_level_by_path[path] = records[0]["level"]
@@ -310,6 +345,7 @@ def sensitive_result(files, policy):
     frozen_touched = sorted(frozen_touched, key=lambda item: (item["path"], item["zone"]))
     protected_touched = sorted(protected_touched, key=lambda item: (item["path"], item["zone"]))
     watched_touched = sorted(watched_touched, key=lambda item: (item["path"], item["zone"]))
+    shadow_hits = sorted(shadow_hits, key=lambda item: (item["path"], item["zone"]))
 
     if frozen_touched:
         status = "blocked"
@@ -323,6 +359,8 @@ def sensitive_result(files, policy):
         "frozen_touched": frozen_touched,
         "protected_touched": protected_touched,
         "watched_touched": watched_touched,
+        "shadow_hits": shadow_hits,
+        "errors": policy.get("errors", []),
         "zone_level_by_path": zone_level_by_path,
     }
 
@@ -523,6 +561,7 @@ def build_evidence(args):
                 "frozen_touched": sensitive_check["frozen_touched"],
                 "protected_touched": sensitive_check["protected_touched"],
                 "watched_touched": sensitive_check["watched_touched"],
+                "shadow_hits": sensitive_check["shadow_hits"],
             },
             "blast_radius": {
                 "shared_modules_changed": [],

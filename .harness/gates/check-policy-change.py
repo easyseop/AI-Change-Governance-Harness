@@ -170,6 +170,12 @@ def scalar_is_weaker(pointer, before, after):
     return False
 
 
+def maturity_weakened(before, after):
+    before_maturity = before.get("maturity", "enforcing")
+    after_maturity = after.get("maturity", "enforcing")
+    return before_maturity == "enforcing" and after_maturity == "shadow"
+
+
 def normalize_list_item(item):
     if isinstance(item, dict):
         return json.dumps(item, ensure_ascii=False, sort_keys=True)
@@ -260,6 +266,17 @@ def compare_sensitive_zones(path, before, after):
                     reason="sensitive zone level lowered",
                 )
             )
+        if maturity_weakened(before_zone, after_zone):
+            findings.append(
+                record(
+                    path,
+                    "weakened_zone_maturity",
+                    f"/zones/{zone_path}/maturity",
+                    before=before_zone.get("maturity", "enforcing"),
+                    after=after_zone.get("maturity", "enforcing"),
+                    reason="sensitive zone maturity changed to shadow",
+                )
+            )
         if before_zone.get("required_approval") and not after_zone.get("required_approval"):
             findings.append(
                 record(
@@ -299,6 +316,17 @@ def compare_capabilities(path, before, after):
                     before=before_cap.get("level"),
                     after=after_cap.get("level"),
                     reason="capability level lowered",
+                )
+            )
+        if maturity_weakened(before_cap, after_cap):
+            findings.append(
+                record(
+                    path,
+                    "weakened_capability_maturity",
+                    f"/capabilities/{cap_id}/maturity",
+                    before=before_cap.get("maturity", "enforcing"),
+                    after=after_cap.get("maturity", "enforcing"),
+                    reason="capability maturity changed to shadow",
                 )
             )
         findings.extend(

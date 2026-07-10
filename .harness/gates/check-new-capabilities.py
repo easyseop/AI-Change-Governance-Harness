@@ -142,6 +142,7 @@ def new_capability_record(path, capability, metadata):
         "path": path,
         "id": cap_id,
         "level": capability.get("level"),
+        "maturity": meta.get("maturity", "enforcing"),
         "reason": meta.get("reason"),
         "reviewer": meta.get("reviewer"),
         "signals": capability.get("signals", []),
@@ -178,6 +179,7 @@ def check_new_capabilities(rev_range, policy, repo="."):
     metadata = catalog_metadata(policy)
     new_capabilities = []
     warned_capabilities = []
+    shadow_capabilities = []
     fail_closed = []
     errors = []
 
@@ -219,13 +221,16 @@ def check_new_capabilities(rev_range, policy, repo="."):
         head_caps = capability_index(head_result)
         for cap_id in sorted(set(head_caps) - set(base_caps)):
             record = new_capability_record(path, head_caps[cap_id], metadata)
-            if record["level"] == "watched":
+            if record["maturity"] == "shadow":
+                shadow_capabilities.append(record)
+            elif record["level"] == "watched":
                 warned_capabilities.append(record)
             else:
                 new_capabilities.append(record)
 
     new_capabilities = sort_capability_records(new_capabilities)
     warned_capabilities = sort_capability_records(warned_capabilities)
+    shadow_capabilities = sort_capability_records(shadow_capabilities)
     fail_closed = sort_fail_closed(fail_closed)
 
     if new_capabilities or fail_closed or errors:
@@ -242,6 +247,7 @@ def check_new_capabilities(rev_range, policy, repo="."):
         "head_commit": run_git(["rev-parse", head], repo).strip(),
         "new_capabilities": new_capabilities,
         "warned_capabilities": warned_capabilities,
+        "shadow_capabilities": shadow_capabilities,
         "fail_closed": fail_closed,
         "errors": errors,
         "exit_code": exit_code,
@@ -260,6 +266,8 @@ def print_text(result):
         print(f"protected: {item['path']}::{item['id']}")
     for item in result.get("warned_capabilities", []):
         print(f"watched: {item['path']}::{item['id']}")
+    for item in result.get("shadow_capabilities", []):
+        print(f"shadow: {item['path']}::{item['id']} level={item['level']}")
     for item in result.get("fail_closed", []):
         print(f"fail_closed: {item['path']} {item['reason']}")
 
@@ -282,6 +290,7 @@ def main():
             "verdict": "approval_required",
             "new_capabilities": [],
             "warned_capabilities": [],
+            "shadow_capabilities": [],
             "fail_closed": [
                 {
                     "path": "<unknown>",

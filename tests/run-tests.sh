@@ -90,7 +90,7 @@ def case_command(case):
             "python3",
             script,
             data["name_status"],
-            "policies/sensitive-zones.yaml",
+            data.get("policy", "policies/sensitive-zones.yaml"),
             "--json",
         ]
 
@@ -106,7 +106,7 @@ def case_command(case):
                 "--change-intent",
                 data["change_intent"],
                 "--sensitive-zones",
-                f"{ROOT_DIR}/policies/sensitive-zones.yaml",
+                f"{ROOT_DIR}/{data.get('policy', 'policies/sensitive-zones.yaml')}",
                 "--approval-routing",
                 f"{ROOT_DIR}/policies/approval-routing.yaml",
                 "--generated-on",
@@ -119,7 +119,7 @@ def case_command(case):
             "--change-intent",
             data["change_intent"],
             "--sensitive-zones",
-            "policies/sensitive-zones.yaml",
+            data.get("policy", "policies/sensitive-zones.yaml"),
             "--approval-routing",
             "policies/approval-routing.yaml",
             "--generated-on",
@@ -244,6 +244,10 @@ def validate_json_gate(case, result, exit_code):
     for key in ("frozen_touched", "protected_touched", "watched_touched"):
         if key in expect:
             check_path_records(errors, key, result.get(key, []), expect[key])
+    if "shadow_hits" in expect:
+        check_path_records(errors, "shadow_hits", result.get("shadow_hits", []), expect["shadow_hits"])
+    if "errors_present" in expect:
+        assert_equal(errors, "errors_present", bool(result.get("errors")), expect["errors_present"])
 
     if "required_approval" in expect:
         approvals = values_at(result.get("protected_touched", []), "required_approval")
@@ -290,6 +294,13 @@ def validate_evidence(case, result, exit_code):
     if "verdict_statement" in expect:
         coverage = evidence.get("coverage_statement", {})
         assert_equal(errors, "coverage.verdict_statement", coverage.get("verdict_statement"), expect["verdict_statement"])
+    if "shadow_hits" in expect:
+        check_path_records(
+            errors,
+            "sensitive_zone_check.shadow_hits",
+            evidence.get("sensitive_zone_check", {}).get("shadow_hits", []),
+            expect["shadow_hits"],
+        )
     if expect.get("no_safe_text"):
         encoded = json.dumps(evidence, ensure_ascii=False).lower()
         if "safe" in encoded or "안전" in encoded:
@@ -535,6 +546,13 @@ def validate_new_capabilities(case, result, exit_code):
             "warned_capabilities",
             capability_diff_summary(result.get("warned_capabilities", [])),
             expect["warned_capabilities"],
+        )
+    if "shadow_capabilities" in expect:
+        assert_equal(
+            errors,
+            "shadow_capabilities",
+            capability_diff_summary(result.get("shadow_capabilities", [])),
+            expect["shadow_capabilities"],
         )
     if "fail_closed" in expect:
         assert_equal(errors, "fail_closed", result.get("fail_closed"), expect["fail_closed"])
