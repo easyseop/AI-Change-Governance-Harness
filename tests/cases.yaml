@@ -1428,3 +1428,59 @@ cases:
       suppressed_rejected: 1
       candidate_paths:
         - src/security/**
+
+  - name: bootstrap-sensitive-functions-candidates
+    gate: bootstrap-sensitive-functions
+    input:
+      repo: tests/fixtures/bootstrap-sensitive-functions/repo
+      policy: policies/sensitive-capabilities.yaml
+      tables: tests/fixtures/bootstrap-sensitive-functions/tables.yaml
+    expect:
+      exit_code: 0
+      candidate_count: 2
+      sql_tables_loaded: 1
+      candidate_functions:
+        - app/risky.py::load_customer
+        - app/risky.py::run_command
+      candidate_capabilities:
+        - [sql_table:customer_pii]
+        - [subprocess_exec]
+      candidate_statuses:
+        - proposed
+        - proposed
+      evidence_sources:
+        - [sql_table_reference]
+        - [capability_signal]
+      draft_only: true
+      limitation_statement: true
+      anchor_present: true
+      rejection_schema: true
+      deterministic_stdout: true
+
+  - name: bootstrap-sensitive-functions-rejected-suppressed
+    gate: bootstrap-sensitive-functions
+    input:
+      repo: tests/fixtures/bootstrap-sensitive-functions/repo
+      policy: policies/sensitive-capabilities.yaml
+      tables: tests/fixtures/bootstrap-sensitive-functions/tables.yaml
+      previous: tests/fixtures/bootstrap-sensitive-functions/previous.yaml
+    expect:
+      exit_code: 0
+      candidate_count: 1
+      suppressed_rejected: 1
+      candidate_functions:
+        - app/risky.py::load_customer
+
+  - name: bootstrap-sensitive-functions-accepted-suppressed
+    gate: bootstrap-sensitive-functions
+    input:
+      repo: tests/fixtures/bootstrap-sensitive-functions/repo
+      policy: policies/sensitive-capabilities.yaml
+      tables: tests/fixtures/bootstrap-sensitive-functions/tables.yaml
+      previous: tests/fixtures/bootstrap-sensitive-functions/previous-accepted.yaml
+    expect:
+      exit_code: 0
+      candidate_count: 1
+      suppressed_accepted: 1
+      candidate_functions:
+        - app/risky.py::load_customer
