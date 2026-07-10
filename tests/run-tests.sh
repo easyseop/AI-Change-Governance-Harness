@@ -642,6 +642,8 @@ def validate_bootstrap_sensitive_zones(case, result, exit_code):
         assert_equal(errors, "summary.candidate_count", summary.get("candidate_count"), expect["candidate_count"])
     if "suppressed_rejected" in expect:
         assert_equal(errors, "summary.suppressed_rejected", summary.get("suppressed_rejected"), expect["suppressed_rejected"])
+    if "suppressed_accepted" in expect:
+        assert_equal(errors, "summary.suppressed_accepted", summary.get("suppressed_accepted"), expect["suppressed_accepted"])
     if "codeowners_read" in expect:
         assert_equal(errors, "summary.codeowners_read", summary.get("codeowners_read"), expect["codeowners_read"])
     if "evidence_sources" in expect:

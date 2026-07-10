@@ -70,11 +70,20 @@ def evidence_key(evidence):
     )
 
 
+def evidence_identity(evidence):
+    return {
+        "source": evidence.get("source", ""),
+        "rule_id": evidence.get("rule_id", ""),
+    }
+
+
 def candidate_fingerprint(path, level, evidence):
     normalized = {
         "path": path,
         "level": level,
-        "evidence": sorted(evidence, key=evidence_key),
+        "evidence_rules": sorted(
+            {json.dumps(evidence_identity(item), ensure_ascii=False, sort_keys=True) for item in evidence}
+        ),
     }
     encoded = json.dumps(normalized, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
