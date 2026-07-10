@@ -5,6 +5,31 @@
 
 ---
 
+## TASK-014 fingerprint 안정성 가드 (D-035 O-2 마감) — **통과·머지완료** (2026-07-11, D-036)
+
+> 대상: `codex/2026-07-11-task014-fingerprint-stability` (fix `4ecdc68`). 목적: D-035 에서 차기 AC 가드로 이월한 fingerprint 취약성 — accepted/rejected 된 존에 형제 파일 1개만 추가돼도 후보가 새 지문으로 재출현해 거절 원장(alert-fatigue 방지)이 무력화되는 논리결함 — 을 닫는다.
+
+**무엇을 검증했나** — "도는지"가 아니라 ① 수정계약(지문 = 후보 정체성)을 정확히 이행했나, ② 형제 파일 추가에도 지문이 실제로 불변인가(적대 fresh), ③ 그 불변이 새 스킴 때문인가(음성검증 = 예전 스킴이면 깨지는가), ④ 회귀 픽스처가 reject·accept **양방향**을 덮나.
+
+**한 줄씩 읽은 결과(핵심 로직)**
+- `evidence_identity(e)` = `{source, rule_id}` 만 추출 → `matched`/개별 파일 `path`/`owner` 배제. 명세("경로+`level`+`{(source,rule_id)}` 집합, 개별 파일경로 지문 제외") 정확 일치.
+- `candidate_fingerprint`: `evidence_rules = sorted({json.dumps(identity)…})` — **set 으로 중복 제거 후 정렬** → 같은 (source,rule_id) 가 파일 N개서 나와도 1개로 접힘 = 파일수·순서 무관. path·level 은 여전히 지문에 포함(정체성 유지·서로 다른 존 충돌 없음).
+- `finalize_candidates`: 재산출 지문이 previous 의 rejected/accepted 지문과 일치하면 각각 suppress. evidence 보고(파일별 path)는 그대로 남음 = 사람 검토 정보 손실 없음.
+
+**적대 검증(fresh 입력, 픽스처 밖·격리 worktree)**
+- scratch repo(존당 파일 1개) 지문 캡처 → 형제 파일 추가 후 재산출 → **지문 전부 동일**: `services/auth/**`=`92efc7c9…`, `db/migrations/**`=`f2d0592e…`, `src/security/**`=`d69633e6…`. evidence 파일수 1→2·2→3 증가에도 불변. 픽스처의 저장 지문과도 일치(스킴 정합).
+- **음성검증**: 동일 run1/run2 산출물을 **예전 evidence-전체 스킴**으로 재계산 → 형제 추가만으로 `db/migrations/**`·`services/auth/**` **CHANGED**(예: `services/auth/**` `33876acc…`→`7b264fb4…` = 예전 previous.yaml 의 원래 지문 `33876acc…` 와 정확히 일치 → 픽스처 지문이 새 스킴으로 올바로 재생성됐음도 교차확인), 단일 evidence `src/security/**` 만 SAME. → **새 스킴이 load-bearing**.
+
+**회귀 픽스처(AC 가드 명세 이행)** — `previous.yaml` 에 `services/auth/**` rejected + `db/migrations/**` accepted 원장을 두고 repo 에 `logout.py`·`002_add_index.sql` 형제 추가 → `suppressed_rejected=1`·`suppressed_accepted=1`·잔여 후보 1(`src/security/**`). D-035 요구("존 reject→형제추가→여전히 suppressed", reject·accept 양쪽) 충족. `run-tests.sh` 에 `suppressed_accepted` 단언 추가(하네스 확장).
+
+**보수적 개발** — Codex 소유 게이트 +11줄(무관 리팩터 0)·`cases.yaml`·`run-tests.sh`·fixture 2파일·`previous.yaml`. Claude 소유 정책/문서/TASKS 무접촉(name-only 확인). `py_compile`·`git diff --check` OK·61/61 PASS.
+
+**비차단 관찰(O-1)** — 스킴 변경으로 예전(`ecd5d68`) 스킴 지문이 든 기존 원장은 지문 불일치로 suppression 이 조용히 깨질 수 있음. 단 draft_only·미도입(실운영 원장 부재)·D-035 가 명시 요구한 변경의 의도된 귀결 → 실해 없음, 가드 불요(관찰만).
+
+**판정: 통과 · 비민감 → Claude main 머지(구현자≠머지자).** D-035 O-2 이월분 마감.
+
+---
+
 ## TASK-014 정책 자동 씨딩 스캐너 `bootstrap-sensitive-zones.py` — **통과·머지완료** (2026-07-11, D-035)
 
 > 대상: `codex/2026-07-11-task014-bootstrap-zones` (impl `ecd5d68`). 목적: 도입 시 사람이 백지에서 zones YAML 을 안 쓰도록, repo 를 스캔해 민감경로 후보를 **초안(draft)** 으로 자동 생성(사람은 승인만).

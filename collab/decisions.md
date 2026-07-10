@@ -4,6 +4,16 @@
 
 ---
 
+## D-036 (2026-07-11) TASK-014 fingerprint 안정성 가드 (D-035 O-2 이월분 마감) — **통과·머지완료**
+대상: 브랜치 `codex/2026-07-11-task014-fingerprint-stability` (fix `4ecdc68`·핸드오프 `f04de7d`). 판정: **통과** → 코드 브랜치 `main` 머지·push(구현자 Codex ≠ 머지자 Claude). 상세: `review-notes.md` TASK-014 fingerprint(D-036) 절. **멱등성**: `4ecdc68`·`f04de7d` 재처리 금지.
+- **수정계약(D-035 O-2) 이행 확인**: fingerprint 입력을 evidence 전체 → **`path`+`level`+정렬된 `{(source, rule_id)}` 집합**(`evidence_identity` = source/rule_id 만; `matched`/개별 파일 `path`/`owner` 제외)으로 변경. evidence 보고에는 파일 경로 그대로 유지, 지문 산출에서만 제외 = 명세(TASKS.md AC#6 가드) 정확 이행. `set` 후 `sorted` = 순서·중복 무관.
+- **적대 검증(fresh, 픽스처 밖·격리 worktree)**: scratch repo 에 존당 파일 1개(login.py·001_init.sql)로 지문 캡처 → 형제 파일(logout.py·002_add_index.sql) 추가 후 재산출 → **지문 완전 동일**(`services/auth/**`=`92efc7c9…`·`db/migrations/**`=`f2d0592e…`·`src/security/**`=`d69633e6…`), evidence 파일수는 1→2·2→3 로 증가해도 불변 = D-035 alert-fatigue 시나리오 실제 차단 실증. 픽스처 저장 지문과도 일치.
+- **음성검증(rig-and-revert)**: 동일 입력을 **예전 evidence-전체 스킴**으로 재산출 시 형제 추가만으로 `db/migrations/**`·`services/auth/**` 지문 CHANGED(회귀 재현), 단일 evidence 인 `src/security/**` 만 SAME → 스킴 변경이 load-bearing 임을 실증. 테스트단: `tests/run-tests.sh` 61/61 PASS, 저장 지문을 예전 스킴으로 monkey-patch 하면 suppression 0/후보 3(Codex 보고 재현).
+- **회귀 픽스처 = AC 가드 명세 충족**: `previous.yaml` 에 `services/auth/**` **rejected** 원장 + `db/migrations/**` **accepted** 원장을 두고 repo 에 각 형제 파일 추가 → 재스캔 시 `suppressed_rejected=1`·`suppressed_accepted=1`·잔여 후보 1(`src/security/**`)로 **양방향**(reject·accept) suppression 검증(D-035 요구 "존 reject→형제추가→여전히 suppressed"·양쪽). `run-tests.sh` 에 `suppressed_accepted` 단언 추가(테스트 하네스 확장, scope-creep 아님).
+- **보수적 개발 OK**: 델타 = Codex 소유 `bootstrap-sensitive-zones.py`(+11줄, 무관 리팩터 없음)·`tests/cases.yaml`·`tests/run-tests.sh`·fixture 2파일·`previous.yaml`·handoff·summaries. **Claude 소유 policies/·docs/·TASKS.md·CLAUDE.md·decisions.md·review-notes.md 무접촉**(name-only 확인). `py_compile`·`git diff --check` OK.
+- **비민감 판정 근거**: draft-only 수동 씨딩 헬퍼의 안정성 보정 — verdict 파이프라인 미연결·자동채택 없음·정산/인증/인가/암호화/DB migration/infra 무관(CLAUDE.md §3). TASK-014(D-035) 및 TASK-005~013·018·019·020 게이트 계열과 동일 범주로 Claude 머지 선례 → 형 승인 불요, Claude 머지.
+- **비차단 관찰(O-1, 이월 불요)**: 스킴 변경으로 이전(`ecd5d68`) 스킴 지문이 든 기존 previous.yaml 원장은 지문 불일치로 suppression 이 조용히 깨질 수 있음. **단** 본 도구는 아직 draft_only·미도입(실운영 원장 부재)이고 D-035 가 명시적으로 요구한 스킴 변경의 의도된 귀결이라 실해 없음 → 가드 불요(관찰만 기록).
+
 ## D-035 (2026-07-11) TASK-014 정책 자동 씨딩 스캐너 `bootstrap-sensitive-zones.py` — **통과·머지완료**
 대상: 브랜치 `codex/2026-07-11-task014-bootstrap-zones` (impl `ecd5d68`·핸드오프 `bdb7e4a`). 판정: **통과** → 코드 브랜치 `main` 머지·push(구현자 Codex ≠ 머지자 Claude). 상세: `review-notes.md` TASK-014(D-035) 절. **멱등성**: `ecd5d68`·`bdb7e4a` 재처리 금지.
 - **AC 충족(1~6)**: ① 2종 씨딩 소스 — 경로 네이밍 토큰(외부화 `--rules`) + CODEOWNERS 소유자 규칙. ② 후보별 근거 evidence(source·rule_id·matched·path/owner) 필수. ③ **draft_only**(mode 필드·adoption_note 에 "automatic" 금지·파일 미덮어쓰기, stdout/`--json`만). ④ 결정적(2회 동일 실증)·규칙매칭만(LLM/휴리스틱 없음). ⑤ 빈 규칙·CODEOWNERS 부재 = 오류 아님(exit 0·`codeowners_read:false`·path rule 단독 동작 실증). ⑥ `status: proposed` + 결정적 fingerprint + rejected 원장(`rejected_reason`/`rejected_by` 스키마) + accepted/rejected 재제안 금지.
