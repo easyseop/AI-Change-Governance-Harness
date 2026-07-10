@@ -280,6 +280,34 @@ def validate_evidence(case, result, exit_code):
         for expected_reason in expect["reasons_contain"]:
             if not any(expected_reason in reason for reason in reasons):
                 errors.append(f"reasons: expected entry containing {expected_reason!r}, got {reasons!r}")
+    if "coverage_checked_gates" in expect:
+        coverage = evidence.get("coverage_statement", {})
+        checked_gates = [item.get("gate") for item in coverage.get("checked", [])]
+        assert_equal(errors, "coverage.checked.gates", checked_gates, expect["coverage_checked_gates"])
+    if "coverage_not_checked" in expect:
+        coverage = evidence.get("coverage_statement", {})
+        assert_equal(errors, "coverage.not_checked", coverage.get("not_checked"), expect["coverage_not_checked"])
+    if "verdict_statement" in expect:
+        coverage = evidence.get("coverage_statement", {})
+        assert_equal(errors, "coverage.verdict_statement", coverage.get("verdict_statement"), expect["verdict_statement"])
+    if expect.get("no_safe_text"):
+        encoded = json.dumps(evidence, ensure_ascii=False).lower()
+        if "safe" in encoded or "안전" in encoded:
+            errors.append("coverage text: forbidden safe/안전 wording found")
+    if expect.get("version_metadata_present"):
+        if not evidence.get("tool_version"):
+            errors.append("tool_version: expected a value")
+        if not evidence.get("python_version"):
+            errors.append("python_version: expected a value")
+        policy_sha = evidence.get("policy_sha", {})
+        for key in ("approval-routing.yaml", "sensitive-zones.yaml"):
+            value = policy_sha.get(key)
+            if not isinstance(value, str) or len(value) != 64:
+                errors.append(f"policy_sha.{key}: expected sha256 hex value, got {value!r}")
+    if expect.get("schema_keys_match_template"):
+        with open("templates/change-evidence.template.yaml", "r", encoding="utf-8") as stream:
+            template = yaml.safe_load(stream).get("change_evidence", {})
+        assert_equal(errors, "schema.keys", sorted(evidence.keys()), sorted(template.keys()))
     return errors
 
 
