@@ -4,6 +4,17 @@
 
 ---
 
+## D-037 (2026-07-11) TASK-015 함수 후보 랭킹 스캐너 `bootstrap-sensitive-functions.py` — **통과·머지완료**
+대상: 브랜치 `codex/2026-07-11-task015-bootstrap-functions` (impl `c174ae6`·핸드오프 `1895c1f`). 판정: **통과** → 코드 브랜치 `main` 머지·push(구현자 Codex ≠ 머지자 Claude). 상세: `review-notes.md` TASK-015(D-037) 절. **멱등성**: `c174ae6`·`1895c1f` 재처리 금지.
+- **AC 충족(1~6)**: ① 기존 `extract-python-capabilities`+`extract-python-inventory` 를 `importlib` 재사용(재구현 없음). ② 출력 = `(경로,함수,능력id[],근거라인)` → `sensitive-functions` 초안, 코드 주석 미부착. ③ `mode: draft_only`·adoption_note(수동 채택)·근거 evidence 필수·결정적·`--json`. ④ 한계 문구(`limitation_statement`): 위험 프리미티브 없는 "의미상 민감" 순수 로직은 미탐 — 스캐너·하네스 공통 미해결 영역·후속 sink tracing/unknown-code 필요 명시. ⑤ SQL 테이블 근거(선택 `--tables`, 없으면 스킵·오류 아님). ⑥ `anchor`(정규화 심볼+시그니처 해시)+`status: proposed`+fingerprint(line 제외)+rejected 원장 스키마+accepted/rejected 재제안 금지.
+- **적대 검증(fresh, 픽스처 밖 — CLAUDE.md 고정 세트)**: ① 동명 오버로드(getter/setter) → start_line 로 별도 후보·시그니처로 지문 분리. ② 조건부/중첩 def·클로저 → 가장 안쪽 함수로 정확 매핑. ③ 결정성 2회 stdout 동일. ④ 비UTF8(`0xe9`) 파일 → `errors` 격리·형제 정상파일 보존·exit 0(TASK-013 교훈 준수). ⑤ 빈 repo·무 tables → exit 0. **fail-safe 불변식**: `deepest_function_for_line` 폴백이 신호를 **드롭하지 않고** 최악의 경우 `<module>` 로 귀속 → 어떤 능력 신호도 유실 없음.
+- **보수적 개발 OK**: 델타 = Codex 소유 `bootstrap-sensitive-functions.py`(신규 408줄·무관 리팩터 없음)·`tests/cases.yaml`(3)·`tests/run-tests.sh`·fixture 4파일·`README.md` 1줄·공동 summaries/handoff. **Claude 소유 policies/·docs/·CLAUDE.md·TASKS.md·decisions.md·templates/ 무접촉**(name-only 확인)·scope-creep/over-reach 없음. `py_compile`·`git diff --check` OK·64/64 PASS.
+- **비민감 판정 근거**: draft_only 수동 씨딩 헬퍼 — verdict 파이프라인 미연결·자동차단/자동채택 없음·정산/인증·인가/암호화/DB migration/infra 무관(CLAUDE.md §3). TASK-014(D-035·D-036) 및 TASK-005~013·018~020 게이트 계열과 동일 범주 Claude 머지 선례 → 형 승인 불요, Claude 머지.
+- **비차단 관찰 3건(전부 fail-safe/내재한계 → §2B 대로 차기 AC 가드로 *명시*, 반려 아님)**:
+  - **O-1 rename 노트 미발화**: `signature_hash` 가 함수명 포함 → rename 시 `symbol`·`signature_hash` 동시 변경 → `anchor_note` "move or rename" 분기가 **move 에만 발화·rename 엔 미발화**(fresh: `pay`→`pay2` `review_note=None`). AC#6 "이름 변경 시 재확인" 이름측 미충족. **단 fail-safe**(rename→지문변경→재제안, 보호 미해제; 손실=연결 힌트뿐). AC#6 명세갭(D-035 O-2 동형) → 차기 AC 가드: `signature_hash=인자 시그니처만(이름 독립)`+회귀 픽스처(accept→rename→재제안 AND move/rename 노트).
+  - **O-2 데코레이터 라인 능력호출 → `<module>` 귀속**: `@subprocess.getoutput(...)` 등 데코레이터 식 능력호출은 라인이 `def`(start_line) 위라 함수 미귀속·`<module>` 폴백(inventory start_line 한계, TASK-005/006 성질). **단 fail-safe**(신호 드롭 없음·정확 라인 evidence 로 노출). CLAUDE.md 요구 **데코레이터 상설 회귀 픽스처가 TASK-015 부재** → 차기 AC 가드: 데코레이터-능력호출 픽스처 상설화 + 데코레이터 라인을 함수로 귀속.
+  - **O-3 동일 지문 충돌**: 한 파일 내 이름·시그·능력·evidence 전부 동일한 두 함수(조건부 twin/@overload)는 같은 fingerprint → 한쪽 reject/accept 시 둘 다 suppress(fresh: twin `pay` 하나 reject→`suppressed_rejected=2`). 유일 fail-unsafe 방향이나 초안상 사람도 구분 불가한 사실상 동일함수 = 내재한계·draft_only 로 실해 미미 → 차기 AC 가드: suppression 키에 `start_line`/본문해시 disambiguator(위치 churn 주의).
+
 ## D-036 (2026-07-11) TASK-014 fingerprint 안정성 가드 (D-035 O-2 이월분 마감) — **통과·머지완료**
 대상: 브랜치 `codex/2026-07-11-task014-fingerprint-stability` (fix `4ecdc68`·핸드오프 `f04de7d`). 판정: **통과** → 코드 브랜치 `main` 머지·push(구현자 Codex ≠ 머지자 Claude). 상세: `review-notes.md` TASK-014 fingerprint(D-036) 절. **멱등성**: `4ecdc68`·`f04de7d` 재처리 금지.
 - **수정계약(D-035 O-2) 이행 확인**: fingerprint 입력을 evidence 전체 → **`path`+`level`+정렬된 `{(source, rule_id)}` 집합**(`evidence_identity` = source/rule_id 만; `matched`/개별 파일 `path`/`owner` 제외)으로 변경. evidence 보고에는 파일 경로 그대로 유지, 지문 산출에서만 제외 = 명세(TASKS.md AC#6 가드) 정확 이행. `set` 후 `sorted` = 순서·중복 무관.

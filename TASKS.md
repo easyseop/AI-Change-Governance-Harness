@@ -172,7 +172,7 @@
    - **🔴 AC 가드(TASK-014 리뷰 D-035 O-2 — fingerprint 안정성)**: fingerprint 는 **후보 정체성**(`path` + `level` + 정렬된 `{(source, rule_id)}` 집합)으로 산출한다. **개별 매칭 파일 경로(evidence[].path)는 지문 산출에서 제외**하고 evidence 보고에는 남긴다. 이유: 초기 구현(`ecd5d68`)은 지문을 `path+evidence` 전체 리스트로 계산해 — **이미 accepted/rejected 된 존에 형제 파일 1개만 추가돼도 지문이 바뀌어 후보가 재출현**(fresh 실증: rejected `services/auth/**` 에 `logout.py` 추가 시 `suppressed_rejected` 1→0). 이는 본 AC#6 이 막으려던 alert-fatigue 를 살아있는 repo 성장에서 그대로 재현하는 논리 결함. **회귀 픽스처 필수**: 존 reject → 형제 파일 추가 → 재스캔 시 **여전히 suppressed**(rejected·accepted 양쪽). TASK-015 anchor(정규화 심볼+시그니처 해시) 조항과 동일 계열의 "조용한 무효화 방지" 원칙.
 **비고(설계)**: import-그래프 중심성·데이터카탈로그 PII 태그·SAST 출력 연동은 **후속 확장 여지**로 남긴다(이번 스코프는 네이밍+CODEOWNERS 2종). 무리한 전수 자동화 금지 — 후보 리콜보다 **근거의 정확성** 우선.
 
-### TASK-015 ☐ 함수 후보 랭킹 `bootstrap-sensitive-functions.py`  (Codex)  *(개선점 #1)*
+### TASK-015 ☑ 함수 후보 랭킹 `bootstrap-sensitive-functions.py`  (Codex)  *(개선점 #1)*  — **통과·머지완료(D-037, 2026-07-11)**
 **목적**: `@gov` 전수 주석이 비현실적인 레거시에서, **이미 위험 능력을 쓰는 함수**를 자동 후보로 뽑아 `sensitive-functions.yaml`(코드-밖 목록) 초안을 만든다. 주석 0, 파일 무수정.
 **입력**: 대상 repo 의 `.py` 파일들 + `sensitive-capabilities.yaml`.
 **수용기준**:
@@ -182,6 +182,10 @@
 4. **정직 한계 명시**: 위험 프리미티브를 안 쓰는 "의미상 민감 함수"(순수 계산 정산 로직 등)는 못 뽑음 → 출력 헤더/문서에 이 한계를 표기(과대선전 방지). **특히 "아무도 의미를 모르는(신호도 없는) 순수 로직"은 이 스캐너뿐 아니라 하네스 전체의 미해결 영역**임을 함께 명시 — 부분 안전망은 MVP-2 종단 역추적(연결로 잡기)과 unknown-코드 표시(후속 검토)뿐.
 5. **SQL 테이블 참조 근거(선택 입력)**: 민감 테이블명 목록이 주어지면, 함수 본문 내 문자열 SQL 의 테이블명 매칭을 추가 근거로. 목록 없으면 스킵(오류 아님). 은행 도메인 특화 — 정산·PII 테이블명은 코드에 문자열로 남는다.
 6. **anchor + 상태(GPT 2-c)**: 출력 스키마에 `anchor`(정규화 심볼 + 시그니처 해시)와 `status/fingerprint`(TASK-014 ⑥과 동일 규약) 포함 — 경로·이름 변경 시 목록이 조용히 무효화(보호 해제)되는 것 방지. 해시 불일치 시 "이동/변경 의심 — 재확인" 표시.
+   - **🟠 차기 AC 가드(TASK-015 리뷰 D-037 — 3건, 전부 fail-safe·후속 태스크에서 보정)**:
+     - **G-1 (AC#6 rename 노트)**: 현 `signature_hash = sha256(name(args))` 는 함수명을 포함해 **rename 시 `symbol`·`signature_hash` 가 동시에 바뀌어** `anchor_note` 의 "move or rename" 재확인 노트가 **move(경로변경)에만 발화하고 rename(이름변경)엔 절대 발화 못 한다** → AC#6 "이름 변경 시 재확인" 의 이름측 미충족. **수정계약**: `signature_hash` 를 **인자 시그니처만(함수명 독립)** 으로 산출(심볼이 이미 이름을 담으므로 중복 제거) → rename 시 sig_hash 불변 → "move or rename" 노트 발화. **회귀 픽스처 필수**: accept 원장 → 함수 rename → 재스캔 시 (a) 재제안 되고 (b) `review_note` 에 move/rename 노트가 뜬다.
+     - **G-2 (데코레이터 라인 능력호출)**: 능력 호출이 **데코레이터 식**(`@subprocess.getoutput(...)`)에 있으면 라인이 `def`(start_line) 위라 함수 미귀속·`<module>` 폴백(inventory start_line=def줄 한계). fail-safe(신호 드롭 없음·정확 라인 노출)이나 **함수-정밀 귀속 상실**. CLAUDE.md 고정 적대세트가 요구하는 **데코레이터 상설 회귀 픽스처를 추가**하고, 가능하면 함수 라인범위를 데코레이터 첫 줄까지 확장해 귀속(TASK-005/006 성질과 정합 유지).
+     - **G-3 (동일 지문 충돌)**: 한 파일 내 이름·시그니처·능력·evidence 가 전부 같은 두 함수(조건부 twin/동일시그 `@overload`)는 같은 fingerprint → 한쪽 reject/accept 시 **둘 다 suppress**(유일 fail-unsafe 방향). suppression 키에 `start_line` 또는 본문 해시 disambiguator 를 더하되, **위치 churn(함수 이동만으로 재제안) 재유입을 피하도록** 신중히(예: 파일 내 동명 충돌시에만 tie-breaker 적용).
 
 ### TASK-016 ☐ 동적 위험접근 감지 보강 (`extract-python-capabilities` 확장)  (Codex)  *(개선점 #2)*
 **목적**: `getattr(os,"sys"+"tem")`·`getattr(os, name)`(변수경유)·`__import__("subpro"+"cess")` 등 **동적 문자열 난독으로 민감 모듈을 만지는 행위**를 잡는다. 무엇을 부르는지 값 추정은 하지 않되(정적분석 한계 인정), **"민감 모듈을 동적으로 접근하는 행위 자체"** 를 신호화.

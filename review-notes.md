@@ -5,6 +5,36 @@
 
 ---
 
+## TASK-015 함수 후보 랭킹 스캐너 `bootstrap-sensitive-functions.py` — **통과·머지완료** (2026-07-11, D-037)
+
+> 대상: `codex/2026-07-11-task015-bootstrap-functions` (impl `c174ae6`·핸드오프 `1895c1f`). 목적: `@gov` 전수 주석이 비현실적인 레거시에서 **이미 위험 능력/지정 SQL 테이블을 쓰는 함수**를 코드-밖 `sensitive-functions` 초안 후보로 뽑는다(주석 0·파일 무수정·draft_only).
+
+**무엇을 검증했나** — "도는지"가 아니라 ① 기존 2개 추출기를 **재사용**했나(중복구현 금지), ② capability signal 을 함수 범위에 **정확히** 매핑하나(CLAUDE.md 고정 적대 세트: 데코레이터·동명 오버로드·조건부/중첩 def), ③ anchor/fingerprint 가 이동·이름변경 시 **조용한 무효화**를 막나(AC#6), ④ 신호가 **드롭 없이** 잡히나(fail-safe), ⑤ 결정적·비UTF8 내성·빈repo/무테이블 exit 0.
+
+**한 줄씩 읽은 결과(핵심 로직)**
+- AC#1 재사용 ✓: `importlib` 로 `extract-python-capabilities.py`(`extract_capabilities`)·`extract-python-inventory.py`(`extract_inventory`) 를 로드해 재사용 — 재구현 없음(`:25-26`,`:157`,`:168`,`:224`).
+- 함수 매핑: `deepest_function_for_line(items, line)` = 해당 라인을 감싸는 함수 중 **가장 짧은(=가장 안쪽)** 것 선택, 없으면 `<module>` 폴백(`:77-95`). 폴백은 **드롭이 아님** — 신호는 항상 후보로 남는다(fail-safe 불변식).
+- anchor = `{symbol: path::name, signature_hash: sha256(name(args))[:16]}`(`:56-74`,`:135-138`). fingerprint = `sha256({anchor, sorted(capabilities), evidence[source/capability_id/table/kind/name — line 제외]})`(`:113-129`). **line 을 지문에서 제외** → 같은 함수 내 신호 라인 이동엔 안정(D-035 계열 원칙 준수). suppression 은 accepted/rejected fingerprint 일치 시(`:304-310`).
+
+**적대 검증(fresh, 픽스처 밖) — CLAUDE.md 고정 세트 전량 실행**
+- ① **동명 오버로드**(getter/setter `Vault.secret`): start_line 이 달라 `candidate_key=(path,name,start_line)` 로 **각각 별도 후보** 유지 ✓. 시그니처(`secret(self)` vs `secret(self, value)`)가 달라 지문도 분리 ✓.
+- ② **조건부/중첩 def**: `if/else` 안 def·클로저 `outer.inner` 모두 **가장 안쪽 함수로 정확 매핑**(`conditional_exec` 6-7, `outer.inner` 14-15) ✓.
+- ③ **결정성**: 동일 입력 2회 stdout **바이트 동일** ✓.
+- ④ **비UTF8 내성**(TASK-013 교훈): latin-1 `0xe9` 파일은 `errors` 로 격리(capability 경로=`unreadable`, table 경로=`UnicodeDecodeError` catch `:247`)되고 **형제 정상파일 후보는 보존·exit 0** — 전역 붕괴 없음 ✓.
+- ⑤ **빈 repo·무 `--tables`**: exit 0, 오류 아님 ✓.
+- ⑥ **음성검증**: `tests/cases.yaml` 의 `candidate_count`/`candidate_functions` 가 실제 후보에 묶여 있고, 회귀 케이스(accepted/rejected suppression)가 `suppressed_*` 단언으로 load-bearing(64/64 PASS, 케이스 기대 변조 시 해당 케이스만 FAIL 구조).
+
+**비차단 관찰(3건 — 전부 fail-safe 또는 내재한계 → §2B 대로 차기 AC 가드로 *명시*, 반려 아님)**
+- **O-1 (AC#6 rename 노트 미발화)**: `signature_hash` 가 함수명을 포함(`name(args)`)해, **이름변경(rename)** 시 `symbol` 과 `signature_hash` 가 **둘 다** 바뀐다 → `anchor_note`(`:287-293`)의 "possible move or rename" 분기는 **이동(move·경로변경, 동명)** 에만 발화하고 **rename 엔 절대 발화 못 함**(fresh 실증: `pay`→`pay2` 시 `review_note=None`; move 는 정상 발화). AC#6 "경로·**이름** 변경 시 재확인 표시" 의 이름측 미충족. **단 fail-safe**: rename 이면 지문도 바뀌어 **재제안(suppress 아님)** = 함수는 여전히 초안에 노출·보호 미해제. 손실은 "이전 결정과의 연결 힌트"뿐. AC#6 이 `signature_hash` 의 이름-독립을 명시 안 한 **명세 갭**(D-035 O-2 와 동형) → 차기 AC 가드: `signature_hash = 인자 시그니처만(이름 독립)` + 회귀 픽스처(accept→rename→재제안 **AND** move/rename 노트 발화).
+- **O-2 (데코레이터 라인 능력호출 → `<module>` 귀속)**: 능력 호출이 **데코레이터 식**(`@subprocess.getoutput("id")`)에 있으면 그 라인이 `def` 라인(=`start_line`)보다 위라 `deepest_function_for_line` 이 함수 범위를 못 잡고 `<module>` 로 귀속(inventory `start_line=def줄` 한계, TASK-005/006 기존 성질). **단 fail-safe**: 신호는 **드롭 안 됨** — `<module>` 후보로 **정확한 라인 evidence** 와 함께 노출(사람이 그 라인=해당 함수 데코레이터임을 확인 가능). 함수-정밀 귀속만 상실. CLAUDE.md 고정 적대세트가 요구하는 **데코레이터 상설 회귀 픽스처가 TASK-015 에 부재** → 차기 AC 가드: 데코레이터-능력호출 픽스처 상설화 + (가능하면) 데코레이터 라인을 피감싸 함수로 귀속.
+- **O-3 (동일 지문 충돌 → 양쪽 suppress)**: 한 파일 내 **이름·시그니처·능력·evidence(kind/name) 가 전부 같은** 두 함수(조건부 twin·동일시그 `@overload`)는 **같은 fingerprint** → 한쪽을 reject/accept 하면 **둘 다 suppress**(fresh 실증: twin `pay` 하나 reject 시 `suppressed_rejected=2`, 잔여 0). 유일하게 **fail-unsafe 방향**이나, 두 함수가 모든 포착 축에서 동일 = 초안 상에서 사람도 구분 불가 = 사실상 동일 함수 → 내재 한계. draft_only·verdict 미연결로 실해 미미 → 차기 AC 가드: suppression 키에 `start_line` 또는 본문 해시 disambiguator(위치 churn 재유입 주의).
+
+**보수적 개발(§1) 평가**: 델타 = Codex 소유 `.harness/gates/bootstrap-sensitive-functions.py`(신규 408줄, 무관 리팩터/포맷/이름변경 없음)·`tests/cases.yaml`(3케이스)·`tests/run-tests.sh`·fixture 4파일·`README.md` 레지스트리 1줄·공동 `summaries`/`handoff-log`. **Claude 소유 policies/·docs/·CLAUDE.md·PROJECT.md·TASKS.md·decisions.md·templates/ 무접촉**(`--name-only` 확인)·change-intent 밖 경로 없음·scope-creep/over-reach 없음. `py_compile`·`git diff --check` OK·64/64 PASS.
+
+**판정**: 핵심 AC(1~6 스캐폴딩)·fingerprint 안정성·재사용·결정성·fail-safe 불변식 충족, 3건 관찰은 전부 fail-safe/내재한계 → **통과**. **비민감**(draft_only 수동 씨딩 헬퍼·verdict 미연결·자동채택 없음·정산/인증·인가/암호화/DB migration/infra 무관, TASK-014·018~020 게이트 계열 Claude 머지 선례) → 구현자 Codex ≠ 머지자 Claude 로 **Claude `main` 머지**.
+
+---
+
 ## TASK-014 fingerprint 안정성 가드 (D-035 O-2 마감) — **통과·머지완료** (2026-07-11, D-036)
 
 > 대상: `codex/2026-07-11-task014-fingerprint-stability` (fix `4ecdc68`). 목적: D-035 에서 차기 AC 가드로 이월한 fingerprint 취약성 — accepted/rejected 된 존에 형제 파일 1개만 추가돼도 후보가 새 지문으로 재출현해 거절 원장(alert-fatigue 방지)이 무력화되는 논리결함 — 을 닫는다.
