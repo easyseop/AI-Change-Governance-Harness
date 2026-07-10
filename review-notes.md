@@ -733,3 +733,40 @@ R-3 은 Codex 불이행 아님 — A-0006 계약 정확 이행. 인라인 주석
 
 ### 검증 로그
 `bash tests/run-tests.sh` 49/49 PASS · `git diff --check` clean · `python3 -m py_compile generate-change-evidence.py` OK — 전부 격리 worktree 재현. 음성검증 2종·fresh 입력 1종 직접 실행.
+
+## TASK-019 보정 재제출 재리뷰 (D-032) — 통과 · main 머지
+대상 `codex/2026-07-09-task019-coverage-statement` · 보정 `c72169d` · 헤드 `29a48e9`. 범위 = R-1·R-2 델타만.
+
+### 한 줄씩 뜯어본 것
+- `coverage_statement(diff_input, verdict, checked=None)` — 기본 `None` 이라 정상 호출부 3곳 동작 **비트 단위 동일**. 예외 핸들러만 `checked=[]` 명시. 최소 침습이고, 내가 짜도 같은 형태(굳이 별도 `error_coverage_statement()` 를 파느니 선택인자가 낫다 — 호출부가 하나뿐).
+- 예외 발생 지점 전수 확인: `build_evidence` 는 `load_intent`(180 `FileNotFoundError`) → `load_sensitive_policy`/`load_routing_policy`(YAML 파손) → `read_diff_lines`(86 `RuntimeError`) 순으로 **게이트 평가 이전**에만 raise 가능. 따라서 `checked:[]` 는 방어적 공백이 아니라 **사실 진술**이다. (`build_function_gov_result` 는 내부에서 errors 를 흡수해 `function_analysis_error:` reason 으로 내보내므로 통상 raise 안 함 → O-3 참고)
+
+### 적대적 검증 — fresh 입력(픽스처 밖) 3종
+| 입력 | rc | verdict | `checked` | 키수 | 템플릿 일치 |
+|---|---|---|---|---|---|
+| `HEAD~1..HEAD --change-intent /nonexistent-XYZ.yaml` (D-031 원 재현입력) | 1 | blocked | `[]` | 17 | ✓ |
+| `--sensitive-zones /tmp/broken.yaml` (파손 YAML) | 1 | blocked | `[]` | 17 | ✓ |
+| `no-such-ref-abc..HEAD` (git RuntimeError) | 1 | blocked | `[]` | 17 | ✓ |
+| (대조) `tests/fixtures/good/name-status.txt` | 0 | pass | `[check-change-intent, check-sensitive-zones]` | 17 | ✓ |
+→ 보정이 픽스처 1건이 아니라 **예외 핸들러 전 경로**를 덮었고, 정상경로 동적성 무회귀.
+
+### 음성검증 (rig-and-revert)
+- `checked=[]` 원복(보정 전 과잉주장) → `evidence-error-missing-intent` **단독 FAIL 49/50**
+- 오류카드 `changed_functions:[]` 삭제 → **단독 FAIL 49/50**
+- 원복 → **50/50 PASS**
+두 변조 모두 **기존 49 케이스 전원 통과** = D-031 의 "오류 카드 미검사 → 거짓확신" 주장이 실증됨. 신규 픽스처는 그 사각지대를 정확히 메운 **실가드**(항상-PASS 아님).
+
+### 테스트 하네스 무력화 점검 (빈 리스트 함정)
+`run-tests.sh` 가 `coverage_checked_gates`/`changed_functions` 를 `if "<key>" in expect` 로 검사함을 소스에서 확인 — `expect.get(...)` truthy 였다면 **빈 리스트 기대값이 조용히 스킵**되어 R-1 가드가 무의미했을 것. 실제로는 `[]` 도 비교된다(위 음성검증이 이를 재확인).
+
+### 하류 영향
+`coverage_statement` 는 사람 리뷰어가 30초 안에 읽는 감사카드의 신뢰 근거다. 오류 카드가 `checked:[]`·`policy_sha:{}`·`changed_files:[]` 로 **일관되게 "아무것도 못 봤다"** 를 말하게 되어, 후속 approval-routing/감사 로그가 오류 카드를 "3게이트 검사 완료된 blocked" 로 오독할 여지가 사라졌다.
+
+### 비차단 관찰 (MVP-2 · 상세 A-0009)
+- **O-2 → 차기 AC 가드 명시**: 오류 카드 `verdict_statement` 가 여전히 `governance violation detected`(실제론 tool error). A-0008 이 "권장·비필수" 로 못박아 보정사유 아님. §2B 필수질문=아니오(과대 진술·fail-closed → 통과 구멍 아님). 차기 AC: 중립 문구 + 회귀 픽스처.
+- **O-3**: `check_function_gov_level` raise 시 2게이트 실행됐는데 `checked:[]` = 과소보고(보수적 → 비차단). 차기: 실행 게이트 누적기록.
+- **O-4**: 오류 픽스처가 **부재 경로**를 트리거로 씀(무주석). 훗날 생성되면 테스트가 시끄럽게 실패 → 비차단. 차기: 주석 1줄.
+- **O-1(이월)**: `schema_keys_match_template` top-level 한정. **AC #8(이월)**: 전체 policy 번들 digest.
+
+### 검증 로그
+`bash tests/run-tests.sh` **50/50 PASS** · `git diff --check` clean · `py_compile` OK — 전부 격리 worktree 재현. fresh 오류입력 3종·정상 대조 1종·음성검증 2종 직접 실행.
