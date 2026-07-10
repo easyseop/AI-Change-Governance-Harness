@@ -993,6 +993,9 @@ cases:
             - kind: call
               line: 54
               name: importlib.import_module
+            - kind: dynamic_import
+              line: 54
+              name: importlib.import_module
         - id: outbound_network
           level: protected
           signals:
@@ -1026,6 +1029,9 @@ cases:
             - kind: call
               line: 22
               name: subprocess.run
+            - kind: dynamic_import
+              line: 26
+              name: subprocess
             - kind: call
               line: 59
               name: os.system
@@ -1088,6 +1094,70 @@ cases:
             - kind: import
               line: 4
               name: subprocess
+            - kind: dynamic_import
+              line: 26
+              name: subprocess
+
+  - name: python-capabilities-dynamic-exact
+    gate: extract-python-capabilities
+    input:
+      source_file: tests/fixtures/capabilities/dynamic-exact.py
+      policy: tests/fixtures/capabilities/dynamic-policy.yaml
+    expect:
+      exit_code: 0
+      unresolved_dynamic: []
+      errors: []
+      capabilities:
+        - id: dynamic_code_exec
+          level: protected
+          signals:
+            - kind: builtin
+              line: 9
+              name: __import__
+        - id: subprocess_exec
+          level: protected
+          signals:
+            - kind: call
+              line: 5
+              name: os.system
+            - kind: dynamic_import
+              line: 9
+              name: subprocess
+
+  - name: python-capabilities-dynamic-watched
+    gate: extract-python-capabilities
+    input:
+      source_file: tests/fixtures/capabilities/dynamic-watched.py
+      policy: tests/fixtures/capabilities/dynamic-policy.yaml
+    expect:
+      exit_code: 0
+      unresolved_dynamic: []
+      errors: []
+      capabilities:
+        - id: dynamic_code_exec
+          level: watched
+          signals:
+            - kind: dynamic_import
+              line: 15
+              name: __import__
+            - kind: dynamic_import
+              line: 19
+              name: importlib.import_module
+            - kind: base64_dynamic
+              line: 23
+              name: __import__
+            - kind: namespace_access
+              line: 27
+              name: globals
+        - id: subprocess_exec
+          level: watched
+          signals:
+            - kind: dynamic_access
+              line: 7
+              name: os.*
+            - kind: dynamic_access
+              line: 11
+              name: os.*
 
   - name: python-capabilities-parse-error
     gate: extract-python-capabilities
@@ -1253,6 +1323,23 @@ cases:
       shadow_capabilities: []
       fail_closed: []
       errors_present: true
+
+  - name: new-capabilities-dynamic-watched-pass
+    gate: check-new-capabilities
+    input:
+      fixture_dir: tests/fixtures/new-capabilities/dynamic-watched
+      policy: tests/fixtures/capabilities/dynamic-policy.yaml
+    expect:
+      verdict: pass
+      exit_code: 0
+      new_capabilities: []
+      warned_capabilities:
+        - path: app/run.py
+          id: subprocess_exec
+          level: watched
+          reviewer: security-reviewer
+          signal_names: [os.*]
+      fail_closed: []
 
   - name: policy-change-loosening-level
     gate: check-policy-change
