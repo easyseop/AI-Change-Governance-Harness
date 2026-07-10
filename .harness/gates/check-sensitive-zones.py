@@ -13,6 +13,7 @@ import yaml
 PASS = 0
 BLOCKED = 1
 APPROVAL_REQUIRED = 2
+VALID_MATURITY = {"enforcing", "shadow"}
 
 
 def normalize_path(path):
@@ -86,12 +87,31 @@ def load_policy(path):
         data = yaml.safe_load(stream) or {}
 
     defaults = data.get("defaults") or {}
+    zones = []
+    errors = []
+    for index, zone in enumerate(data.get("zones") or []):
+        normalized = dict(zone)
+        maturity = normalized.get("maturity", "enforcing")
+        if maturity not in VALID_MATURITY:
+            errors.append(
+                {
+                    "error": "invalid_maturity",
+                    "index": index,
+                    "path": normalized.get("path"),
+                    "maturity": maturity,
+                }
+            )
+            maturity = "enforcing"
+        normalized["maturity"] = maturity
+        zones.append(normalized)
+
     return {
         "block_levels": defaults.get("block_levels") or [],
         "approve_levels": defaults.get("approve_levels") or [],
         "warn_levels": defaults.get("warn_levels") or [],
         "unlisted_level": defaults.get("unlisted_level") or "free",
-        "zones": data.get("zones") or [],
+        "zones": zones,
+        "errors": errors,
     }
 
 
@@ -119,6 +139,7 @@ def matching_zone_records(path, policy):
                 "level": level,
                 "reason": zone.get("reason", ""),
                 "required_approval": zone.get("required_approval"),
+                "maturity": zone.get("maturity", "enforcing"),
                 "strength": level_strength(level, policy),
             }
         )
@@ -142,6 +163,8 @@ def public_record(record):
     }
     if record["required_approval"]:
         result["required_approval"] = record["required_approval"]
+    if record.get("maturity") == "shadow":
+        result["maturity"] = "shadow"
     return result
 
 
@@ -149,9 +172,17 @@ def check_files(files, policy):
     frozen_touched = []
     protected_touched = []
     watched_touched = []
+    shadow_hits = []
 
     for path in files:
-        for record in strongest_records(matching_zone_records(path, policy)):
+        records = matching_zone_records(path, policy)
+        for record in strongest_records(
+            [record for record in records if record.get("maturity") == "shadow"]
+        ):
+            shadow_hits.append(public_record(record))
+        for record in strongest_records(
+            [record for record in records if record.get("maturity") != "shadow"]
+        ):
             public = public_record(record)
             level = record["level"]
             if level in policy["block_levels"]:
@@ -164,6 +195,7 @@ def check_files(files, policy):
     frozen_touched = sorted(frozen_touched, key=lambda item: (item["path"], item["zone"]))
     protected_touched = sorted(protected_touched, key=lambda item: (item["path"], item["zone"]))
     watched_touched = sorted(watched_touched, key=lambda item: (item["path"], item["zone"]))
+    shadow_hits = sorted(shadow_hits, key=lambda item: (item["path"], item["zone"]))
 
     if frozen_touched:
         verdict = "blocked"
@@ -182,6 +214,8 @@ def check_files(files, policy):
         "frozen_touched": frozen_touched,
         "protected_touched": protected_touched,
         "watched_touched": watched_touched,
+        "shadow_hits": shadow_hits,
+        "errors": policy.get("errors", []),
         "exit_code": exit_code,
     }
 
@@ -208,6 +242,10 @@ def print_text(result):
         print(f"protected: {item['path']} ({item['reason']}{suffix})")
     for item in result["watched_touched"]:
         print(f"watched: {item['path']} ({item['reason']})")
+    for item in result.get("shadow_hits", []):
+        print(f"shadow: {item['path']} ({item['level']}, {item['reason']})")
+    for error in result.get("errors", []):
+        print(f"error: {error}")
 
 
 def main():

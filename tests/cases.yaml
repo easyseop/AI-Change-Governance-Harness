@@ -236,6 +236,62 @@ cases:
       watched_touched:
         - lib/common/helpers.py
 
+  - name: maturity-zone-shadow-pass
+    gate: check-sensitive-zones
+    input:
+      name_status: tests/fixtures/maturity/shadow-name-status.txt
+      policy: tests/fixtures/maturity/sensitive-zones.yaml
+    expect:
+      verdict: pass
+      exit_code: 0
+      protected_touched: []
+      shadow_hits:
+        - app/shadow/pay.py
+
+  - name: maturity-zone-enforcing-approval
+    gate: check-sensitive-zones
+    input:
+      name_status: tests/fixtures/maturity/enforcing-name-status.txt
+      policy: tests/fixtures/maturity/sensitive-zones.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      protected_touched:
+        - app/enforcing/pay.py
+      shadow_hits: []
+
+  - name: maturity-zone-invalid-enforcing
+    gate: check-sensitive-zones
+    input:
+      name_status: tests/fixtures/maturity/invalid-name-status.txt
+      policy: tests/fixtures/maturity/invalid-sensitive-zones.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      protected_touched:
+        - app/invalid/pay.py
+      errors_present: true
+
+  - name: evidence-zone-shadow-hit
+    gate: generate-change-evidence
+    input:
+      name_status: tests/fixtures/maturity/shadow-name-status.txt
+      numstat: tests/fixtures/maturity/shadow-numstat.txt
+      change_intent: tests/fixtures/maturity/change-intent.yaml
+      policy: tests/fixtures/maturity/sensitive-zones.yaml
+    expect:
+      verdict: pass
+      exit_code: 0
+      files_changed: 1
+      lines_added: 1
+      lines_removed: 1
+      changed_files:
+        - path: app/shadow/pay.py
+          zone_level: protected
+          in_allowed_paths: true
+      shadow_hits:
+        - app/shadow/pay.py
+
   - name: python-inventory
     gate: extract-python-inventory
     input:
@@ -1158,6 +1214,43 @@ cases:
           reviewer: security-reviewer
           signal_names: [subprocess]
       warned_capabilities: []
+      fail_closed: []
+      errors_present: true
+
+  - name: new-capabilities-shadow-pass
+    gate: check-new-capabilities
+    input:
+      fixture_dir: tests/fixtures/new-capabilities/shadow-capability
+      policy: tests/fixtures/capabilities/shadow-policy.yaml
+    expect:
+      verdict: pass
+      exit_code: 0
+      new_capabilities: []
+      warned_capabilities: []
+      shadow_capabilities:
+        - path: app/client.py
+          id: outbound_network
+          level: protected
+          reviewer: security-reviewer
+          signal_names: [requests]
+      fail_closed: []
+
+  - name: new-capabilities-invalid-maturity-enforcing
+    gate: check-new-capabilities
+    input:
+      fixture_dir: tests/fixtures/new-capabilities/invalid-maturity
+      policy: tests/fixtures/capabilities/invalid-maturity-policy.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      new_capabilities:
+        - path: app/client.py
+          id: outbound_network
+          level: protected
+          reviewer: security-reviewer
+          signal_names: [requests]
+      warned_capabilities: []
+      shadow_capabilities: []
       fail_closed: []
       errors_present: true
 

@@ -10,6 +10,7 @@ import yaml
 
 DEFAULT_POLICY = "policies/sensitive-capabilities.yaml"
 VALID_LEVELS = {"protected", "watched"}
+VALID_MATURITY = {"enforcing", "shadow"}
 DEFAULT_INVALID_LEVEL = "protected"
 
 
@@ -47,6 +48,16 @@ def load_catalog(path):
                 }
             )
             level = DEFAULT_INVALID_LEVEL
+        maturity = raw.get("maturity", "enforcing")
+        if maturity not in VALID_MATURITY:
+            errors.append(
+                {
+                    "error": "invalid_maturity",
+                    "id": cap_id,
+                    "maturity": maturity,
+                }
+            )
+            maturity = "enforcing"
 
         signals = raw.get("signals") or {}
         known = {"imports", "calls", "builtins"}
@@ -57,6 +68,7 @@ def load_catalog(path):
             {
                 "id": cap_id,
                 "level": level,
+                "maturity": maturity,
                 "reason": raw.get("reason"),
                 "reviewer": raw.get("reviewer"),
                 "imports": signal_list(signals, "imports"),
