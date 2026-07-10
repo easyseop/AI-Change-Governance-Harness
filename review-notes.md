@@ -5,6 +5,32 @@
 
 ---
 
+## TASK-020 규칙 성숙도(maturity/shadow) — **보정요청** (2026-07-11, D-033 · A-0010)
+
+- 대상: 브랜치 `codex/2026-07-11-task020-maturity` (헤드 `42062f6`, 구현 `5449c65`)
+- 파일: `check-sensitive-zones.py`·`generate-change-evidence.py`·`extract-python-capabilities.py`·`check-new-capabilities.py` + `tests/fixtures/maturity`·`capabilities`·`new-capabilities/{shadow-capability,invalid-maturity}` + `cases.yaml`/`run-tests.sh`
+- 결정: **D-033 보정요청(R-1·🔴)** — 코드 브랜치 보류, 리뷰기록만 main.
+
+### 심층·적대적 검증 (fresh 입력·픽스처 밖 + 음성검증)
+
+설계 정합: 4게이트 모두 `maturity`(기본 enforcing) 를 정책 로드에 정규화, **verdict 집계 직전** shadow/non-shadow 파티션 분리 — shadow 는 `shadow_hits`/`shadow_capabilities` 로만 기록. `strongest_records` 를 두 파티션에 **각각** 적용해 shadow 가 non-shadow 판정에 개입 못 함.
+
+- **AC #1 하위호환** ✅ — 무기입=enforcing. 기존 56/56 무회귀. enforcing 명시(T2 frozen→BLOCKED·T4 protected→APPROVAL)가 maturity 도입 전과 동일.
+- **AC #2 verdict 미반영+기록** ✅ — fresh 5정책 존:
+  - T1 shadow-frozen→PASS(0)+shadow_hit / T3 shadow-protected→PASS+shadow_hit.
+  - **혼합존(같은 경로 2룰)**: T6 shadow-frozen + enforcing-protected → **APPROVAL(2)**(frozen 으로 에스컬레이트 안 함)·shadow_hit=frozen. T7 shadow-protected + enforcing-watched → **PASS(0)**(watched 만 집행). = 파티션 로직 정합.
+  - `check-new-capabilities`: shadow cap → `shadow_capabilities`·pass. `generate-change-evidence`: shadow-frozen → 카드 `status:pass`·`frozen_touched:[]`·`shadow_hits` 기록(verdict 무오염). zone_level_by_path 는 shadow-only 경로에 원 level(protected 등) 보고하나 verdict/status 는 non-shadow touched 로만 구동 → 카드 정직·차단 무영향.
+- **AC #3 fail-closed 절** ✅ — 잘못된 `maturity: pilot`→T5 검증오류+enforcing 보수(approval·exit 2). extract/capability 동일.
+- **AC #4 쌍+음성** ✅ — 독립 rig-and-revert 2종: ① sensitive-zones verdict-side 필터 `!= "shadow"` → 전체수용으로 rig 시 shadow-frozen 이 **BLOCK 으로 뒤집힘**(필터 load-bearing). ② check-new-capabilities `maturity` 상수 enforcing rig → `new-capabilities-shadow-pass` **단독 FAIL(55/56)**·원복 56/56.
+- **보수적 개발(§1)** ✅ — 국소·무관리팩터 없음·Claude 소유 무접촉.
+
+### R-1 (🔴 보정사유) — AC #3 정합성 조항 미충족 (§2B 직접구멍)
+
+AC #3: "`maturity: shadow` 로 바꾸는 diff 는 TASK-018 이 완화로 잡는다 — 두 태스크 정합 필수." **미충족.** clean fresh 저장소 실증:
+- base=`app/pay/**` frozen(정산 핵심), head=같은 존에 한 줄 `maturity: shadow`. → sensitive-zones 가 `app/pay/core.py` 를 **PASS**(frozen 자동차단 무력화). → **정책 diff 를 `check-policy-change.py` 가 완화 미탐(PASS·exit 0)**. 양성대조: `frozen→protected` 하향은 정상 감지(`weakened_zone_level`·exit 2) = 게이트는 작동하나 maturity 차원 부지.
+- **판정근거**: frozen 은 유일한 하드-차단(불변원칙 §4). 그 층이 어떤 게이트에도 안 걸리는 한 줄로 소리없이 꺼짐 = maturity=shadow 는 의미상 규칙삭제/등급하향과 동일한 완화. §2B 필수질문("거버넌스 목적에 직접 구멍?") = 예 → 비차단 불가.
+- **수정계약**: `check-policy-change.py`(Codex 소유) 구조비교에 maturity 차원 — 기존 zone/cap enforcing→shadow 전환=`policy_loosening`(approval), 신규 shadow 룰 신설=pass(정상 롤아웃). 회귀 픽스처 1쌍 + 음성검증. 유한·구조적(무한퇴행 아님).
+
 ## TASK-001 `check-change-intent` — 리뷰통과 (2026-06-29)
 
 - 대상: commit `ff75529`, 브랜치 `codex/2026-06-29-task001-change-intent`

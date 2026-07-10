@@ -4,6 +4,12 @@
 
 ---
 
+## D-033 (2026-07-11) TASK-020 규칙 성숙도(maturity/shadow) **보정요청** (R-1 · 🔴)
+대상: 브랜치 `codex/2026-07-11-task020-maturity` (헤드 `42062f6`, 구현 `5449c65`). 판정: **보정요청** — 코드 브랜치 머지 **보류**, 리뷰기록만 `main` 머지. 상세: `collab/answers/A-0010.md`·`review-notes.md` TASK-020 절.
+- **통과(재론불요)**: AC #1(기본 enforcing·하위호환)·#2(shadow→verdict 미반영+shadow_hits, 4게이트·혼합존 T6/T7 포함 실증)·#4(쌍 픽스처+독립 음성검증 rig-and-revert 2종)·AC #3 **fail-closed 절**(잘못된 maturity→enforcing+검증오류, T5·capability 실증). 56/56 PASS. 보수적개발 OK(무관 리팩터·scope-creep 없음·Claude 소유 무접촉).
+- **R-1(🔴 보정사유)**: AC #3 **정합성 조항**("`maturity: shadow` 로 바꾸는 diff 는 TASK-018 이 완화로 잡는다 — 두 태스크 정합 필수") **미충족**. clean fresh 실증: frozen 정산존에 한 줄 `maturity: shadow` 추가 → ① sensitive-zones 가 그 존을 PASS(자동차단 무력화) ② 그 **정책 diff 를 `check-policy-change.py` 가 완화로 미탐(exit 0)**(양성대조: 등급하향은 정상 감지). = 유일한 하드-차단(1층 frozen·불변원칙 §4)이 어떤 게이트에도 안 걸리는 한 줄로 무력화 → **§2B 직접구멍, 비차단 불가**.
+- **수정계약**: `check-policy-change.py` 구조비교에 maturity 차원 추가 — 기존 zone/cap 의 enforcing→shadow 전환 = `policy_loosening`(approval), 신규 shadow 룰 신설 = pass. 회귀 픽스처 1쌍 + 음성검증. (파일 Codex 소유 → Codex 보정.)
+
 ## D-001 (2026-06-28) 민감함 기준 = 경로(MVP-0) → 능력·데이터(MVP-1+)
 경로는 약한 대리표지. MVP-0 은 경로기반으로 시작하되, 능력/데이터 기반을 MVP-1 로 확장한다.
 근거: 신규 코드·재사용 모듈은 경로만으로 판단 불가.
