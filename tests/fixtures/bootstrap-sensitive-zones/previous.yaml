@@ -1,0 +1,22 @@
+bootstrap_sensitive_zones:
+  generated_by: bootstrap-sensitive-zones
+  source_repo: fixture
+  mode: draft_only
+  summary:
+    candidate_count: 1
+    suppressed_accepted: 0
+    suppressed_rejected: 0
+    codeowners_read: true
+  candidates:
+    - path: services/auth/**
+      level: protected
+      reason: authentication path token
+      status: rejected
+      fingerprint: 33876acc6fe6651801f4294d9f0092850e1cc0aa5b3c021c73fedd3f806fecd6
+      rejected_reason: too broad for this repo
+      rejected_by: security-reviewer
+      evidence:
+        - source: path_naming
+          rule_id: auth-token
+          matched: auth
+          path: services/auth/login.py

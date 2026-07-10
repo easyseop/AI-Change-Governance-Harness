@@ -1373,3 +1373,58 @@ cases:
       policy_loosening_kinds: []
       enforcement_bypass_kinds:
         - removed_required_check
+
+  - name: bootstrap-sensitive-zones-candidates
+    gate: bootstrap-sensitive-zones
+    input:
+      repo: tests/fixtures/bootstrap-sensitive-zones/repo
+      rules: tests/fixtures/bootstrap-sensitive-zones/rules.yaml
+    expect:
+      exit_code: 0
+      candidate_count: 3
+      candidate_paths:
+        - db/migrations/**
+        - services/auth/**
+        - src/security/**
+      candidate_levels:
+        - protected
+        - protected
+        - protected
+      candidate_statuses:
+        - proposed
+        - proposed
+        - proposed
+      evidence_sources:
+        - [codeowners, path_naming]
+        - [path_naming]
+        - [codeowners]
+      codeowners_read: true
+      draft_only: true
+      rejection_schema: true
+      deterministic_stdout: true
+
+  - name: bootstrap-sensitive-zones-empty
+    gate: bootstrap-sensitive-zones
+    input:
+      repo: tests/fixtures/bootstrap-sensitive-zones/repo
+      rules: tests/fixtures/bootstrap-sensitive-zones/empty-rules.yaml
+    expect:
+      exit_code: 0
+      candidate_count: 0
+      candidate_paths: []
+      codeowners_read: true
+      draft_only: true
+
+  - name: bootstrap-sensitive-zones-rejected-suppressed
+    gate: bootstrap-sensitive-zones
+    input:
+      repo: tests/fixtures/bootstrap-sensitive-zones/repo
+      rules: tests/fixtures/bootstrap-sensitive-zones/rules.yaml
+      previous: tests/fixtures/bootstrap-sensitive-zones/previous.yaml
+    expect:
+      exit_code: 0
+      candidate_count: 2
+      suppressed_rejected: 1
+      candidate_paths:
+        - db/migrations/**
+        - src/security/**
