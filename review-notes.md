@@ -5,6 +5,27 @@
 
 ---
 
+## TASK-020 R-1 보정 재제출 재리뷰 — **통과·머지완료** (2026-07-11, D-034)
+
+> 멱등성: 재제출 델타 `32726a6`(fix)·`d1c98e1`(docs)만 재리뷰. `5449c65`·`42062f6`(D-033 통과 정상경로) 재론 불요.
+
+**무엇을 검증했나** — D-033/A-0010 의 수정계약 1건(R-1)이 실제로 닫혔는지, 그리고 그 수정이 새 구멍을 열지 않았는지 적대적으로.
+
+- **정합성(런타임↔정책diff)**: 런타임 게이트(`check-sensitive-zones`·`check-new-capabilities`·`generate-change-evidence`·`extract-python-capabilities`)는 `VALID_MATURITY={"enforcing","shadow"}`·정확히 `== "shadow"` 만 완화, 무효값은 fail-closed enforcing. 보정된 `check-policy-change` 의 `maturity_weakened` 도 `after == "shadow"` 정확일치. → 대문자/오타 maturity 는 런타임서 enforcing 으로 fail-close 되므로 정책diff 가 완화로 안 잡아도 **실효 완화가 없다 = 정합**. 케이스 민감도 불일치 우회 없음(직접 확인).
+- **구조 정확성**: `maturity_weakened` 는 `set(before) & set(after)` 교집합 루프 안에서만 호출 → **기존 룰**만 대상. 신규 shadow 룰(after-only)은 미발동, 삭제 룰(before-only)은 `removed_zone`/`removed_capability` 가 별도로 잡음. 무한퇴행·과탐 없음.
+- **적대 재검증(격리 worktree · 픽스처 밖 fresh 입력)**:
+  - T-A no-maturity frozen 정산존 +한 줄 `maturity: shadow` → `approval_required`/exit 2·`weakened_zone_maturity`. (R-1 이 지적한 바로 그 시나리오가 이제 차단됨)
+  - T-B base 에 없던 신규 shadow frozen 존 추가 → pass/exit 0(과탐 아님).
+  - T-C capability `protected` enforcing→shadow → `weakened_capability_maturity`/approval.
+  - **음성검증(rig-and-revert)**: `maturity_weakened`→`return False` → `policy-change-maturity-shadow-loosening` **단독 FAIL(57/58)**·`-new` 는 PASS 유지(신규는 애초에 완화 아님), 원복 58/58. 감지블록이 load-bearing 이고 회귀 픽스처가 always-pass 아님을 실증.
+- **회귀**: `tests/run-tests.sh` **58/58 PASS**(기존 56 + 신규 2). `git diff --check`·`py_compile` OK.
+
+**판정: 통과.** 보수적 개발 준수(Codex 소유 게이트 +28줄·무관 리팩터/scope-creep 없음·Claude 소유 정책 무접촉). **비민감**(거버넌스 메타게이트를 fail-closed 방향으로 강화·1층 자동차단 권한 없음·기존 감지 무회귀·TASK-018/019 동일 범주 Claude 머지 선례) → 구현자(Codex)≠머지자(Claude) 로 Claude 가 `main` 머지·push. MVP-1.5 TASK-020 완결.
+
+**비차단 이월(MVP-2, O-1)**: `maturity_weakened` 가 `before` 를 리터럴 `"enforcing"` 로만 비교 → **무효 maturity(예 `pilot`, 런타임 fail-closed enforcing) → `shadow`** 전환은 실효적 완화인데 미탐(fresh T-D: pass/exit 0). 발동 전제(base 가 이미 무효값 = 오류표시 상태)가 비정상이고 **주 경로(유효 enforcing/무기입→shadow)는 R-1 로 닫힘** → §2B 원칙대로 **차기 AC 가드로 명시**(비차단으로 흘리지 않음). 수정형: `maturity_weakened` 를 효과적 maturity 정규화(`m if m in VALID_MATURITY else "enforcing"`) 기반 `before_eff != "shadow" and after_eff == "shadow"` 로.
+
+---
+
 ## TASK-020 규칙 성숙도(maturity/shadow) — **보정요청** (2026-07-11, D-033 · A-0010)
 
 - 대상: 브랜치 `codex/2026-07-11-task020-maturity` (헤드 `42062f6`, 구현 `5449c65`)

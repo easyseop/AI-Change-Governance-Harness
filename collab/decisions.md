@@ -4,6 +4,14 @@
 
 ---
 
+## D-034 (2026-07-11) TASK-020 R-1 보정 재제출 재리뷰 — **통과·머지완료** (MVP-1.5 TASK-020 완결)
+대상: 브랜치 `codex/2026-07-11-task020-maturity` (보정 `32726a6`·헤드 `d1c98e1`). 판정: **통과** → 코드 브랜치 `main` 머지·push(구현자 Codex ≠ 머지자 Claude). 상세: `review-notes.md` TASK-020 재리뷰(D-034) 절. **멱등성**: `5449c65`·`42062f6`(정상경로·D-033 통과분)·`32726a6`·`d1c98e1` 재처리 금지.
+- **R-1 해소 ✓**: D-033 수정계약 그대로 이행. `check-policy-change.py` 구조비교에 `maturity_weakened(before, after)` 추가 — 기존 zone/capability 의 (무maturity=enforcing 또는 enforcing)→`shadow` 전환을 `weakened_zone_maturity`/`weakened_capability_maturity` 로 기록 → `policy_loosening` → `approval_required`(exit 2). 신규 shadow 룰 신설(base 에 없던 zone/cap)은 교집합 루프 밖이라 미발동 = pass 유지. 정합성: 런타임 게이트(sensitive-zones·new-capabilities)와 동일하게 **정확히 `"shadow"`** 만 완화로 취급(대문자·오타는 런타임서 fail-closed enforcing → 완화 아님이므로 미탐이 정합).
+- **적대 재검증(fresh, 격리 worktree)**: ① no-maturity frozen 정산존 +`maturity: shadow` → `approval_required`/exit 2·`weakened_zone_maturity`(픽스처 밖 fresh). ② 신규 shadow 존 추가 → pass/exit 0(과탐 없음). ③ capability enforcing→shadow → `weakened_capability_maturity`/approval. ④ **음성검증(rig-and-revert)**: `maturity_weakened`→`return False` 변조 시 `policy-change-maturity-shadow-loosening` **단독 FAIL(57/58)**·`-new` 는 그대로 PASS, 원복 58/58 = 감지블록 load-bearing·픽스처 실가드 실증.
+- **보수적 개발 OK**: 델타 = Codex 소유 `check-policy-change.py`(+28줄, 무관 리팩터 없음)·`tests/cases.yaml`(2케이스)·픽스처 2쌍. Claude 소유 정책파일 무접촉·scope-creep 없음. `py_compile`·`git diff --check` OK.
+- **비민감 판정 근거**: 하네스 거버넌스 *메타게이트* 강화(완화 미탐 구멍 닫음 = fail-closed 방향)·자동차단(1층) 권한 없음(verdict=approval_required 2층)·기존 감지 무회귀(58/58). TASK-018/019 동일 범주(gate 코드)로 Claude 머지 선례 존재 → 형 승인 불요.
+- **비차단 이월(MVP-2, O-1)**: `maturity_weakened` 가 `before` 를 **리터럴 `"enforcing"`** 로만 비교 → **`maturity: pilot`(무효·런타임 fail-closed enforcing) → `shadow`** 전환은 실효적 완화인데 미탐(fresh 실증 T-D: pass/exit 0). 발동 전제(base 가 이미 무효 maturity = 오류표시 상태)가 비정상이고 R-1 이 실증한 **주 경로(유효 enforcing/무기입→shadow)는 닫힘** → 차기 AC 가드로 명시(§2B: "보정 또는 차기 AC 가드로 *명시적으로*"). 수정형: 효과적 maturity 정규화(`m if m in VALID else "enforcing"`) 후 `before_eff != "shadow" and after_eff == "shadow"`.
+
 ## D-033 (2026-07-11) TASK-020 규칙 성숙도(maturity/shadow) **보정요청** (R-1 · 🔴)
 대상: 브랜치 `codex/2026-07-11-task020-maturity` (헤드 `42062f6`, 구현 `5449c65`). 판정: **보정요청** — 코드 브랜치 머지 **보류**, 리뷰기록만 `main` 머지. 상세: `collab/answers/A-0010.md`·`review-notes.md` TASK-020 절.
 - **통과(재론불요)**: AC #1(기본 enforcing·하위호환)·#2(shadow→verdict 미반영+shadow_hits, 4게이트·혼합존 T6/T7 포함 실증)·#4(쌍 픽스처+독립 음성검증 rig-and-revert 2종)·AC #3 **fail-closed 절**(잘못된 maturity→enforcing+검증오류, T5·capability 실증). 56/56 PASS. 보수적개발 OK(무관 리팩터·scope-creep 없음·Claude 소유 무접촉).
