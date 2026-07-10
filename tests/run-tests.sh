@@ -27,6 +27,7 @@ GATES = {
     "check-new-capabilities": ".harness/gates/check-new-capabilities.py",
     "check-policy-change": ".harness/gates/check-policy-change.py",
     "bootstrap-sensitive-zones": ".harness/gates/bootstrap-sensitive-zones.py",
+    "bootstrap-sensitive-functions": ".harness/gates/bootstrap-sensitive-functions.py",
 }
 ROOT_DIR = os.getcwd()
 
@@ -226,6 +227,20 @@ def case_command(case):
         ]
         if data.get("codeowners"):
             command.extend(["--codeowners", data["codeowners"]])
+        if data.get("previous"):
+            command.extend(["--previous", data["previous"]])
+        return command
+
+    if gate == "bootstrap-sensitive-functions":
+        command = [
+            "python3",
+            script,
+            data["repo"],
+            data.get("policy", "policies/sensitive-capabilities.yaml"),
+            "--json",
+        ]
+        if data.get("tables"):
+            command.extend(["--tables", data["tables"]])
         if data.get("previous"):
             command.extend(["--previous", data["previous"]])
         return command
@@ -668,6 +683,63 @@ def validate_bootstrap_sensitive_zones(case, result, exit_code):
     return errors
 
 
+def validate_bootstrap_sensitive_functions(case, result, exit_code):
+    expect = case["expect"]
+    errors = []
+    assert_equal(errors, "exit_code", exit_code, expect["exit_code"])
+    summary = result.get("summary", {})
+    candidates = result.get("candidates", [])
+
+    if "candidate_functions" in expect:
+        actual = [f"{candidate.get('path')}::{candidate.get('function')}" for candidate in candidates]
+        assert_equal(errors, "candidate_functions", actual, expect["candidate_functions"])
+    if "candidate_capabilities" in expect:
+        actual = [candidate.get("capabilities") for candidate in candidates]
+        assert_equal(errors, "candidate_capabilities", actual, expect["candidate_capabilities"])
+    if "candidate_statuses" in expect:
+        assert_equal(errors, "candidate_statuses", values_at(candidates, "status"), expect["candidate_statuses"])
+    if "candidate_count" in expect:
+        assert_equal(errors, "summary.candidate_count", summary.get("candidate_count"), expect["candidate_count"])
+    if "suppressed_rejected" in expect:
+        assert_equal(errors, "summary.suppressed_rejected", summary.get("suppressed_rejected"), expect["suppressed_rejected"])
+    if "suppressed_accepted" in expect:
+        assert_equal(errors, "summary.suppressed_accepted", summary.get("suppressed_accepted"), expect["suppressed_accepted"])
+    if "sql_tables_loaded" in expect:
+        assert_equal(errors, "summary.sql_tables_loaded", summary.get("sql_tables_loaded"), expect["sql_tables_loaded"])
+    if "evidence_sources" in expect:
+        actual_sources = [
+            sorted({evidence.get("source") for evidence in candidate.get("evidence", [])})
+            for candidate in candidates
+        ]
+        assert_equal(errors, "evidence_sources", actual_sources, expect["evidence_sources"])
+    if expect.get("draft_only"):
+        assert_equal(errors, "mode", result.get("mode"), "draft_only")
+        if "automatic" in result.get("adoption_note", "").lower():
+            errors.append("adoption_note: must not imply automatic adoption")
+    if expect.get("limitation_statement"):
+        statement = result.get("limitation_statement", "")
+        for phrase in ("Pure business-critical logic", "not detected"):
+            if phrase not in statement:
+                errors.append(f"limitation_statement: expected phrase {phrase!r}")
+    if expect.get("anchor_present"):
+        for candidate in candidates:
+            anchor = candidate.get("anchor") or {}
+            if not anchor.get("symbol") or not anchor.get("signature_hash"):
+                errors.append(f"anchor missing from {candidate.get('path')}::{candidate.get('function')}")
+            if not candidate.get("fingerprint"):
+                errors.append(f"fingerprint missing from {candidate.get('path')}::{candidate.get('function')}")
+    if expect.get("rejection_schema"):
+        for candidate in candidates:
+            if "rejected_reason" not in candidate or "rejected_by" not in candidate:
+                errors.append(f"rejection schema missing from {candidate.get('path')}::{candidate.get('function')}")
+    if expect.get("deterministic_stdout"):
+        first = run_command(case_command(case)).stdout
+        second = run_command(case_command(case)).stdout
+        assert_equal(errors, "deterministic_stdout", first, second)
+
+    return errors
+
+
 def main():
     with open("tests/cases.yaml", "r", encoding="utf-8") as stream:
         cases = yaml.safe_load(stream)["cases"]
@@ -700,6 +772,8 @@ def main():
                 errors = validate_policy_change(case, result, completed.returncode)
             elif case["gate"] == "bootstrap-sensitive-zones":
                 errors = validate_bootstrap_sensitive_zones(case, result, completed.returncode)
+            elif case["gate"] == "bootstrap-sensitive-functions":
+                errors = validate_bootstrap_sensitive_functions(case, result, completed.returncode)
             else:
                 errors = validate_json_gate(case, result, completed.returncode)
         except Exception as error:
