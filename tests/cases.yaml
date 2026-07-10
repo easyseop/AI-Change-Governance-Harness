@@ -1298,6 +1298,27 @@ cases:
         - removed_list_item
       enforcement_bypass_kinds: []
 
+  - name: policy-change-maturity-shadow-loosening
+    gate: check-policy-change
+    input:
+      fixture_dir: tests/fixtures/policy-change/maturity-shadow-loosening
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      policy_loosening_kinds:
+        - weakened_zone_maturity
+      enforcement_bypass_kinds: []
+
+  - name: policy-change-maturity-shadow-new
+    gate: check-policy-change
+    input:
+      fixture_dir: tests/fixtures/policy-change/maturity-shadow-new
+    expect:
+      verdict: pass
+      exit_code: 0
+      policy_loosening_kinds: []
+      enforcement_bypass_kinds: []
+
   - name: policy-change-runner-bypass
     gate: check-policy-change
     input:
