@@ -168,7 +168,8 @@
 3. 출력은 **초안일 뿐** — 파일을 직접 덮어쓰지 않는다(stdout/지정경로 초안만). "자동 채택" 문구·동작 금지.
 4. 결정적(2회 동일, 정렬 고정) + `--json`. LLM·휴리스틱 점수 추정 금지 — 규칙 매칭만.
 5. 미지원/빈 결과는 오류 아님(빈 후보 + 사유). CODEOWNERS 부재 시 (a)만으로 동작.
-6. **🔴 후보 상태 + 거절 원장(GPT P4 최소형)**: 후보마다 `status: proposed` 와 결정적 `fingerprint`(경로+근거 정규화 해시) 부여. **이전 실행 산출물(후보 파일)을 선택 입력으로 받아** — `rejected` fingerprint 는 재제안 금지(왜 제외됐는지 카운트만 보고), `accepted` 는 중복 제안 금지. `rejected` 항목은 `rejected_reason`/`rejected_by` 필드 스키마 포함. 이게 없으면 스캔 재실행마다 거절된 후보가 재출현해 씨딩 자체가 alert fatigue 원인이 된다.
+6. **🔴 후보 상태 + 거절 원장(GPT P4 최소형)**: 후보마다 `status: proposed` 와 결정적 `fingerprint` 부여. **이전 실행 산출물(후보 파일)을 선택 입력으로 받아** — `rejected` fingerprint 는 재제안 금지(왜 제외됐는지 카운트만 보고), `accepted` 는 중복 제안 금지. `rejected` 항목은 `rejected_reason`/`rejected_by` 필드 스키마 포함. 이게 없으면 스캔 재실행마다 거절된 후보가 재출현해 씨딩 자체가 alert fatigue 원인이 된다.
+   - **🔴 AC 가드(TASK-014 리뷰 D-035 O-2 — fingerprint 안정성)**: fingerprint 는 **후보 정체성**(`path` + `level` + 정렬된 `{(source, rule_id)}` 집합)으로 산출한다. **개별 매칭 파일 경로(evidence[].path)는 지문 산출에서 제외**하고 evidence 보고에는 남긴다. 이유: 초기 구현(`ecd5d68`)은 지문을 `path+evidence` 전체 리스트로 계산해 — **이미 accepted/rejected 된 존에 형제 파일 1개만 추가돼도 지문이 바뀌어 후보가 재출현**(fresh 실증: rejected `services/auth/**` 에 `logout.py` 추가 시 `suppressed_rejected` 1→0). 이는 본 AC#6 이 막으려던 alert-fatigue 를 살아있는 repo 성장에서 그대로 재현하는 논리 결함. **회귀 픽스처 필수**: 존 reject → 형제 파일 추가 → 재스캔 시 **여전히 suppressed**(rejected·accepted 양쪽). TASK-015 anchor(정규화 심볼+시그니처 해시) 조항과 동일 계열의 "조용한 무효화 방지" 원칙.
 **비고(설계)**: import-그래프 중심성·데이터카탈로그 PII 태그·SAST 출력 연동은 **후속 확장 여지**로 남긴다(이번 스코프는 네이밍+CODEOWNERS 2종). 무리한 전수 자동화 금지 — 후보 리콜보다 **근거의 정확성** 우선.
 
 ### TASK-015 ☐ 함수 후보 랭킹 `bootstrap-sensitive-functions.py`  (Codex)  *(개선점 #1)*

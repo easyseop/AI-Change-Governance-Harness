@@ -5,6 +5,38 @@
 
 ---
 
+## TASK-014 정책 자동 씨딩 스캐너 `bootstrap-sensitive-zones.py` — **통과·머지완료** (2026-07-11, D-035)
+
+> 대상: `codex/2026-07-11-task014-bootstrap-zones` (impl `ecd5d68`). 목적: 도입 시 사람이 백지에서 zones YAML 을 안 쓰도록, repo 를 스캔해 민감경로 후보를 **초안(draft)** 으로 자동 생성(사람은 승인만).
+
+**무엇을 검증했나** — "도는지"가 아니라 ① 후보 근거가 정확한가(과대선전 없이), ② 초안일 뿐 자동채택이 없는가, ③ 거절 원장이 alert fatigue 를 실제로 막는가(AC#6 🔴), ④ 이 출력을 하류(사람이 sensitive-zones 에 붙임)가 어떻게 쓰나.
+
+**한 줄씩 읽은 결과(핵심 로직)**
+- `split_tokens` = 비알파넘 경계로 토큰화 → **부분문자열 오탐 없음**(`oauth.py`→`{oauth,py}`, `auth` 토큰 불매칭). 정합.
+- `candidate_glob_for` = 매칭 토큰이 든 **첫 경로 세그먼트**까지 자르고 `/**` 부여(`services/auth/login.py`+`auth`→`services/auth/**`). 디렉토리 매칭엔 정확.
+- `add_candidate` = 경로 키로 병합·evidence 누적·**LEVEL_STRENGTH 최댓값**으로 등급 승격. `merge_candidates` 로 path/codeowner 두 소스 evidence 를 한 후보로 합침 → `db/migrations/**` 가 `[codeowners, path_naming]` 두 근거. 정합.
+- `finalize_candidates` = 정렬(path,level) 후 fingerprint 계산 → previous 의 rejected/accepted 지문이면 카운트만 올리고 스킵. rejected 스키마(`rejected_reason`/`rejected_by`) 항상 포함.
+
+**적대적 검증(픽스처 밖 fresh 입력, 직접 실행)**
+- **[T-A] 파일명 토큰**: `app/auth.py`(디렉토리 아닌 파일명에 토큰) → 글로브가 `app/auth.py/**` 로 생성됨. 어색 → **하류 영향 직접 확인**: 이 repo 매처 `check-sensitive-zones.match_glob("app/auth.py","app/auth.py/**")` = **True**(후행 `**` 가 0세그먼트 매칭). 즉 채택돼도 실제 파일을 보호함 → **기능상 정합·비차단**(cosmetic).
+- **[T-B] no-CODEOWNERS repo**: path rule 단독으로 `services/auth/**` 후보·exit 0·`codeowners_read:false`. AC#5 ✓.
+- **[T-C] 빈 규칙**: 후보 0·exit 0·오류 아님. AC#5 ✓.
+- **[T-D 음성검증(rig-and-revert)]**: `cases.yaml` 의 `candidate_count: 3`→`99` 변조 → `bootstrap-sensitive-zones-candidates` **단독 FAIL(60/61)**, 원복 61/61. 테스트가 항상-PASS 아님·실가드 실증.
+- **[T-E] 결정성**: 동일 입력 2회 stdout 바이트 동일. AC#4 ✓.
+
+**🔴 발견 — fingerprint 취약성(거버넌스 영향, 차기 AC 가드로 명시 이월 O-2)**
+- **재현(fresh)**: previous 에서 `services/auth/**` 를 `rejected`("too broad") 로 둔 채, repo 에 `services/auth/logout.py` **형제 파일 1개 추가** 후 재스캔 → `services/auth/**` 가 **다시 `proposed` 로 재출현**, `suppressed_rejected` **1→0**. `accepted` 로 둔 경우도 동일하게 **재제안**(`suppressed_accepted` 0). 즉 **accepted 중복제안 금지·rejected 재제안 금지 두 조항이 모두 형제파일 추가에 깨진다.**
+- **원인**: `candidate_fingerprint` 가 `path+level+evidence` **전체 리스트**(매칭 파일별 `path` 포함)를 해싱 → 존 하위에 파일이 하나만 늘어도 evidence 집합이 바뀌어 지문이 변함. 살아있는 repo(특히 `auth/` 같은 활성 디렉토리)에선 사실상 매 스캔 재출현.
+- **왜 🔴 인가**: AC#6 이 이 정확한 실패를 명문화("이게 없으면 스캔 재실행마다 거절된 후보가 재출현해 씨딩 자체가 alert fatigue 원인") — 기능 헤드라인 목적을 일상 성장에서 defeat.
+- **그러나 보정요청(반려)이 아니라 차기 AC 가드로 처리하는 이유(공정성)**: AC#6 이 fingerprint 를 **"경로+근거(evidence) 정규화 해시"** 로 *명시*했고 Codex 는 그대로 이행. 수용기준·논리 정합·테스트 모두 충족한 구현을 명세대로 짰다는 이유로 반려하는 것은 부당(§2B "수용기준 충족+논리 정합이면 머지 유효"). 결함의 뿌리는 **명세(내가/선행 Claude 가 쓴 AC) 설계**. → §2B "거버넌스 영향 논리결함은 비차단으로 흘리지 말고 차기 AC 가드로 *명시적으로* 막는다" 에 따라 **TASKS.md AC#6 개정 + 회귀 픽스처 요구를 명시**(아래 수정계약).
+- **수정계약(차기)**: fingerprint = **후보 정체성** = `path`+`level`+정렬된 `{(source, rule_id)}` 집합(개별 매칭파일 `path` 는 evidence 보고에는 남기되 지문 산출에서 제외). 회귀 픽스처: 존 reject → 형제 파일 추가 → 재스캔 시 **여전히 suppressed** (rejected·accepted 양쪽).
+
+**보수적 개발 평가(§1)**: change-intent(TASK-014) 범위 내. Codex 소유 `.harness/gates/`·`tests/` + README 레지스트리 2줄만. **Claude 소유(policies/·docs/·CLAUDE.md·TASKS.md·templates/) 무접촉**·무관 리팩터/포맷/이름변경 없음·blast radius 정상. scope-creep/over-reach 없음.
+
+**판정**: 통과. **비민감**(draft-only 수동 씨딩 헬퍼·verdict 파이프라인 미연결·자동채택 없음·정산/인증/암호화/migration/infra 무관) → 구현자≠머지자로 **Claude `main` 머지·push**. fingerprint 취약성은 **O-2 차기 AC 가드**로 명시(TASKS.md 반영).
+
+---
+
 ## TASK-020 R-1 보정 재제출 재리뷰 — **통과·머지완료** (2026-07-11, D-034)
 
 > 멱등성: 재제출 델타 `32726a6`(fix)·`d1c98e1`(docs)만 재리뷰. `5449c65`·`42062f6`(D-033 통과 정상경로) 재론 불요.
