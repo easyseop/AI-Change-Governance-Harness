@@ -6,7 +6,7 @@
 | # | 제목 | 상태 |
 |---|---|---|
 | [ADR-001](ADR-001-verdict-status.md) | 판정 상태 의미론 (status/analysis_state/disposition 3축) | Accepted |
-| ADR-002 | result/evidence 스키마 (계획) | Draft |
+| [ADR-002](ADR-002-result-evidence-schema.md) | result/evidence 스키마 (검증 2층 분리) | Accepted |
 
 > 작성 규약: Claude 가 정책·설계 판단으로 초안 → 형 승인 시 Accepted.
 > 불변 원칙(CLAUDE.md §4: 결정론·2·3층 자동차단 금지·fail-closed)을 어기는 결정은 둘 수 없다.
