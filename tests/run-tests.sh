@@ -26,6 +26,7 @@ GATES = {
     "extract-python-capabilities": ".harness/gates/extract-python-capabilities.py",
     "check-new-capabilities": ".harness/gates/check-new-capabilities.py",
     "check-policy-change": ".harness/gates/check-policy-change.py",
+    "bootstrap-sensitive-zones": ".harness/gates/bootstrap-sensitive-zones.py",
 }
 ROOT_DIR = os.getcwd()
 
@@ -213,6 +214,21 @@ def case_command(case):
             work_dir,
             "--json",
         ]
+
+    if gate == "bootstrap-sensitive-zones":
+        command = [
+            "python3",
+            script,
+            data["repo"],
+            "--rules",
+            data["rules"],
+            "--json",
+        ]
+        if data.get("codeowners"):
+            command.extend(["--codeowners", data["codeowners"]])
+        if data.get("previous"):
+            command.extend(["--previous", data["previous"]])
+        return command
 
     raise ValueError(f"unsupported gate: {gate}")
 
@@ -609,6 +625,47 @@ def validate_policy_change(case, result, exit_code):
     return errors
 
 
+def validate_bootstrap_sensitive_zones(case, result, exit_code):
+    expect = case["expect"]
+    errors = []
+    assert_equal(errors, "exit_code", exit_code, expect["exit_code"])
+    summary = result.get("summary", {})
+    candidates = result.get("candidates", [])
+
+    if "candidate_paths" in expect:
+        assert_equal(errors, "candidate_paths", values_at(candidates, "path"), expect["candidate_paths"])
+    if "candidate_statuses" in expect:
+        assert_equal(errors, "candidate_statuses", values_at(candidates, "status"), expect["candidate_statuses"])
+    if "candidate_levels" in expect:
+        assert_equal(errors, "candidate_levels", values_at(candidates, "level"), expect["candidate_levels"])
+    if "candidate_count" in expect:
+        assert_equal(errors, "summary.candidate_count", summary.get("candidate_count"), expect["candidate_count"])
+    if "suppressed_rejected" in expect:
+        assert_equal(errors, "summary.suppressed_rejected", summary.get("suppressed_rejected"), expect["suppressed_rejected"])
+    if "codeowners_read" in expect:
+        assert_equal(errors, "summary.codeowners_read", summary.get("codeowners_read"), expect["codeowners_read"])
+    if "evidence_sources" in expect:
+        actual_sources = [
+            sorted({evidence.get("source") for evidence in candidate.get("evidence", [])})
+            for candidate in candidates
+        ]
+        assert_equal(errors, "evidence_sources", actual_sources, expect["evidence_sources"])
+    if expect.get("draft_only"):
+        assert_equal(errors, "mode", result.get("mode"), "draft_only")
+        if "automatic" in result.get("adoption_note", "").lower():
+            errors.append("adoption_note: must not imply automatic adoption")
+    if expect.get("rejection_schema"):
+        for candidate in candidates:
+            if "rejected_reason" not in candidate or "rejected_by" not in candidate:
+                errors.append(f"rejection schema missing from {candidate.get('path')}")
+    if expect.get("deterministic_stdout"):
+        first = run_command(case_command(case)).stdout
+        second = run_command(case_command(case)).stdout
+        assert_equal(errors, "deterministic_stdout", first, second)
+
+    return errors
+
+
 def main():
     with open("tests/cases.yaml", "r", encoding="utf-8") as stream:
         cases = yaml.safe_load(stream)["cases"]
@@ -639,6 +696,8 @@ def main():
                 errors = validate_new_capabilities(case, result, completed.returncode)
             elif case["gate"] == "check-policy-change":
                 errors = validate_policy_change(case, result, completed.returncode)
+            elif case["gate"] == "bootstrap-sensitive-zones":
+                errors = validate_bootstrap_sensitive_zones(case, result, completed.returncode)
             else:
                 errors = validate_json_gate(case, result, completed.returncode)
         except Exception as error:
