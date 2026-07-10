@@ -64,8 +64,15 @@ else
 fi
 
 echo "▶ Codex 실행 (무인: -a never -s $SANDBOX) · 모드=$MODE"
-exec codex --ask-for-approval never "${SBOX_ARGS[@]}" \
-  "먼저 collab/handoff-log.md 맨 위(최신) 줄을 확인해라. \
-(A) 맨 위 줄이 '보정요청'이면: 런처가 이미 그 줄의 작업 브랜치를 checkout 해뒀다(자동 식별 실패 메시지가 떴으면 handoff 줄이 가리키는 codex 브랜치를 직접 checkout, main 새 브랜치 금지). ★리뷰기록(보정 지시)은 origin/main 에만 있으니 'git show origin/main:collab/answers/A-XXXX.md' 와 'git show origin/main:collab/handoff-log.md' 맨 위 줄로 읽어라 — 읽고 보정하는 데엔 origin/main 머지가 불필요하다(머지 시 collab 로그 append 충돌은 양쪽 유지 union 으로 해소, 코드 보존). 그 지시(R-x 델타만·멱등성 준수)대로 코드만 보정하고 tests/run-tests.sh 전체 green 확인 후 같은 브랜치에 상세 커밋·push(재인계). 워킹트리에 커밋 안 된 변경이 있으면 먼저 확인해 살릴지 판단. \
-(B) 그 외(리뷰통과·done·새 태스크)면: START-HERE.md → COMMON-RULES.md → AGENTS.md → TASKS.md 읽고 오늘 날짜 브랜치(codex/$(date +%F)-<주제>)를 최신 main 기준으로 만들어 다음 할 일을 진행해. \
-어느 경우든 끝나면 COMMON-RULES §3 형식의 상세 커밋 후 collab/handoff-log.md 한 줄 + summaries/$(date +%F).md 누적 기록하고 push. 루트에 STOP 파일 있으면 즉시 중단. main 직접 push·자기 머지 금지."
+# 🔴 모드는 런처가 origin/main 기준으로 이미 판단했다. Codex 가 로컬 handoff-log 로 재판단하면
+#    보정요청 브랜치의 로컬 handoff 맨 위는 'TASK-XXX done'(자기 제출)이라 '새 태스크'로 오판한다.
+#    → 프롬프트를 MODE 로 분기해 못박는다(로컬 handoff 로 모드 판단 금지).
+COMMON_TAIL="끝나면 COMMON-RULES §3 상세 커밋 후 collab/handoff-log.md 한 줄 + summaries/$(date +%F).md 누적 기록하고 push. 루트에 STOP 파일 있으면 즉시 중단. main 직접 push·자기 머지 금지."
+if [ "$MODE" = "보정" ]; then
+  PROMPT="⚠️ 지금은 '보정 재제출' 차례다(런처가 origin/main 기준으로 확정). 런처가 작업 브랜치 ${WB:-(handoff 줄의 codex 브랜치)} 를 이미 checkout 했다. \
+★로컬 collab/handoff-log.md 로 모드 판단하지 마라 — 이 브랜치 로컬 handoff 맨 위는 네가 낸 'done' 이라 '새 태스크'처럼 보인다. 그건 무시하고, 보정 지시는 origin/main 에서 읽어라: 'git show origin/main:collab/answers/${CORR_ANS:-A-XXXX}.md' 와 'git show origin/main:collab/handoff-log.md' 맨 위 줄. (origin/main 머지 불필요.) \
+그 R-x 지시(멱등성: 지정 커밋 재처리 금지·델타만)대로 **코드만 보정**하고 tests/run-tests.sh 전체 green 확인 후 **같은 브랜치**에 상세 커밋·push(재인계). ★새 태스크(TASK-014 등)로 넘어가지 마라. $COMMON_TAIL"
+else
+  PROMPT="새 태스크 차례다. START-HERE.md → COMMON-RULES.md → AGENTS.md → TASKS.md 읽고, TASKS.md 실행 순서상 다음 할 일을 확인해 오늘 날짜 브랜치(codex/$(date +%F)-<주제>)를 최신 main 기준으로 만들어 진행해. $COMMON_TAIL"
+fi
+exec codex --ask-for-approval never "${SBOX_ARGS[@]}" "$PROMPT"
