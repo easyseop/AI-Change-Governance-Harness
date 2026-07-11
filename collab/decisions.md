@@ -4,6 +4,14 @@
 
 ---
 
+## D-038 (2026-07-11) TASK-016 동적 위험접근 감지 보강 `extract-python-capabilities.py` — **보정요청**(하류 통합 회귀: 동적 watched 가 신규 protected 은닉) + AC#8 Claude 완료
+대상: 브랜치 `codex/2026-07-11-task016-dynamic-capabilities` (헤드 `47db5c5`·구현 `6aeb513`). 판정: **보정요청 1건(🔴)** → 코드 브랜치 **머지 보류**. 리뷰기록만 `main` 머지. 상세: `collab/answers/A-0011.md`·`review-notes.md` TASK-016 절. **멱등성**: `6aeb513`·`47db5c5` 재처리 금지. 재제출은 R-1 보정 델타만.
+- **추출기 계층 AC #1~7 통과(재론 불필요)**: fresh 픽스처밖 입력으로 실증 — `getattr(os,name)`→watched / `getattr(self,name)`·미바인딩→무신호(오탐억제) / `getattr(os,"sy"+"stem")`·`__import__("sub"+"process")`→상수접기 protected 정확 / `__import__(name)`·`importlib.import_module(name)`→dynamic_code_exec watched / `base64.b64decode` 인접→base64_dynamic / `globals()[name]()`→namespace_access watched. 별칭 해소·결정성·음성검증(기대 변조→단독 FAIL 66/67·원복 67/67) OK. `strongest_level` 로 동적 watched 는 protected 로 승격 불가(AC#3 상한 준수).
+- **R-1 (🔴 보정사유) — 하류 회귀**: TASK-016 이 protected 능력을 watched 로도 표면화 → "id 1개 ⇒ level 1개" 전제 붕괴. `check-new-capabilities` 신규탐지는 **id 집합 차분만**(level 무시) → base 에 동적 watched 로 능력 id 가 이미 있으면 head 의 **신규 protected 정적호출을 은닉**. **실증(실제 정책)**: base `getattr(os,name)`+head `os.system(cmd)` 추가 → **main=approval_required/exit2(포착) ↔ 본 브랜치=pass/exit0(무경고 은닉)** = 기존 게이트 순수 퇴행. CLAUDE.md §2B 필수질문상 거버넌스 직접구멍 → 비차단 금지.
+- **보정 계약**: `check-new-capabilities.py` 에 **level 에스컬레이션 탐지**(base∩head 공유 id 에서 watched→protected 승격 시 approval_required) + 상설 회귀 픽스처(위 실증세트, 기대 exit2) + 음성검증. 추출기·정책파일 무접촉. base=clean→head 동적 watched 단독은 기존대로 pass+warning 재확인.
+- **AC #8 (Q-0003) — Claude 완료**: 정책 소유자로서 `policies/sensitive-capabilities.yaml` 5종에 `source`(builtin: cwe/owasp/bandit | org:팀)·`owner` 필드 + 헤더 스키마 주석 추가. 게이트 미독해 필드라 무해(64/64 PASS). Codex 재구현 불요.
+- **보수적 개발 평가**: 브랜치 델타 = Codex 소유 `extract-python-capabilities.py`(+143)·`tests/*`·fixtures·공동 summaries/handoff, Claude 소유 무접촉·scope-creep 없음(추출기 자체는 깨끗). 반려는 순전히 하류 정합 1건.
+
 ## D-037 (2026-07-11) TASK-015 함수 후보 랭킹 스캐너 `bootstrap-sensitive-functions.py` — **통과·머지완료**
 대상: 브랜치 `codex/2026-07-11-task015-bootstrap-functions` (impl `c174ae6`·핸드오프 `1895c1f`). 판정: **통과** → 코드 브랜치 `main` 머지·push(구현자 Codex ≠ 머지자 Claude). 상세: `review-notes.md` TASK-015(D-037) 절. **멱등성**: `c174ae6`·`1895c1f` 재처리 금지.
 - **AC 충족(1~6)**: ① 기존 `extract-python-capabilities`+`extract-python-inventory` 를 `importlib` 재사용(재구현 없음). ② 출력 = `(경로,함수,능력id[],근거라인)` → `sensitive-functions` 초안, 코드 주석 미부착. ③ `mode: draft_only`·adoption_note(수동 채택)·근거 evidence 필수·결정적·`--json`. ④ 한계 문구(`limitation_statement`): 위험 프리미티브 없는 "의미상 민감" 순수 로직은 미탐 — 스캐너·하네스 공통 미해결 영역·후속 sink tracing/unknown-code 필요 명시. ⑤ SQL 테이블 근거(선택 `--tables`, 없으면 스킵·오류 아님). ⑥ `anchor`(정규화 심볼+시그니처 해시)+`status: proposed`+fingerprint(line 제외)+rejected 원장 스키마+accepted/rejected 재제안 금지.

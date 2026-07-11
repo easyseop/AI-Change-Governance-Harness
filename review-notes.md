@@ -5,6 +5,43 @@
 
 ---
 
+## TASK-016 동적 위험접근 감지 보강 `extract-python-capabilities.py` — **보정요청** (2026-07-11, D-038)
+
+> 대상: `codex/2026-07-11-task016-dynamic-capabilities` (impl `6aeb513`·핸드오프 `47db5c5`). 목적: `getattr(os,name)`·`__import__(name)` 등 정적 호출명으로 해소 안 되는 **동적 민감모듈 접근**을 완전 통과시키지 않고 저확신 `watched` 로 남긴다.
+
+**무엇을 검증했나** — ① 비리터럴 동적접근이 watched 로 잡히나, ② 리터럴/조립은 정확 매칭으로 접나(AC#6 상수접기), ③ 일반객체 동적접근은 무신호인가(AC#2 오탐억제), ④ 동적 신호가 절대 protected 로 승격 안 하나(AC#3 상한), ⑤ **그리고 이 출력을 하류 `check-new-capabilities` 가 어떻게 쓰나(하류 영향)**.
+
+**한 줄씩 읽은 결과(핵심 로직)**
+- `fold_string(node)`: `Constant(str)` 또는 `BinOp(Add)` 좌우 재귀 접기만. 값실행·변수해소 없음 → 결정적(`:206-214`). `getattr`/`__import__` 인자에 공용 적용.
+- `maybe_record_dynamic_access`: `getattr`/`setattr` 대상 base 를 `resolve_dotted_name`(별칭 bindings 해소, 미바인딩은 이름 그대로) → attr 이 fold 실패(비리터럴)면 `caps_for_catalog_module(base)` 로 **watched** 신호(`level="watched"` 명시). base 가 민감모듈이 아니면 매칭 없음 = 오탐억제.
+- `strongest_level`: `LEVEL_STRENGTH{watched:0, protected:1}` 로 능력별 level 을 **강한 쪽으로 병합**. 동적 watched 는 기존 정적 protected 를 강등 못하고, 자기 혼자면 watched 상한(AC#3 준수).
+- `__import__` 를 generic builtin 경로(`IMPORT_BUILTINS`)에서 제외 → 비리터럴 `__import__` 가 protected(카탈로그 builtin level)로 새지 않고 dynamic 핸들러의 watched 로만 감(정합).
+
+**적대 검증(fresh, 픽스처 밖 — 실제/테스트 정책)**
+| 입력 | 결과 | 판정 |
+|---|---|---|
+| `getattr(os,"sy"+"stem")()` | `subprocess_exec` **protected** | AC#6 상수접기 정확 ✅ |
+| `getattr(self,name)` | 무신호 | AC#2 오탐억제 ✅ |
+| `getattr(os,name)` | `subprocess_exec` **watched** | AC#1 ✅ |
+| `import os as _o; getattr(_o,name)` | `subprocess_exec` **watched** | 별칭 해소 ✅ |
+| `getattr(osmod,name)` (미바인딩) | 무신호 | 오탐억제 ✅ |
+| `__import__(name)` | `dynamic_code_exec` **watched** | AC#7 ✅ |
+| `__import__("sub"+"process")` | `dynamic_code_exec`+`subprocess_exec` **protected** | 접기+import 정확 ✅ |
+
+- **음성검증**: `cases.yaml` 의 `python-capabilities-dynamic-watched` 기대 level 을 watched→protected 변조 → 해당 케이스 **단독 FAIL(66/67)**, 원복 67/67 = 픽스처 load-bearing 실증.
+
+**🔴 하류 영향에서 결함 발견 (R-1, 보정사유)** — CLAUDE.md §2B "이 출력을 다음 태스크가 어떻게 쓰나" 를 따진 결과:
+- `check-new-capabilities` 신규탐지 = `set(head_caps) - set(base_caps)` (**id 만**, level 무시). TASK-016 전엔 능력 level 이 id 별 상수(protected)라 이 전제가 안전했으나, TASK-016 이 같은 id 를 **watched 로도** 표면화하면서 전제가 깨졌다.
+- **실증(fresh, 실제 `policies/sensitive-capabilities.yaml`)**: base=`getattr(os,name)`(동적→`subprocess_exec` watched) → head 에 `os.system(cmd)`(신규 실제 RCE→protected) 추가.
+  - **main(TASK-016 이전)**: `subprocess_exec` 가 base 에 없음 → 신규 → `approval_required`·**exit 2**. 포착 ✅
+  - **본 브랜치**: `subprocess_exec` id 가 base 에 이미(watched) → 신규 아님 → `pass`·**exit 0**. **은닉 — 경고조차 없음** ❌
+- = 개선 아닌 **순수 퇴행**. 동적 디스패처(`getattr(os,name)`)는 base 상주 현실적이고 그 뒤 실제 `os.system` 추가가 조용히 미탐. 거버넌스 직접 구멍 → **비차단 불가**.
+- **보정 계약(Codex, `check-new-capabilities.py` 만)**: 공유 id 의 **level 에스컬레이션(watched→protected)** 을 신규/승격으로 잡아 `approval_required`. 상설 회귀 픽스처(위 세트, 기대 exit2) + 음성검증(가드 제거 시 pass 로 뒤집힘). 추출기·정책 무접촉.
+
+**보수적 개발(§1)** — 추출기 델타(+143)는 무관 리팩터·scope-creep 없이 깨끗. 반려는 순전히 하류 정합 1건. AC#8 은 Claude 가 정책소유자로 `main` 반영(Q-0003 응답, A-0011).
+
+---
+
 ## TASK-015 함수 후보 랭킹 스캐너 `bootstrap-sensitive-functions.py` — **통과·머지완료** (2026-07-11, D-037)
 
 > 대상: `codex/2026-07-11-task015-bootstrap-functions` (impl `c174ae6`·핸드오프 `1895c1f`). 목적: `@gov` 전수 주석이 비현실적인 레거시에서 **이미 위험 능력/지정 SQL 테이블을 쓰는 함수**를 코드-밖 `sensitive-functions` 초안 후보로 뽑는다(주석 0·파일 무수정·draft_only).

@@ -197,8 +197,10 @@
 5. 결정적 + `--json`. LLM·값 실행 금지.
 6. **리터럴 조립 상수접기(GPT 2-b)**: 인자가 **문자열 리터럴만의 결합**(`"sys"+"tem"` 등)이면 결정적으로 접어(fold) 리터럴과 동일하게 **정확 매칭**으로 처리(= watched 가 아니라 해당 능력으로 정확 보고). 리터럴만으로 접을 수 없으면(변수·호출 포함) ①의 watched 신호로. 상수접기는 AST 수준 계산이라 결정론 원칙과 충돌 없음.
 7. **신호 목록 확대**: `globals()`/`locals()`/`vars()` 경유의 이름 접근, `base64` 디코드 결과가 import/exec 인자로 쓰이는 인접 패턴 → watched. 적대 픽스처 세트(④)에 각 1건 추가.
-8. **카탈로그 출처 메타데이터(GPT 2-a)**: `sensitive-capabilities.yaml` 스키마에 `source`(`builtin: cwe/owasp/bandit` | `org: <팀>`)·`owner` 필드 추가, 기존 5종 전 항목 기입. "이 목록 왜 믿나"가 파일 자체로 답해지게(형 질문의 명문화).
+8. **카탈로그 출처 메타데이터(GPT 2-a)**: `sensitive-capabilities.yaml` 스키마에 `source`(`builtin: cwe/owasp/bandit` | `org: <팀>`)·`owner` 필드 추가, 기존 5종 전 항목 기입. "이 목록 왜 믿나"가 파일 자체로 답해지게(형 질문의 명문화). — ✅ **Claude 완료**(2026-07-11, Q-0003/A-0011, 5종 source+owner 기입).
+9. **🔴 하류 정합 가드 — level 에스컬레이션(D-038/R-1 보정사유)**: watched 도입으로 "능력 id 1개 ⇒ level 1개" 전제가 깨졌다. `check-new-capabilities` 는 신규탐지(id 차분)에 더해 **base∩head 공유 id 의 level 이 `watched`→`protected` 로 강해지면 신규/승격으로 잡아 `approval_required`(exit 2)** 해야 한다. 안 그러면 base 의 동적 watched 가 head 의 **신규 protected 정적호출을 은닉**(실증: base `getattr(os,name)`+head `os.system` → main exit2 ↔ 브랜치 exit0). 상설 회귀 픽스처(그 세트)+음성검증 필수.
 **근거**: 2026-07-07 리뷰 실측 — 현행은 조립·변수경유가 verdict=pass 로 완전 누락. 정적분석상 100% 차단은 불가하나 "동적으로 민감모듈 접근이 *새로 생김*"은 결정적으로 잡힌다.
+**리뷰 상태(2026-07-11, D-038)**: 추출기 AC #1~7 실증 통과 · AC#8 Claude 완료 · **AC#9(R-1) 보정요청 — 코드 브랜치 머지 보류**. 재제출은 `check-new-capabilities` level 에스컬레이션 보정 델타만.
 
 ### TASK-017 ☐ 뮤테이션(음성검증) 자동화 `tests/mutation-check.sh`  (Codex)  *(개선점 #3)*
 **목적**: "40/40 PASS"가 *시험이 죽어서* 나온 게 아님을 **매 CI 자동 보증**한다. 지금은 사람이 수동으로 기대값을 변조해야만 확인됨.
