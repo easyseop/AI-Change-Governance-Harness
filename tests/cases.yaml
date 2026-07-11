@@ -1587,3 +1587,80 @@ cases:
       suppressed_accepted: 1
       candidate_functions:
         - app/risky.py::load_customer
+
+  - name: metamorphic-import-alias
+    group: metamorphic
+    gate: extract-python-capabilities
+    input:
+      source_file: tests/fixtures/metamorphic/import-alias.py
+    expect:
+      exit_code: 0
+      capability_ids:
+        - subprocess_exec
+      capability_levels:
+        - protected
+      errors: []
+
+  - name: metamorphic-spacing-comments
+    group: metamorphic
+    gate: extract-python-capabilities
+    input:
+      source_file: tests/fixtures/metamorphic/spacing-comments.py
+    expect:
+      exit_code: 0
+      capability_ids:
+        - subprocess_exec
+      capability_levels:
+        - protected
+      errors: []
+
+  - name: metamorphic-function-order
+    group: metamorphic
+    gate: extract-python-capabilities
+    input:
+      source_file: tests/fixtures/metamorphic/function-order.py
+    expect:
+      exit_code: 0
+      capability_ids:
+        - subprocess_exec
+      capability_levels:
+        - protected
+      errors: []
+
+  - name: negative-corpus-capability-free-source
+    group: negative-corpus
+    gate: extract-python-capabilities
+    input:
+      source_file: tests/fixtures/negative-corpus/capability-free.py
+    expect:
+      exit_code: 0
+      capability_ids: []
+      capability_levels: []
+      unresolved_dynamic: []
+      errors: []
+
+  - name: negative-corpus-harmless-python-change
+    group: negative-corpus
+    gate: check-new-capabilities
+    input:
+      fixture_dir: tests/fixtures/negative-corpus/harmless-python
+    expect:
+      verdict: pass
+      exit_code: 0
+      new_capabilities: []
+      warned_capabilities: []
+      fail_closed: []
+      errors_present: false
+
+  - name: negative-corpus-docs-only-change
+    group: negative-corpus
+    gate: check-new-capabilities
+    input:
+      fixture_dir: tests/fixtures/negative-corpus/docs-only
+    expect:
+      verdict: pass
+      exit_code: 0
+      new_capabilities: []
+      warned_capabilities: []
+      fail_closed: []
+      errors_present: false
