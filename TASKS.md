@@ -187,7 +187,7 @@
      - **G-2 (데코레이터 라인 능력호출)**: 능력 호출이 **데코레이터 식**(`@subprocess.getoutput(...)`)에 있으면 라인이 `def`(start_line) 위라 함수 미귀속·`<module>` 폴백(inventory start_line=def줄 한계). fail-safe(신호 드롭 없음·정확 라인 노출)이나 **함수-정밀 귀속 상실**. CLAUDE.md 고정 적대세트가 요구하는 **데코레이터 상설 회귀 픽스처를 추가**하고, 가능하면 함수 라인범위를 데코레이터 첫 줄까지 확장해 귀속(TASK-005/006 성질과 정합 유지).
      - **G-3 (동일 지문 충돌)**: 한 파일 내 이름·시그니처·능력·evidence 가 전부 같은 두 함수(조건부 twin/동일시그 `@overload`)는 같은 fingerprint → 한쪽 reject/accept 시 **둘 다 suppress**(유일 fail-unsafe 방향). suppression 키에 `start_line` 또는 본문 해시 disambiguator 를 더하되, **위치 churn(함수 이동만으로 재제안) 재유입을 피하도록** 신중히(예: 파일 내 동명 충돌시에만 tie-breaker 적용).
 
-### TASK-016 ☐ 동적 위험접근 감지 보강 (`extract-python-capabilities` 확장)  (Codex)  *(개선점 #2)*
+### TASK-016 ☑ 동적 위험접근 감지 보강 (`extract-python-capabilities` 확장)  (Codex)  *(개선점 #2)*  — **완결(D-039)**
 **목적**: `getattr(os,"sys"+"tem")`·`getattr(os, name)`(변수경유)·`__import__("subpro"+"cess")` 등 **동적 문자열 난독으로 민감 모듈을 만지는 행위**를 잡는다. 무엇을 부르는지 값 추정은 하지 않되(정적분석 한계 인정), **"민감 모듈을 동적으로 접근하는 행위 자체"** 를 신호화.
 **수용기준**:
 1. `getattr`/`setattr`/`__import__`/`importlib.import_module` 의 인자가 **비-리터럴**(BinOp 문자열 조립·Name 변수 등)이고, 그 대상 객체가 **민감 모듈**(`os`·`subprocess`·`socket`·`sys`·`importlib` 등 카탈로그 연동 목록)이면 → **`watched`(경고) 신호** 로 보고. 대상이 리터럴로 확정되면 기존 로직대로 정확 매칭.
@@ -200,7 +200,7 @@
 8. **카탈로그 출처 메타데이터(GPT 2-a)**: `sensitive-capabilities.yaml` 스키마에 `source`(`builtin: cwe/owasp/bandit` | `org: <팀>`)·`owner` 필드 추가, 기존 5종 전 항목 기입. "이 목록 왜 믿나"가 파일 자체로 답해지게(형 질문의 명문화). — ✅ **Claude 완료**(2026-07-11, Q-0003/A-0011, 5종 source+owner 기입).
 9. **🔴 하류 정합 가드 — level 에스컬레이션(D-038/R-1 보정사유)**: watched 도입으로 "능력 id 1개 ⇒ level 1개" 전제가 깨졌다. `check-new-capabilities` 는 신규탐지(id 차분)에 더해 **base∩head 공유 id 의 level 이 `watched`→`protected` 로 강해지면 신규/승격으로 잡아 `approval_required`(exit 2)** 해야 한다. 안 그러면 base 의 동적 watched 가 head 의 **신규 protected 정적호출을 은닉**(실증: base `getattr(os,name)`+head `os.system` → main exit2 ↔ 브랜치 exit0). 상설 회귀 픽스처(그 세트)+음성검증 필수.
 **근거**: 2026-07-07 리뷰 실측 — 현행은 조립·변수경유가 verdict=pass 로 완전 누락. 정적분석상 100% 차단은 불가하나 "동적으로 민감모듈 접근이 *새로 생김*"은 결정적으로 잡힌다.
-**리뷰 상태(2026-07-11, D-038)**: 추출기 AC #1~7 실증 통과 · AC#8 Claude 완료 · **AC#9(R-1) 보정요청 — 코드 브랜치 머지 보류**. 재제출은 `check-new-capabilities` level 에스컬레이션 보정 델타만.
+**리뷰 상태(2026-07-11, D-039)**: **완결 · Claude main 머지**. 추출기 AC #1~7(D-038 통과) · AC#8 Claude 완료 · **AC#9(R-1) 보정 재제출 `e839fe9` 통과** — `check-new-capabilities` 가 base∩head 공유 id 의 watched→protected 에스컬레이션을 감지해 approval_required(exit 2), 상설 회귀 픽스처 `new-capabilities-dynamic-level-escalation`+음성검증(루프 제거 시 pass 회귀). 68/68 PASS. 상세 D-039·A-0011 §해소·review-notes.
 
 ### TASK-017 ☐ 뮤테이션(음성검증) 자동화 `tests/mutation-check.sh`  (Codex)  *(개선점 #3)*
 **목적**: "40/40 PASS"가 *시험이 죽어서* 나온 게 아님을 **매 CI 자동 보증**한다. 지금은 사람이 수동으로 기대값을 변조해야만 확인됨.

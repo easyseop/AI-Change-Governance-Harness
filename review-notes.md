@@ -42,6 +42,34 @@
 
 ---
 
+## TASK-016 R-1 보정 재제출 재리뷰 — 하류 회귀 해소 · **통과·머지완료** (2026-07-11, D-039)
+
+> 대상: `codex/2026-07-11-task016-dynamic-capabilities` (보정 fix `e839fe9`·헤드 `dec42e9`). 선행 D-038/A-0011 의 R-1(동적 watched 가 신규 protected 정적호출 은닉) 보정. **R-1 델타만** 재리뷰(멱등성: `6aeb513`·`47db5c5`·`e839fe9`·`dec42e9` 재처리 금지). 추출기 AC#1~7 은 D-038 통과 확정·재론 없음.
+
+**무엇을 검증했나** — ① 보정이 R-1 실증(base 동적 watched + head 신규 protected 정적호출)을 실제로 막나, ② 파일 내 동일 id 집계 전제(strongest_level)가 보정을 떠받치나, ③ 완화 아닌 방향(de-escalation)을 과탐하지 않나, ④ 가드가 load-bearing 인가(음성검증), ⑤ 스코프·정합.
+
+**한 줄씩 — 보정 로직(`check-new-capabilities.py` +22줄)**
+- `LEVEL_STRENGTH = capability_gate.LEVEL_STRENGTH` — 추출기와 **동일 상수 재사용**(`{watched:0,protected:1}`)으로 순서 불일치 원천 차단. 계약 정합.
+- `escalated_capability_record(...)` = `new_capability_record` 위에 `base_level`·`change:level_escalation` 부착 — 기존 record 스키마 재사용(중복 로직 없음).
+- 신규 루프 `for cap_id in sorted(set(head_caps) & set(base_caps))`: `head_level` 강도 `>` `base_level` 일 때만 record 생성, 그 외 `continue`. protected → `new_capabilities`(approval), shadow maturity → `shadow_capabilities`(무영향), (도달불가) watched → warned. **결정성**: `sorted(...)` + 말미 `sort_capability_records`.
+
+**설계 정합 — 왜 보정이 성립하나(집계가 load-bearing)**: `capability_index` 는 `{id: capability}` 단일 매핑이라 원래 "id 1개⇒level 1개" 붕괴가 R-1 사유였다. 그러나 추출기 `extract_from_source` 의 `found=defaultdict(...)` + `add_signal`→`strongest_level`(extract-python-capabilities.py:131~141)이 **파일 내 동일 id 를 최강 level·신호병합 단일 record 로 집계**한다. 따라서 head 에 watched `getattr(os,name)` + protected `os.system` 공존 시 `head_caps[subprocess_exec].level = protected` 로 확정 → 에스컬레이션 루프가 정확히 포착. (id 는 base 에 이미 있어 `head-base` 신규루프엔 안 잡히므로 이 루프가 유일 포착 지점 = 정확.)
+
+**적대 검증 (fresh·픽스처 밖·실제 `policies/sensitive-capabilities.yaml`, 신규 git repo)**
+- **R-1 핵심**: base `def f(name): getattr(os,name)`(watched) → head 에 `def g(cmd): os.system(cmd)` 추가 → 브랜치 게이트 `approval_required`/**exit 2**, `new_capabilities=[{id:subprocess_exec, level:protected, base_level:watched, change:level_escalation, signals:[dynamic_access@5, call os.system@9]}]`. R-1 실증 정확 폐쇄.
+- **참고(main 대조)**: main 게이트는 추출기가 `getattr` 를 동적 감지 못 해 base 에 subprocess_exec 부재 → head `os.system` 을 **신규 id** 로 잡음(exit 2). 회귀는 **TASK-016 추출기가 base 에 watched subprocess_exec 를 넣은 뒤**에만 발생 = 순수 하류 통합 결함이었음을 재확인.
+- **de-escalation 무과탐**: base protected `os.system` → head 동적 watched `getattr` 단독 → `head(0)≤base(1)` skip → **pass/exit 0**. 완화(제거)는 신규능력 아님 정합.
+
+**음성검증 (rig-and-revert)**: 에스컬레이션 루프 블록만 제거한 게이트 사본을 동일 fresh R-1 입력에 실행 → `pass`/**exit 0**·`new:[]`·`warned:[]` 로 뒤집힘 = 가드 load-bearing 실증 + R-1 회귀 정확 재현(항상-PASS 아님). 원복 시 exit 2. 전체 `bash tests/run-tests.sh` **68/68 PASS**(신규 `new-capabilities-dynamic-level-escalation` 포함), 기존 `new-capabilities-dynamic-watched-pass`(base clean→head 동적 watched 단독=pass+warning) 유지, `git diff --check`(47db5c5..dec42e9) clean, `py_compile` OK.
+
+**보수적 개발(§1)**: 보정 델타 `e839fe9` = `check-new-capabilities.py` +22줄(소비자 분류 1곳)·`tests/cases.yaml` 1케이스·픽스처 2파일. **추출기·`policies/*` 무접촉**(A-0011 명시요구 준수)·무관 리팩터/scope-creep 없음·Claude 소유 무접촉. `dec42e9` 는 공동소유 handoff/summaries.
+
+**비차단 관찰 (O-1, 반려 아님)**: 에스컬레이션 record 의 `elif record["level"]=="watched"` 분기는 도달 불가(에스컬레이션 head level 은 항상 protected; watched(0)→watched(0)는 `≤` 로 skip). 방어적·무해·3단계 level 전방호환 → §2B 필수질문=아니오(구멍 아님). 비차단.
+
+**머지(D-007)**: 신규 능력 diff 분석·판정 게이트 = **비민감**(approval 상한·1층 자동차단 불가·정산/인증·인가/암호화/migration/infra 무관·D-020~D-038 게이트 계열 선례). 테스트 머지로 코드 클린·`policies/sensitive-capabilities.yaml` AC#8 source/owner 보존 확인(브랜치 무수정). 머지가 브랜치 전체(원 추출기 `6aeb513`+보정)를 반입 — 추출기는 D-038 통과 확정분. 구현자(Codex)≠머지자(Claude) → **Claude `main` 머지·push. TASK-016 완결.**
+
+---
+
 ## TASK-015 함수 후보 랭킹 스캐너 `bootstrap-sensitive-functions.py` — **통과·머지완료** (2026-07-11, D-037)
 
 > 대상: `codex/2026-07-11-task015-bootstrap-functions` (impl `c174ae6`·핸드오프 `1895c1f`). 목적: `@gov` 전수 주석이 비현실적인 레거시에서 **이미 위험 능력/지정 SQL 테이블을 쓰는 함수**를 코드-밖 `sensitive-functions` 초안 후보로 뽑는다(주석 0·파일 무수정·draft_only).
