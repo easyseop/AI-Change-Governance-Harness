@@ -13,6 +13,10 @@
 #              os·io 처럼 흔한 모듈은 여기 넣지 않는다(잡음). 대신 그 특정 호출만 calls 로.
 #   calls    : 해석된 점표기 전체 이름(별칭·from-import 해소 후)이 일치하면 신호.
 #   builtins : import 없는 내장 이름(eval/exec 등) 이 호출되면 신호.
+# 출처 메타데이터(TASK-016 AC#8 — "이 목록 왜 믿나"를 파일 자체로 답한다):
+#   source   : 이 항목의 근거 출처. `builtin: cwe|owasp|bandit`(공인 위험 카탈로그) 또는
+#              `org: <팀>`(우리 조직 자체 판단). 게이트는 이 필드를 읽지 않는다(문서용·감사용).
+#   owner    : 이 항목을 유지·소유하는 책임 주체(변경 시 이 주체가 판단). reviewer 와 같을 수 있다.
 # =====================================================================
 
 policy_version: "0.1-mvp1"
@@ -33,6 +37,9 @@ capabilities:
     level: protected
     reason: 임의 명령/셸 실행 — 권한확대·RCE 경계
     reviewer: security-reviewer
+    source:                    # 이 항목을 "왜 믿나" — 공인 위험 출처 (TASK-016 AC#8)
+      builtin: bandit          # B602/B605 shell=True·B607 부분경로 · CWE-78 OS Command Injection
+    owner: security-reviewer   # 이 항목을 유지·소유하는 책임 주체
     signals:
       imports: [subprocess, pty]         # os 는 import 무신호 — 아래 특정 호출만
       calls:
@@ -63,6 +70,9 @@ capabilities:
     level: protected
     reason: 문자열→코드 실행 — 임의 코드 주입 경계
     reviewer: security-reviewer
+    source:
+      builtin: bandit          # B307 eval·B102 exec_used·B323 · CWE-95 Code Injection
+    owner: security-reviewer
     signals:
       builtins: [eval, exec, compile, __import__]
       calls:
@@ -75,6 +85,9 @@ capabilities:
     level: protected
     reason: pickle/yaml 등 역직렬화 — 원격 코드 실행 벡터
     reviewer: security-reviewer
+    source:
+      builtin: bandit          # B301 pickle·B506 yaml_load · CWE-502 Deserialization of Untrusted Data
+    owner: security-reviewer
     signals:
       imports: [pickle, cPickle, marshal, shelve, dill]
       calls:
@@ -95,6 +108,9 @@ capabilities:
     level: protected
     reason: 신규 외부 송수신 — 데이터 유출·SSRF 경계
     reviewer: security-reviewer
+    source:
+      builtin: owasp           # A10:2021 SSRF · 데이터 유출 경계 (CWE-918)
+    owner: security-reviewer
     signals:
       imports:
         - requests
@@ -123,6 +139,9 @@ capabilities:
     level: protected
     reason: 암호화/복호화/서명 도입 — 보안 경계, 사람 검토
     reviewer: security-reviewer
+    source:
+      builtin: cwe             # CWE-327 취약 암호·CWE-295 인증서 검증 우회(ssl._create_unverified_context)
+    owner: security-reviewer
     signals:
       imports:
         - cryptography
