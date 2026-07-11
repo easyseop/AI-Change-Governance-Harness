@@ -532,6 +532,20 @@ def validate_python_capabilities(case, result, exit_code):
         assert_equal(errors, "unreadable_present", bool(result.get("unreadable")), expect["unreadable_present"])
     if "capabilities" in expect:
         assert_equal(errors, "capabilities", capability_summary(result), expect["capabilities"])
+    if "capability_ids" in expect:
+        assert_equal(
+            errors,
+            "capability_ids",
+            [capability.get("id") for capability in result.get("capabilities", [])],
+            expect["capability_ids"],
+        )
+    if "capability_levels" in expect:
+        assert_equal(
+            errors,
+            "capability_levels",
+            [capability.get("level") for capability in result.get("capabilities", [])],
+            expect["capability_levels"],
+        )
     if "unresolved_dynamic" in expect:
         assert_equal(errors, "unresolved_dynamic", result.get("unresolved_dynamic"), expect["unresolved_dynamic"])
     if "errors" in expect:
@@ -743,11 +757,28 @@ def validate_bootstrap_sensitive_functions(case, result, exit_code):
 def main():
     with open("tests/cases.yaml", "r", encoding="utf-8") as stream:
         cases = yaml.safe_load(stream)["cases"]
+    selected_names = {
+        name.strip()
+        for name in os.environ.get("TEST_CASE_NAME", "").split(",")
+        if name.strip()
+    }
+    selected_group = os.environ.get("TEST_CASE_GROUP", "").strip()
+    if selected_names:
+        cases = [case for case in cases if case["name"] in selected_names]
+    if selected_group:
+        cases = [case for case in cases if case.get("group") == selected_group]
+    if not cases:
+        print("FAIL no test cases selected")
+        return 1
 
     passed = 0
     failed = 0
+    group_totals = {}
+    group_passed = {}
 
     for case in cases:
+        group = case.get("group", "default")
+        group_totals[group] = group_totals.get(group, 0) + 1
         command = case_command(case)
         completed = run_command(command)
         try:
@@ -792,9 +823,12 @@ def main():
                 print(completed.stdout.rstrip())
         else:
             passed += 1
+            group_passed[group] = group_passed.get(group, 0) + 1
             print(f"PASS {case['name']} ({case['gate']})")
 
     print(f"Summary: {passed}/{len(cases)} PASS")
+    for group in sorted(group_totals):
+        print(f"Group {group}: {group_passed.get(group, 0)}/{group_totals[group]} PASS")
     if failed:
         return 1
     return 0
