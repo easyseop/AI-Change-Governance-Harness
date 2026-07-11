@@ -271,6 +271,20 @@ def validate_json_gate(case, result, exit_code):
     for key in ("out_of_scope_paths", "forbidden_touched"):
         if key in expect:
             assert_equal(errors, key, result.get(key), expect[key])
+    if "scope_too_broad" in expect:
+        assert_equal(
+            errors,
+            "scope_too_broad.too_broad",
+            result.get("scope_too_broad", {}).get("too_broad"),
+            expect["scope_too_broad"],
+        )
+    if "scope_too_broad_reasons" in expect:
+        assert_equal(
+            errors,
+            "scope_too_broad.reasons",
+            result.get("scope_too_broad", {}).get("reasons"),
+            expect["scope_too_broad_reasons"],
+        )
 
     for key in ("frozen_touched", "protected_touched", "watched_touched"):
         if key in expect:

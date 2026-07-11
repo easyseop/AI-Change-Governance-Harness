@@ -13,6 +13,8 @@ import yaml
 PASS = 0
 BLOCKED = 1
 APPROVAL_REQUIRED = 2
+DEFAULT_BROAD_SCOPE_THRESHOLD_PERCENT = 80
+ROOT_SCOPE_GLOBS = {"*", "**"}
 
 
 def normalize_path(path):
@@ -56,6 +58,11 @@ def load_intent(path):
     return {
         "allowed_paths": intent.get("allowed_paths") or [],
         "forbidden_paths": intent.get("forbidden_paths") or [],
+        "broad_scope_threshold_percent": int(
+            intent.get("broad_scope_threshold_percent")
+            or intent.get("scope_policy", {}).get("broad_scope_threshold_percent")
+            or DEFAULT_BROAD_SCOPE_THRESHOLD_PERCENT
+        ),
         "requirement_id": intent.get("requirement_id"),
         "author": intent.get("author"),
     }
@@ -97,9 +104,101 @@ def parse_changed_files(name_status_lines):
     return files
 
 
-def check_files(files, intent):
+def diff_base_ref(diff_input):
+    if os.path.exists(diff_input):
+        return "HEAD"
+    if "..." in diff_input:
+        return diff_input.split("...", 1)[0] or "HEAD"
+    if ".." in diff_input:
+        return diff_input.split("..", 1)[0] or "HEAD"
+    return "HEAD"
+
+
+def repo_top_level_dirs(diff_input, files):
+    base_ref = diff_base_ref(diff_input)
+    result = subprocess.run(
+        ["git", "ls-tree", "-d", "--name-only", base_ref],
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    if result.returncode == 0:
+        dirs = [normalize_path(line.strip()) for line in result.stdout.splitlines() if line.strip()]
+        if dirs:
+            return sorted(set(dirs))
+
+    return sorted({path.split("/", 1)[0] for path in files if "/" in path})
+
+
+def normalize_scope_glob(pattern):
+    normalized = normalize_path(pattern).strip()
+    while normalized.startswith("./"):
+        normalized = normalized[2:]
+    return normalized.strip("/")
+
+
+def root_scope_globs(allowed_paths):
+    return sorted(
+        pattern
+        for pattern in allowed_paths
+        if normalize_scope_glob(pattern) in ROOT_SCOPE_GLOBS
+    )
+
+
+def covered_top_level_dirs(allowed_paths, top_level_dirs):
+    covered = []
+    for directory in top_level_dirs:
+        probe_path = f"{directory}/__scope_probe__"
+        for pattern in allowed_paths:
+            if match_glob(directory, pattern) or match_glob(probe_path, pattern):
+                covered.append(directory)
+                break
+    return sorted(covered)
+
+
+def broad_scope_result(files, intent, diff_input):
+    empty = {
+        "too_broad": False,
+        "reasons": [],
+        "root_globs": [],
+        "covered_top_level_dirs": [],
+        "top_level_dir_count": 0,
+        "coverage_percent": 0,
+        "threshold_percent": intent["broad_scope_threshold_percent"],
+    }
+    if not files:
+        return empty
+
+    allowed_paths = intent["allowed_paths"]
+    top_level_dirs = repo_top_level_dirs(diff_input, files)
+    roots = root_scope_globs(allowed_paths)
+    covered = covered_top_level_dirs(allowed_paths, top_level_dirs)
+    coverage_percent = 0
+    if top_level_dirs:
+        coverage_percent = int((len(covered) * 100) / len(top_level_dirs))
+
+    reasons = []
+    if roots:
+        reasons.append("root_scope_glob")
+    if top_level_dirs and coverage_percent >= intent["broad_scope_threshold_percent"]:
+        reasons.append("top_level_coverage")
+
+    return {
+        "too_broad": bool(reasons),
+        "reasons": reasons,
+        "root_globs": roots,
+        "covered_top_level_dirs": covered,
+        "top_level_dir_count": len(top_level_dirs),
+        "coverage_percent": coverage_percent,
+        "threshold_percent": intent["broad_scope_threshold_percent"],
+    }
+
+
+def check_files(files, intent, diff_input):
     allowed_paths = intent["allowed_paths"]
     forbidden_paths = intent["forbidden_paths"]
+    scope_too_broad = broad_scope_result(files, intent, diff_input)
 
     forbidden_touched = []
     out_of_scope = []
@@ -116,7 +215,7 @@ def check_files(files, intent):
     if forbidden_touched:
         verdict = "blocked"
         exit_code = BLOCKED
-    elif out_of_scope:
+    elif out_of_scope or scope_too_broad["too_broad"]:
         verdict = "approval_required"
         exit_code = APPROVAL_REQUIRED
     else:
@@ -129,6 +228,7 @@ def check_files(files, intent):
         "changed_files": files,
         "out_of_scope_paths": out_of_scope,
         "forbidden_touched": forbidden_touched,
+        "scope_too_broad": scope_too_broad,
         "exit_code": exit_code,
     }
 
@@ -148,6 +248,9 @@ def print_text(result):
         print(f"forbidden: {path}")
     for path in result["out_of_scope_paths"]:
         print(f"out_of_scope: {path}")
+    if result["scope_too_broad"]["too_broad"]:
+        reasons = ",".join(result["scope_too_broad"]["reasons"])
+        print(f"scope_too_broad: {reasons}")
 
 
 def main():
@@ -162,7 +265,7 @@ def main():
     try:
         intent = load_intent(args.change_intent)
         files = parse_changed_files(read_name_status(args.diff_input))
-        result = check_files(files, intent)
+        result = check_files(files, intent, args.diff_input)
     except FileNotFoundError as error:
         result = {
             "gate": "check-change-intent",

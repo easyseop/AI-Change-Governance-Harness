@@ -1,0 +1,12 @@
+change_intent:
+  requirement_id: REQ-BROAD-COVERAGE
+  author: codex
+  allowed_paths:
+    - ".harness/**"
+    - "collab/**"
+    - "docs/**"
+    - "policies/**"
+    - "scripts/**"
+    - "summaries/**"
+    - "templates/**"
+  forbidden_paths: []
