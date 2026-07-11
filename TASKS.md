@@ -202,7 +202,7 @@
 **근거**: 2026-07-07 리뷰 실측 — 현행은 조립·변수경유가 verdict=pass 로 완전 누락. 정적분석상 100% 차단은 불가하나 "동적으로 민감모듈 접근이 *새로 생김*"은 결정적으로 잡힌다.
 **리뷰 상태(2026-07-11, D-039)**: **완결 · Claude main 머지**. 추출기 AC #1~7(D-038 통과) · AC#8 Claude 완료 · **AC#9(R-1) 보정 재제출 `e839fe9` 통과** — `check-new-capabilities` 가 base∩head 공유 id 의 watched→protected 에스컬레이션을 감지해 approval_required(exit 2), 상설 회귀 픽스처 `new-capabilities-dynamic-level-escalation`+음성검증(루프 제거 시 pass 회귀). 68/68 PASS. 상세 D-039·A-0011 §해소·review-notes.
 
-### TASK-017 ☐ 뮤테이션(음성검증) 자동화 `tests/mutation-check.sh`  (Codex)  *(개선점 #3)*
+### TASK-017 ☑ 뮤테이션(음성검증) 자동화 `tests/mutation-check.sh`  (Codex)  *(개선점 #3)*  — **done·통과·머지완료 (D-040, 2026-07-11)**
 **목적**: "40/40 PASS"가 *시험이 죽어서* 나온 게 아님을 **매 CI 자동 보증**한다. 지금은 사람이 수동으로 기대값을 변조해야만 확인됨.
 **수용기준**:
 1. `tests/cases.yaml` 의 각 케이스 기대값(verdict/exit_code)을 **프로그램적으로 변조**한 뒤 스위트를 돌려, **반드시 FAIL 이 발생**함을 확인(원본은 자동 복원).

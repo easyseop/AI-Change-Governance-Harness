@@ -4,6 +4,27 @@
 
 ---
 
+## D-040 (2026-07-11) TASK-017 뮤테이션(음성검증) 자동화 `tests/mutation-check.sh` — **통과 · Claude main 머지**
+대상: 브랜치 `codex/2026-07-11-task017-mutation-check` (impl `459a519` · 핸드오프 `4bd00c0`). 신규 `tests/mutation-check.sh`(194줄) + `tests/run-tests.sh` 선택실행/그룹요약/capability_ids·levels 검증(+34) + metamorphic·negative-corpus 케이스 6종 + 픽스처 8파일 + README 1줄. **멱등성**: `459a519`·`4bd00c0` 재처리 금지.
+
+**수용기준 실증 (전부 직접 실행·적대 검증)**:
+- **AC#1·#2 (기대값 변조→반드시 FAIL / 죽은 테스트 목록·exit≠0)**: `bash tests/mutation-check.sh` → 121건 변조 전부 감지·dead 0·PASS. **음성검증(rig-and-revert, load-bearing 증명)**: ① `mutate_verdict` 를 no-op(identity)로 변조 → verdict 보유 48케이스 전부 dead 로 보고·`FAIL mutation-check` / ② `mutate_exit_code` 를 no-op 로 변조 → **exit 1**·`good:exit` 등 dead 보고. 원복 후 재-PASS. ⇒ 검출 루프가 실제로 죽은 테스트를 잡는다(항상-green 아님).
+- **AC#3 (verdict·exit_code 변조 지원·결정적·원본 무변경)**: 두 필드 mutator 존재(121 변조). 결정론(파일순 순회·`sort_keys=False`·무작위 없음). **원본 무변경**: 모든 변조를 `tempfile` repo 복사본에서 수행 → 실제 repo 파일 구조적으로 미접촉(복원 성패와 무관하게 안전) = AC 요구의 *강한* 충족.
+- **AC#4 (단일 진입점)**: `bash tests/mutation-check.sh` 하나.
+- **AC#5 (정책 변조)**: maturity fixture `app/enforcing/**` protected→watched 하향 → `maturity-zone-enforcing-approval` FAIL 확인·원본 복원. 실행서 "failed after protected->watched policy mutation" 확인 = 정책이 판정을 지배함 실증.
+- **AC#6 (metamorphic 3종)**: (a)import 별칭 `subprocess as sp` (b)공백·주석 삽입 (c)함수 정의 순서 이동 — 3케이스 모두 `subprocess_exec/protected`·`errors:[]` 동일 판정 pin. 요구 (a)(b)(c) 정확 대응. 실제 정책 대비 3/3 PASS.
+- **AC#7 (negative corpus 별도 그룹)**: `negative-corpus` 그룹 3종(무신호 source·무해 python 변경·docs-only) 무경고 검증 + 러너가 `Group negative-corpus: 3/3 PASS` 별도 표기·`TEST_CASE_GROUP=negative-corpus` 선택 실행. alert-fatigue 방어 체계 증거.
+
+**적대·하류 검증**: 케이스명 74/74 유니크 → mutation-check 의 index-변조 vs name-선택 정렬 안전(중복명이면 오분류 가능하나 부재). metamorphic 케이스의 `capability_ids`/`capability_levels` 는 mutation-check 변조 대상 아님(AC#3 "최소 verdict·exit_code")이나 정상 러너 assert_equal 로 load-bearing·비어있지 않은 값 pin(비공허). 전체 스위트 74/74 PASS(default 68·metamorphic 3·negative 3), `bash -n` OK.
+
+**보수적 개발(§1)**: 순수 테스트 하네스·픽스처·README 실행예시 1줄만 변경. **정책파일(`policies/*`)·게이트 판정로직(`.harness/gates/*`)·Claude 소유(docs·TASKS·decisions·answers·templates) 전부 무접촉**. `run-tests.sh` 선택실행은 env 없으면 기존 전체스위트(하위호환). scope-creep 없음.
+
+**머지 판정(D-007)**: mutation-check = **CI 테스트-품질 도구**(verdict 파이프라인 미연결·자동차단/자동채택 없음·정산/인증·인가/암호화/DB migration/infra 무관·1층 자동차단 권한 없음) → CLAUDE.md §3 **비민감**. TASK-005~016·018~020 테스트·게이트 계열 Claude 머지 선례(D-020~D-039). 구현자(Codex)≠머지자(Claude) → **Claude 가 `main` 머지·push**.
+
+**비차단 관찰(O-1, MVP-2 / 차기 AC 가드 후보)**: `main()` 의 "Original files unchanged" 해시 검사는 `ROOT`(실제 repo) 파일을 대상으로 하나 모든 변조는 `tempfile` 복사본에서만 일어나 ROOT 는 구조적으로 절대 쓰이지 않는다 → **이 라인은 공허(vacuous)**·in-repo 복원 실패를 검출할 수 없다. 다만 실제 repo 안전은 copy 설계로 *더 강하게* 보장되므로 **거버넌스 구멍 아님**(비차단 정당). 차기: 복원검증을 원하면 temp-copy 파일 해시를 검사하거나 오해 소지 라인 제거. (in-repo 복원 실패 시엔 후속 metamorphic/negative 그룹이 스퓨리어스 FAIL 로 간접 노출되어 false-pass 위험도 없음.)
+
+상세: `review-notes.md` TASK-017(D-040) 절.
+
 ## D-039 (2026-07-11) TASK-016 R-1 보정 재제출 재리뷰 — 하류 회귀 해소 확인 · **통과 · Claude main 머지** (TASK-016 완결)
 대상: `codex/2026-07-11-task016-dynamic-capabilities` · 보정 fix `e839fe9` · 헤드 `dec42e9` (선행 D-038/A-0011). 재리뷰 범위 = **R-1 보정 델타만**. 추출기 계층 AC #1~7 은 D-038 에서 실증 통과·재론 없음. 멱등성: `6aeb513`·`47db5c5`·`e839fe9`·`dec42e9` 재처리 금지.
 **판정 = 통과, `main` 머지·push 완료. 더 할 일 없음.**

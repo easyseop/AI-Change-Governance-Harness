@@ -5,6 +5,45 @@
 
 ---
 
+## TASK-017 (D-040) 뮤테이션(음성검증) 자동화 `tests/mutation-check.sh` — 통과
+
+**대상**: `codex/2026-07-11-task017-mutation-check` · impl `459a519` · 핸드오프 `4bd00c0`. 신규 `tests/mutation-check.sh` + `run-tests.sh` 선택실행/그룹요약/`capability_ids`·`capability_levels` assert + cases 6종 + 픽스처 8 + README 1줄.
+
+**의도 대비 검수 (거수기 금지 — 능동적으로 깨보려 함)**
+이 태스크의 거버넌스 목적 = "40/40 PASS 가 *시험이 죽어서* 나온 게 아님을 매 CI 자동 보증". 따라서 핵심 질문은 **"이 하네스가 진짜 죽은 테스트를 잡는가, 아니면 자기 자신도 항상-green 인가"**. 코드를 읽는 걸로 끝내지 않고 하네스를 *변조해서 뒤집어* 봤다.
+
+### 한 줄씩 뜯어본 로직
+- `check_expectation_mutations`: 케이스별로 `original_cases` 를 매 반복마다 yaml 라운드트립으로 새로 떠서(변조 누적 없음·결정적) index 위치의 `verdict`/`exit_code` 를 mutator 로 바꿔 쓰고 → `TEST_CASE_NAME=case명` 으로 **그 케이스만** 선택 실행 → returncode 0 이면(=변조했는데 PASS) dead 로 수집. 끝에 원본 복원.
+- `mutate_verdict`: pass→blocked, blocked→pass, approval_required→pass, 그 외→pass. `mutate_exit_code`: 0→2, 비0→0. 두 경우 다 원본과 반드시 다른 값 산출 → 변조가 실질적.
+- `check_policy_mutation`: maturity fixture `app/enforcing/**` zone 을 protected→watched(+required_approval=None) 로 낮춰 `maturity-zone-enforcing-approval` 이 FAIL 하는지 → 정책이 판정을 지배함 증명. 원본 복원.
+- `run-tests.sh`: `TEST_CASE_NAME`(콤마분리 다중)·`TEST_CASE_GROUP` 선택, 미선택시 `FAIL no test cases selected`, group 요약 출력, `capability_ids`/`capability_levels` 신규 assert. env 없으면 전체 스위트(하위호환).
+
+### 적대적 검증 (직접 실행)
+- **정상 실행**: `bash tests/mutation-check.sh` → `Expectation mutations checked: 121` · dead 0 · Policy mutation 감지 · Metamorphic/Negative PASS · Original files unchanged PASS · `PASS mutation-check` (exit 0). 전체 스위트 `74/74 PASS`(default 68·metamorphic 3·negative 3).
+- **음성검증 ① (verdict mutator no-op rig)**: `mutate_verdict` 를 `return value` 로 변조 → verdict 보유 48케이스 전부 `dead expectation mutations` 로 열거·`FAIL mutation-check`. ⇒ 변조가 실질적으로 판정을 뒤집어야만 PASS 가 나옴을 증명(하네스 load-bearing). 원복 후 정상.
+- **음성검증 ② (exit_code mutator no-op rig)**: `mutate_exit_code` 를 `return value` 로 변조 → **exit 1** · `good:exit` 등 dead 보고 · FAIL. 원복.
+- ⇒ 두 필드 검출 루프 모두 진짜로 죽은 테스트를 잡는다. "돌아갈 것 같다" 아닌 "깨보려 했으나(=변조) 정상 FAIL 로 반응".
+- **AC#5 정책변조 load-bearing**: 실행 로그 "maturity-zone-enforcing-approval failed after protected->watched policy mutation" = zone 하향이 실제로 판정을 approval_required→pass 로 바꿔 케이스가 깨짐. 원본 복원 확인(`Original files unchanged` — 단 O-1 참조).
+- **metamorphic 실증(픽스처 밖 개념검증)**: 세 변형(별칭 `subprocess as sp`→`sp.run` / 공백·주석 / helper 선행 순서)이 전부 `subprocess_exec/protected` 동일 → 별칭해소·공백무시·정의순서독립 실제 확인. 요구 (a)(b)(c) 정확 대응.
+
+### 하류 영향·설계 정합
+- 케이스명 **74/74 유니크** 확인 → mutation-check 가 index 로 변조하고 name 으로 선택하는 정렬이 안전(중복명이면 다른 케이스 선택·오분류 위험이나 부재). 차기에 케이스 추가 시 유니크 유지가 암묵 계약 → negative(중복명) 발생 시 자동 노출됨(선택 실행이 여러 케이스 돌려 conservative FAIL).
+- metamorphic 케이스의 `capability_ids`/`capability_levels` 는 mutation-check 변조 대상이 **아님**(AC#3 "최소 verdict·exit_code" 범위). 그러나 값이 비공허(`[subprocess_exec]`/`[protected]`)로 pin 되고 정상 러너 `assert_equal` 로 검증되므로 공허한 assert 아님. exit_code:0 변조는 121건에 포함되어 각 metamorphic 케이스가 "실제로 무언가 검사함"도 보장.
+
+### 보수적 개발(§1)
+순수 테스트 하네스·픽스처·README 실행예시 1줄. **정책(`policies/*`)·게이트(`.harness/gates/*`)·Claude 소유(docs·TASKS·decisions·answers·templates·CLAUDE.md) 전부 무접촉** (`git diff --name-only` 로 확인). scope-creep/over-reach 없음. blast radius = 테스트 계층에 한정.
+
+### 비차단 관찰 (O-1 · MVP-2 / 차기 AC 가드 후보)
+`main()` 의 `restore_ok = before_hashes == after_hashes` 는 `file_sha` 가 `ROOT`(실제 repo)를 읽어 계산 → 그러나 모든 변조는 `tempfile` 복사본(`repo`)에서만 일어나 ROOT 는 **구조적으로 절대 기록되지 않음**. 따라서 "Original files unchanged: PASS" 는 **항상 참(공허)** 이고 in-repo 복원 실패를 검출할 수 없다. **거버넌스 구멍 아님**: 실제 repo 안전은 copy 설계가 restore-and-verify 보다 *강하게* 보장(원본이 애초에 안 만져짐). in-repo 복원이 실패해도 후속 policy/metamorphic/negative 체크가 스퓨리어스 FAIL 로 간접 노출 → false-pass 위험도 없음. **차기 개선(강요 아님)**: 복원 검증을 원하면 temp-copy 파일 해시를 검사하거나 오해 소지 라인 제거. §2B "거버넌스 직접구멍" 아니므로 비차단 정당.
+
+### 검증 로그
+- `bash tests/run-tests.sh` → 74/74 PASS (Group default 68/68·metamorphic 3/3·negative-corpus 3/3)
+- `bash tests/mutation-check.sh` → 121 변조 감지·dead 0·정책변조 감지·PASS (약 90s)
+- rig ①(verdict no-op) → 48 dead·FAIL / rig ②(exit_code no-op) → exit 1·FAIL / 각 원복 후 PASS
+- 케이스명 유니크 74/74 · `git diff --name-only origin/main` = 게이트/정책/Claude소유 무접촉
+
+---
+
 ## TASK-016 동적 위험접근 감지 보강 `extract-python-capabilities.py` — **보정요청** (2026-07-11, D-038)
 
 > 대상: `codex/2026-07-11-task016-dynamic-capabilities` (impl `6aeb513`·핸드오프 `47db5c5`). 목적: `getattr(os,name)`·`__import__(name)` 등 정적 호출명으로 해소 안 되는 **동적 민감모듈 접근**을 완전 통과시키지 않고 저확신 `watched` 로 남긴다.
