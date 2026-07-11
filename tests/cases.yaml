@@ -1341,6 +1341,22 @@ cases:
           signal_names: [os.*]
       fail_closed: []
 
+  - name: new-capabilities-dynamic-level-escalation
+    gate: check-new-capabilities
+    input:
+      fixture_dir: tests/fixtures/new-capabilities/dynamic-level-escalation
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      new_capabilities:
+        - path: app/run.py
+          id: subprocess_exec
+          level: protected
+          reviewer: security-reviewer
+          signal_names: [os.*, os.system]
+      warned_capabilities: []
+      fail_closed: []
+
   - name: policy-change-loosening-level
     gate: check-policy-change
     input:
