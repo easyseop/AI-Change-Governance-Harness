@@ -25,6 +25,7 @@ def load_gate_module(filename, module_name):
 capability_gate = load_gate_module(
     "extract-python-capabilities.py", "extract_python_capabilities_gate"
 )
+LEVEL_STRENGTH = capability_gate.LEVEL_STRENGTH
 
 
 def normalize_path(path):
@@ -149,6 +150,13 @@ def new_capability_record(path, capability, metadata):
     }
 
 
+def escalated_capability_record(path, base_capability, head_capability, metadata):
+    record = new_capability_record(path, head_capability, metadata)
+    record["base_level"] = base_capability.get("level")
+    record["change"] = "level_escalation"
+    return record
+
+
 def fail_closed_record(path, reason):
     return {
         "path": path,
@@ -221,6 +229,20 @@ def check_new_capabilities(rev_range, policy, repo="."):
         head_caps = capability_index(head_result)
         for cap_id in sorted(set(head_caps) - set(base_caps)):
             record = new_capability_record(path, head_caps[cap_id], metadata)
+            if record["maturity"] == "shadow":
+                shadow_capabilities.append(record)
+            elif record["level"] == "watched":
+                warned_capabilities.append(record)
+            else:
+                new_capabilities.append(record)
+        for cap_id in sorted(set(head_caps) & set(base_caps)):
+            base_level = base_caps[cap_id].get("level")
+            head_level = head_caps[cap_id].get("level")
+            if LEVEL_STRENGTH.get(head_level, 0) <= LEVEL_STRENGTH.get(base_level, 0):
+                continue
+            record = escalated_capability_record(
+                path, base_caps[cap_id], head_caps[cap_id], metadata
+            )
             if record["maturity"] == "shadow":
                 shadow_capabilities.append(record)
             elif record["level"] == "watched":

@@ -12,6 +12,10 @@ DEFAULT_POLICY = "policies/sensitive-capabilities.yaml"
 VALID_LEVELS = {"protected", "watched"}
 VALID_MATURITY = {"enforcing", "shadow"}
 DEFAULT_INVALID_LEVEL = "protected"
+LEVEL_STRENGTH = {"watched": 0, "protected": 1}
+IMPORT_BUILTINS = {"__import__"}
+DYNAMIC_CODE_BUILTINS = {"__import__", "eval", "exec", "compile"}
+DYNAMIC_NAMESPACE_ACCESSORS = {"globals", "locals", "vars"}
 
 
 def read_source(path):
@@ -124,8 +128,17 @@ def caps_for_catalog_module(module, catalog_modules):
     return matched
 
 
-def add_signal(found, cap, kind, name, line):
-    found[cap["id"]]["level"] = cap["level"]
+def strongest_level(current, new):
+    if current is None:
+        return new
+    if LEVEL_STRENGTH.get(new, 0) > LEVEL_STRENGTH.get(current, 0):
+        return new
+    return current
+
+
+def add_signal(found, cap, kind, name, line, level=None):
+    signal_level = level or cap["level"]
+    found[cap["id"]]["level"] = strongest_level(found[cap["id"]]["level"], signal_level)
     found[cap["id"]]["reason"] = cap["reason"]
     found[cap["id"]]["reviewer"] = cap["reviewer"]
     found[cap["id"]]["signals"].add((kind, name, line))
@@ -193,6 +206,30 @@ def dotted_name(node):
     return None
 
 
+def fold_string(node):
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        left = fold_string(node.left)
+        right = fold_string(node.right)
+        if left is not None and right is not None:
+            return left + right
+    return None
+
+
+def resolve_dotted_name(node, bindings, require_bound_base=False):
+    name = dotted_name(node)
+    if not name:
+        return None
+    root, _, rest = name.partition(".")
+    if root in bindings:
+        resolved = bindings[root]
+        return f"{resolved}.{rest}" if rest else resolved
+    if require_bound_base:
+        return None
+    return name
+
+
 def resolve_call_name(func, bindings):
     getattr_name = resolve_getattr_call_name(func, bindings)
     if getattr_name:
@@ -214,7 +251,8 @@ def resolve_getattr_call_name(func, bindings, require_bound_base=False):
         return None
     if len(func.args) < 2:
         return None
-    if not isinstance(func.args[1], ast.Constant) or not isinstance(func.args[1].value, str):
+    attr_name = fold_string(func.args[1])
+    if attr_name is None:
         return None
 
     base_name = dotted_name(func.args[0])
@@ -226,7 +264,94 @@ def resolve_getattr_call_name(func, bindings, require_bound_base=False):
         base_name = f"{resolved}.{rest}" if rest else resolved
     elif require_bound_base:
         return None
-    return f"{base_name}.{func.args[1].value}"
+    return f"{base_name}.{attr_name}"
+
+
+def dynamic_code_caps(builtin_index):
+    caps = []
+    seen = set()
+    for name in sorted(DYNAMIC_CODE_BUILTINS):
+        for cap in builtin_index.get(name, []):
+            if cap["id"] not in seen:
+                caps.append(cap)
+                seen.add(cap["id"])
+    return caps
+
+
+def contains_base64_decode(node, bindings):
+    for child in ast.walk(node):
+        if not isinstance(child, ast.Call):
+            continue
+        call_name = resolve_call_name(child.func, bindings)
+        if call_name in {"base64.b64decode", "base64.urlsafe_b64decode", "base64.decodebytes"}:
+            return True
+    return False
+
+
+def add_dynamic_module_signal(found, module_name, catalog_modules, signal_name, line):
+    for cap in caps_for_catalog_module(module_name, catalog_modules):
+        add_signal(found, cap, "dynamic_access", signal_name, line, level="watched")
+
+
+def add_dynamic_code_signal(found, builtin_index, kind, name, line):
+    for cap in dynamic_code_caps(builtin_index):
+        add_signal(found, cap, kind, name, line, level="watched")
+
+
+def maybe_record_dynamic_access(node, found, bindings, import_index, catalog_modules, builtin_index):
+    if not isinstance(node.func, ast.Name):
+        return
+
+    if node.func.id in {"getattr", "setattr"} and len(node.args) >= 2:
+        base_name = resolve_dotted_name(node.args[0], bindings)
+        if not base_name:
+            return
+        attr_name = fold_string(node.args[1])
+        if attr_name is None:
+            add_dynamic_module_signal(
+                found,
+                base_name,
+                catalog_modules,
+                f"{base_name}.*",
+                node.lineno,
+            )
+        return
+
+    if node.func.id == "__import__" and node.args:
+        module_name = fold_string(node.args[0])
+        if module_name is None:
+            kind = "base64_dynamic" if contains_base64_decode(node.args[0], bindings) else "dynamic_import"
+            add_dynamic_code_signal(found, builtin_index, kind, "__import__", node.lineno)
+        else:
+            for cap in caps_for_import(module_name, import_index):
+                add_signal(found, cap, "dynamic_import", module_name, node.lineno)
+            for cap in builtin_index.get("__import__", []):
+                add_signal(found, cap, "builtin", "__import__", node.lineno)
+
+
+def maybe_record_namespace_access(node, found, builtin_index):
+    func = node.func
+    if not isinstance(func, ast.Subscript):
+        return
+    value = func.value
+    if not isinstance(value, ast.Call):
+        return
+    if isinstance(value.func, ast.Name) and value.func.id in DYNAMIC_NAMESPACE_ACCESSORS:
+        add_dynamic_code_signal(found, builtin_index, "namespace_access", value.func.id, node.lineno)
+
+
+def maybe_record_importlib_dynamic_import(node, call_name, found, bindings, import_index, builtin_index):
+    if call_name not in {"importlib.import_module", "importlib.__import__"}:
+        return
+    if not node.args:
+        return
+    module_name = fold_string(node.args[0])
+    if module_name is None:
+        kind = "base64_dynamic" if contains_base64_decode(node.args[0], bindings) else "dynamic_import"
+        add_dynamic_code_signal(found, builtin_index, kind, call_name, node.lineno)
+        return
+    for cap in caps_for_import(module_name, import_index):
+        add_signal(found, cap, "dynamic_import", module_name, node.lineno)
 
 
 def public_capabilities(found):
@@ -270,12 +395,20 @@ def extract_from_source(source, source_path, policy_path):
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
-        if isinstance(node.func, ast.Name):
+        maybe_record_dynamic_access(
+            node, found, bindings, import_index, catalog_modules, builtin_index
+        )
+        maybe_record_namespace_access(node, found, builtin_index)
+
+        if isinstance(node.func, ast.Name) and node.func.id not in IMPORT_BUILTINS:
             for cap in builtin_index.get(node.func.id, []):
                 add_signal(found, cap, "builtin", node.func.id, node.lineno)
 
         call_name = resolve_call_name(node.func, bindings)
         if call_name:
+            maybe_record_importlib_dynamic_import(
+                node, call_name, found, bindings, import_index, builtin_index
+            )
             for cap in call_index.get(call_name, []):
                 add_signal(found, cap, "call", call_name, node.lineno)
 
