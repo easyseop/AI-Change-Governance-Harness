@@ -204,6 +204,41 @@ cases:
       forbidden_touched:
         - secrets/prod.key
 
+  - name: broad-intent-root
+    gate: check-change-intent
+    input:
+      name_status: tests/fixtures/broad-intent-root/name-status.txt
+      change_intent: tests/fixtures/broad-intent-root/change-intent.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      scope_too_broad: true
+      scope_too_broad_reasons:
+        - root_scope_glob
+        - top_level_coverage
+
+  - name: broad-intent-coverage
+    gate: check-change-intent
+    input:
+      name_status: tests/fixtures/broad-intent-coverage/name-status.txt
+      change_intent: tests/fixtures/broad-intent-coverage/change-intent.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      scope_too_broad: true
+      scope_too_broad_reasons:
+        - top_level_coverage
+
+  - name: broad-intent-normal-wide
+    gate: check-change-intent
+    input:
+      name_status: tests/fixtures/broad-intent-normal-wide/name-status.txt
+      change_intent: tests/fixtures/broad-intent-normal-wide/change-intent.yaml
+    expect:
+      verdict: pass
+      exit_code: 0
+      scope_too_broad: false
+
   - name: frozen
     gate: check-sensitive-zones
     input:
