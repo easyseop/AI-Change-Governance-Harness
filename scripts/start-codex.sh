@@ -39,9 +39,18 @@ if printf '%s' "$TOP" | grep -q '보정요청'; then
   # 리뷰기록(A-XXXX·decisions·handoff 신호)은 origin/main 에만 있고 작업 브랜치엔 없다.
   # → 작업 브랜치를 '보정요청' 줄의 헤드 커밋으로 자동 식별해 checkout(엉뚱한 브랜치 pull 로 보정요청을 못 보던 문제 방지).
   #   main 은 머지하지 않는다(collab 로그가 append 충돌). 리뷰기록은 origin/main 에서 '읽는다'.
-  HEADC="$(printf '%s' "$TOP" | sed -n 's/.*| \([0-9a-f]\{7,40\}\) (\*\*보정요청\*\*).*/\1/p')"
-  WORKREF="$(git branch -r --contains "$HEADC" 2>/dev/null | grep -oE 'origin/codex/[^ ]+' | head -1)"
-  CORR_ANS="$(printf '%s' "$TOP" | grep -oE 'A-[0-9]{4}' | head -1)"
+  # 헤드 커밋 = ' (**보정요청**)' 바로 앞의 hex 토큰. 형식이 진화해도 견고하게:
+  #   신형 '| <구현> / 헤드 <head> (**보정요청**)' · 구형 '| <head> (**보정요청**)' 둘 다 대응
+  #   (앞 구분자를 [^0-9a-f] 로 잡아 '| '·'헤드 ' 무엇이든 허용). ★set -euo pipefail 아래서
+  #   추출 실패(빈 값)면 git/grep 이 비영종료 → 스크립트가 조용히 죽던 버그 → '|| true' 로 방어.
+  HEADC="$(printf '%s' "$TOP" | sed -n 's/.*[^0-9a-f]\([0-9a-f]\{7,40\}\) (\*\*보정요청\*\*).*/\1/p' || true)"
+  CORR_ANS="$(printf '%s' "$TOP" | grep -oE 'A-[0-9]{4}' | head -1 || true)"
+  WORKREF=""
+  if [ -n "$HEADC" ]; then
+    WORKREF="$(git branch -r --contains "$HEADC" 2>/dev/null | grep -oE 'origin/codex/[^ ]+' | head -1 || true)"
+  else
+    echo "   ⚠ handoff 줄에서 헤드 커밋 추출 실패(형식 변화 가능) — 아래 줄이 가리키는 codex 브랜치를 수동 checkout 하라."
+  fi
   if [ -n "$WORKREF" ]; then
     WB="${WORKREF#origin/}"
     echo "   ▸ 작업 브랜치 자동 식별: $WB (헤드 $HEADC) → checkout"
