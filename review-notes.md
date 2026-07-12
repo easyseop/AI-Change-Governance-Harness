@@ -5,6 +5,52 @@
 
 ---
 
+## TASK-021 R-1 재리뷰 (D-042) — 보정 재제출 · 통과 · Claude main 머지
+
+**대상**: `codex/2026-07-11-task021-broad-intent` — 보정 `1c08afa` · 헤드 `c4655ad`. 멱등성: 검출 엔진(`616ff43`/`1b954c3`)은 D-041/A-0012 에서 실증 통과 — **R-1 보정 델타만** 재리뷰.
+
+**보정 델타 (한 줄 확인)**
+```python
+# 이전 (자기-무력화):
+#   "broad_scope_threshold_percent": int(
+#       intent.get("broad_scope_threshold_percent")
+#       or intent.get("scope_policy", {}).get("broad_scope_threshold_percent")
+#       or DEFAULT_BROAD_SCOPE_THRESHOLD_PERCENT),
+# 보정 후 (line 61):
+    "broad_scope_threshold_percent": DEFAULT_BROAD_SCOPE_THRESHOLD_PERCENT,
+```
+→ **권장 보정(오버라이드 제거)** 채택. author 가 임계값을 통제하던 두 조회 키를 모두 제거. `grep` 으로 threshold 세팅점이 line 61(상수 80) **유일**하고 소비점(164·180·190)이 전부 이 상수 참조임을 확인 → 신뢰경계 복구(author→상수).
+
+**적대 재검증 (fresh·픽스처 밖·라이브트리 결합 차단)**
+D-041 의 ADV1 을 **합성 8-디렉토리 git repo** 에서 재현(라이브 repo 트리 의존 제거):
+```
+change_intent: broad_scope_threshold_percent: 101 + scope_policy.…: 101
+allowed_paths: 8개 최상위 디렉토리 개별 나열(리터럴 */** 회피)
+→ threshold 80 (공격값 101 무시) · coverage 100% · reasons [top_level_coverage]
+→ verdict approval_required · exit 2   ✅ 공격 차단
+```
+자기-무력화 스위치(임계값 오버라이드)가 사라져 공격이 더는 통하지 않음.
+
+**음성검증 (rig-and-revert — 델타가 load-bearing 임을 증명)**
+line 61 을 예전 author-통제 코드로 되돌린 rigged 사본에 **동일 공격 입력** →
+```
+→ threshold 101 · reasons [] · verdict pass · exit 0   ← 구멍 재개방
+```
+= 이 한 줄이 R-1 을 닫는 유일·load-bearing 변경. 항상-PASS 아님 실증.
+
+**회귀 고정 · 무회귀**
+`broad-intent-coverage` 픽스처에 공격 선언값 `101`(+중첩 `scope_policy`)을 심어 상설 회귀가 R-1 입력을 그대로 담음(threshold 무시·`approval_required` 기대). `tests/run-tests.sh` **77/77 PASS**(default 71·metamorphic 3·negative 3) · `py_compile` OK · `git diff --check` OK.
+
+**보수적 개발**
+보정 델타 = 게이트 1줄 + 픽스처 3줄 + 공동소유(handoff·summaries). `policies/*`·Claude 소유 무접촉·scope-creep 없음.
+
+**비차단 관찰 (O-1, R-2 잔존) → 차기 AC 가드 G-broad-1**
+회귀 픽스처가 여전히 라이브 repo 트리에 결합(name-status 파일 입력 → `diff_base_ref` HEAD 폴백 → `repo_top_level_dirs` 가 실 repo `git ls-tree -d HEAD` 를 셈). 현재 8 top-level dir, 픽스처 7개 나열=87%≥80 통과. 최상위 디렉토리 1개 추가 시 7/9=77%<80 → verdict pass 로 뒤집혀 **무관한 repo 성장에 이 회귀가 깨짐**. 프로덕션(실 diff ref 입력)은 base ref 로 결정적 → **거버넌스 구멍 아님·비차단**. 픽스처가 top-level dir 집합을 합성 base 트리 등으로 결정적 고정하도록 **차기 AC 가드**로 명시(보정 필수 아님). root-glob 케이스는 커버리지 무관해 안정적.
+
+**판정**: R-1 해소 ✓ · 통과 · 비민감(2층 approval 격상만·1층 차단 권한 없음·정산/인증/암호화/migration/infra 무관·게이트 계열 Claude 머지 선례) → **Claude main 머지**. → `collab/decisions.md` D-042.
+
+---
+
 ## TASK-021 (D-041) 광역 의도선언 격상 `check-change-intent` — 보정요청 (1건 · 🔴)
 
 **대상**: `codex/2026-07-11-task021-broad-intent` · impl `616ff43` · 헤드 `1b954c3`. `check-change-intent.py` +109줄, `tests/cases.yaml` 3케이스, 러너 assert, 픽스처 3종.

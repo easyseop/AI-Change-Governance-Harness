@@ -4,6 +4,20 @@
 
 ---
 
+## D-042 (2026-07-13) TASK-021 R-1 보정 재제출 재리뷰 — **R-1 해소 확인 · 통과 · Claude main 머지 (TASK-021 완결)**
+대상: 브랜치 `codex/2026-07-11-task021-broad-intent` — 보정 `1c08afa`(fix) · 헤드 `c4655ad`(handoff). **멱등성**: `616ff43`·`1b954c3`·`1c08afa`·`c4655ad` 재처리 금지. **재제출은 R-1 보정 델타만 재리뷰**(D-041/A-0012 계약대로 검출 엔진은 재론 없음).
+
+**판정: 통과 · Claude main 머지.** D-041 R-1(🔴 자기-무력화)이 **권장 보정(change-intent 오버라이드 제거)** 으로 정확히 닫혔다.
+
+- **R-1 해소 ✓**: `load_intent()` 가 이제 `broad_scope_threshold_percent` 를 **change-intent 에서 읽지 않고** 고정 `DEFAULT_BROAD_SCOPE_THRESHOLD_PERCENT = 80` 만 쓴다(gate line 61). 임계값을 읽던 두 조회 키(`intent.get(...)` · `scope_policy.get(...)`) 전부 제거 → **author 통제 경로 부재**(grep 확인: threshold 세팅점 line 61 유일, 소비점 164·180·190 은 전부 이 상수 참조). AC "기본 80" 그대로 충족.
+- **적대 재검증(fresh·픽스처 밖·합성 repo 로 라이브트리 결합 차단)**: ADV1 재현 — 합성 8-디렉토리 repo 에서 `broad_scope_threshold_percent: 101`(+`scope_policy` 중첩) 선언 + 최상위 8개 개별 나열 → **threshold 80(공격값 101 무시)·coverage 100%·`top_level_coverage`·approval_required/exit 2**. 자기-무력화 스위치 소멸.
+- **음성검증(rig-and-revert, load-bearing 실증)**: line 61 을 예전 author-통제 코드로 되돌린 rigged 사본에 동일 공격 → **threshold 101·`pass`/exit 0 으로 회귀**(구멍 재개방). 즉 이 한 줄 델타가 R-1 을 닫는 load-bearing 변경임이 실증됨(항상-green 아님).
+- **회귀 고정**: `broad-intent-coverage` 픽스처에 공격자 선언값 101(+중첩)을 심어, 이 태스크의 상설 회귀가 R-1 공격입력을 그대로 재현(threshold 무시·`approval_required` 기대). `run-tests.sh` **77/77 PASS** · `py_compile` OK · `git diff --check` OK.
+- **보수적 개발 ✓**: 보정 델타 = 게이트 1줄(±6/1) + 픽스처 3줄 + 공동소유(handoff·summaries)뿐. **`policies/*`·Claude 소유(docs·TASKS·decisions·answers·templates) 무접촉**·scope-creep 없음.
+- **R-2 (🟡 비차단) 잔존 → 차기 AC 가드**: 회귀 픽스처가 여전히 라이브 repo 트리(현재 8 top-level dir, 7개 나열=87%)에 결합. 최상위 디렉토리 추가 시 7/9=77%<80 로 테스트가 뒤집힘. 프로덕션(실 diff ref)은 결정적이라 거버넌스 구멍 아님·비차단이나, 픽스처가 top-level 집합을 결정적으로 고정하도록 **차기 AC 가드(G-broad-1)** 로 명시(§2B 대로 비차단으로 안 흘림). — 보정 필수 아님, TASK-021 완결에 지장 없음.
+
+**민감도**: 거버넌스 메타-게이트(change-intent 범위). 격상은 **approval_required(2층)** 뿐 — **1층 자동차단 권한 없음**(불변원칙 §4 준수). 정산/인증·인가/암호화/DB migration/infra 무관. → **비민감**(TASK-018·019·020[D-034]·016[D-039]·017[D-040] 동일 게이트 계열 Claude 머지 선례). **D-007**: 리뷰 통과+비민감 → 구현자(Codex)≠머지자(Claude)로 **Claude 가 코드 브랜치를 `main` 머지·push**. 상세: `review-notes.md` TASK-021 R-1 재리뷰(D-042) 절 · `collab/answers/A-0012.md` §해소.
+
 ## D-041 (2026-07-13) TASK-021 광역 의도선언 격상 `check-change-intent` — **보정요청 (1건 · 🔴) · 코드 머지 보류**
 대상: 브랜치 `codex/2026-07-11-task021-broad-intent` (헤드 `1b954c3` · 구현 `616ff43`). `check-change-intent.py` +109줄(루트 glob 정규화·top-level 커버리지·`scope_too_broad`→approval_required 격상) + `tests/cases.yaml` 3케이스 + 러너 assert + 픽스처 3종. **멱등성**: `616ff43`·`1b954c3` 재처리 금지. 재제출은 **R-1 보정 델타만** 재리뷰.
 
