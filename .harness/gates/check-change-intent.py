@@ -58,11 +58,7 @@ def load_intent(path):
     return {
         "allowed_paths": intent.get("allowed_paths") or [],
         "forbidden_paths": intent.get("forbidden_paths") or [],
-        "broad_scope_threshold_percent": int(
-            intent.get("broad_scope_threshold_percent")
-            or intent.get("scope_policy", {}).get("broad_scope_threshold_percent")
-            or DEFAULT_BROAD_SCOPE_THRESHOLD_PERCENT
-        ),
+        "broad_scope_threshold_percent": DEFAULT_BROAD_SCOPE_THRESHOLD_PERCENT,
         "requirement_id": intent.get("requirement_id"),
         "author": intent.get("author"),
     }
