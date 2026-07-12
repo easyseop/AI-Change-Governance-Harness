@@ -4,6 +4,19 @@
 
 ---
 
+## D-041 (2026-07-13) TASK-021 광역 의도선언 격상 `check-change-intent` — **보정요청 (1건 · 🔴) · 코드 머지 보류**
+대상: 브랜치 `codex/2026-07-11-task021-broad-intent` (헤드 `1b954c3` · 구현 `616ff43`). `check-change-intent.py` +109줄(루트 glob 정규화·top-level 커버리지·`scope_too_broad`→approval_required 격상) + `tests/cases.yaml` 3케이스 + 러너 assert + 픽스처 3종. **멱등성**: `616ff43`·`1b954c3` 재처리 금지. 재제출은 **R-1 보정 델타만** 재리뷰.
+
+**판정: 보정요청.** 검출 엔진은 fresh 적대입력·음성검증으로 실증 통과했으나, **임계값 N 의 신뢰경계** 1건이 거버넌스 구멍을 낸다.
+
+- **통과(재론 불필요)**: AC#1(a) 루트 glob 검출(`*`·`**`·`./**` 정규화 동치, **임계값 독립** — ADV3 실증) / AC#1(b) 커버리지 검출은 **기본 임계값 하에서** 정상(ADV2: 8개 나열 → 100%·approval_required) / AC#2 오탐 억제(normal-wide 75%<80 → pass) / AC#3 하위호환(TASK-001 로직 무변경·빈 diff pass 유지·forbidden 우선·too_broad 는 approval_required 로만 격상, blocked 승격 없음) / `run-tests.sh` **77/77 PASS** / 보수적 개발(policies·Claude 소유 무접촉·scope-creep 없음).
+
+- **R-1 (🔴 · 보정 필수) — 자기-무력화**: AC#1(b) 는 "N 은 정책값"인데, 구현은 N 을 **피검자 자신의 change-intent.yaml**(`load_intent`: `intent.get("broad_scope_threshold_percent")` — `change_intent` 블록 하위)에서만 읽는다. 정책파일 경로 부재·클램프 부재. → 작성자가 같은 파일에 `broad_scope_threshold_percent: 101` 을 넣고 최상위 디렉토리를 개별 나열(리터럴 `*`/`**` 회피)하면 **커버리지 100%인데도 `pass`/exit 0**(ADV1 실증). TASK-021 이 막으려는 "선언을 무의미하게 만들기"를 한 단계 위로 옮겨 재현 = 거버넌스 목적에 **직접 구멍**(§2B 필수질문 → 비차단 금지). 보정: change-intent 오버라이드 제거(고정 기본 80 유지=AC "기본 80" 충족) 또는 Claude 소유 정책파일에서 N 읽기. **클램프 ≤100 만으론 불충분**(threshold=100+7/8 나열=87%<100 통과) — author 통제 자체를 끊어야 함.
+
+- **R-2 (🟡 · 비차단 → 차기 AC / 보정 시 동봉 권장)**: 회귀 픽스처가 라이브 repo 트리에 결합. name-status 파일 입력 → `diff_base_ref` HEAD 폴백 → `repo_top_level_dirs` 가 실 repo 최상위 디렉토리를 셈. `broad-intent-coverage`(7개 나열)는 현재 7/8=87% 통과지만 최상위 디렉토리 추가 시 7/9=77%<80 → verdict pass 로 뒤집혀 **무관한 repo 성장에 회귀 테스트가 깨짐**. 프로덕션(실 diff ref)은 결정적이라 구멍은 아님 → 비차단. 픽스처가 top-level dir 집합을 결정적으로 고정하도록 권장.
+
+**D-007 흐름**: 코드 브랜치 **머지 보류**. 리뷰기록(D-041·`A-0012`·`review-notes.md`)은 `main` 머지(다음 세션·Codex 가 봄). `handoff-log.md` 맨 위에 `Claude → Codex … (보정요청)` 신호 남김(새 태스크 오인 방지). 상세: `collab/answers/A-0012.md`·`review-notes.md` TASK-021(D-041) 절.
+
 ## D-040 (2026-07-11) TASK-017 뮤테이션(음성검증) 자동화 `tests/mutation-check.sh` — **통과 · Claude main 머지**
 대상: 브랜치 `codex/2026-07-11-task017-mutation-check` (impl `459a519` · 핸드오프 `4bd00c0`). 신규 `tests/mutation-check.sh`(194줄) + `tests/run-tests.sh` 선택실행/그룹요약/capability_ids·levels 검증(+34) + metamorphic·negative-corpus 케이스 6종 + 픽스처 8파일 + README 1줄. **멱등성**: `459a519`·`4bd00c0` 재처리 금지.
 

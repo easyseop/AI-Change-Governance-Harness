@@ -5,6 +5,44 @@
 
 ---
 
+## TASK-021 (D-041) 광역 의도선언 격상 `check-change-intent` — 보정요청 (1건 · 🔴)
+
+**대상**: `codex/2026-07-11-task021-broad-intent` · impl `616ff43` · 헤드 `1b954c3`. `check-change-intent.py` +109줄, `tests/cases.yaml` 3케이스, 러너 assert, 픽스처 3종.
+
+**의도 대비 검수 (거수기 금지 — 능동적으로 깨보려 함)**
+이 태스크의 거버넌스 목적 = "`allowed_paths:["**"]` 류로 의도 게이트를 **무력화**하는 것을 막는다". 따라서 핵심 질문은 **"작성자가 이 방어를 다시 무력화할 수 있는가"**. 코드를 읽는 데 그치지 않고 픽스처 밖 fresh 입력으로 **실제 게이트를 돌려 깨보려** 했다.
+
+### 한 줄씩 뜯어본 로직
+- `normalize_scope_glob`/`root_scope_globs`: `PurePosixPath` 정규화 + `strip("/")` 후 `{"*","**"}` 동치 검사. `**`·`*`·`./**`·`**/` 전부 동치로 잡음. `**/**`·`**/*` 는 root-glob 은 아니나 커버리지 경로가 포착(아래).
+- `repo_top_level_dirs`: `git ls-tree -d --name-only <base_ref>` 로 최상위 **디렉토리**만. base_ref 는 `diff_base_ref`(ref 의 `...`/`..` 앞 토큰, 파일입력이면 HEAD). 실패 시 변경파일 디렉토리로 폴백.
+- `covered_top_level_dirs`: 각 top-level dir 을 dir 자체 또는 `dir/__scope_probe__` 로 매칭 → `app/*`·`app/**` 류가 dir 을 덮는지 판정(probe 로 `app/*` 형도 커버 인정). 커버리지% = covered/total(정수 나눗셈).
+- 격상: `too_broad = root_glob 존재 OR 커버리지 ≥ 임계값`. `check_files` 에서 **forbidden(blocked) 우선 → out_of_scope OR too_broad → approval_required**. too_broad 는 절대 blocked 로 안 감(AC#3).
+
+### 적대적 검증 (fresh 입력·픽스처 밖·실제 게이트)
+- **ADV2 (커버리지 검출 정상)**: 최상위 8개 전부 개별 `dir/**` 나열, 임계값 미지정(기본 80) → `coverage 100`·`top_level_coverage`·`approval_required`. 엔진 정상.
+- **ADV3 (root-glob 임계값 독립)**: `["**"]` + `broad_scope_threshold_percent:101` → `root_scope_glob`·`approval_required`. AC#1(a) 는 임계값과 무관하게 발화. ✅
+- **ADV1 (🔴 자기-무력화 재현)**: 최상위 8개 개별 나열(리터럴 `*`/`**` 회피) + **같은 파일에 `broad_scope_threshold_percent:101`** → `coverage 100`·`root_globs []`·**`too_broad false` → `pass`/exit 0**. 사실상 무제한 선언이 AC#1(b) 를 완전 회피. ⇒ **결함**.
+- **음성검증(rig-and-revert)**: ADV1 선언에서 `broad_scope_threshold_percent` 한 줄만 제거 → `top_level_coverage`·`approval_required`/exit 2 로 뒤집힘. ⇒ 회피 스위치 = **임계값 오버라이드 그 자체**(가드가 load-bearing 함을 역으로 증명).
+
+### 결함 R-1 (🔴) — 임계값 N 의 신뢰경계 오배치
+`load_intent` 는 N 을 `intent.get("broad_scope_threshold_percent") or intent.get("scope_policy",{}).get(...) or 80` 으로 읽는데 `intent = data.get("change_intent")` — **피검자(author) 소유 선언**이다. 외부 정책파일 경로 부재·상한 클램프 부재. AC#1(b) "N 은 정책값"(= 거버넌스 소유: Claude `policies/*` 또는 고정)과 정면 충돌 + 위 실증대로 자기-무력화. **§2B 필수질문**("거버넌스 목적에 직접 구멍?") → 예 → 비차단 금지 → **보정요청**.
+보정 방향: (권장) 오버라이드 제거·고정 기본 80 / 또는 Claude 소유 정책에서 읽기. **클램프 ≤100 만으론 불충분**(threshold=100+7/8 나열=87%<100 통과).
+
+### 하류 영향
+`scope_too_broad` 는 감사카드/후속 라우팅에 `reasons`·`coverage_percent`·`covered_top_level_dirs` 를 노출 → approval-routing 이 이 신호를 근거로 쓸 때, author 가 임계값을 올려 신호 자체를 지우면 하류 전 계층이 광역성을 못 본다. R-1 은 이 게이트 하나가 아니라 하류 승인체계 전체의 근거를 무력화한다.
+
+### 비차단 관찰 R-2 (🟡 · 차기 AC / 보정 시 동봉 권장)
+회귀 픽스처가 라이브 repo 트리에 결합. name-status 파일 입력 → `diff_base_ref` HEAD 폴백 → `repo_top_level_dirs` 가 실 repo 최상위 디렉토리(현재 8개)를 셈. `broad-intent-coverage`(7개 나열) 판정 = fixture 아닌 실 repo 구조 의존: 지금 7/8=87% 통과지만 최상위 디렉토리 1개 추가 시 7/9=77%<80 → `pass` 로 뒤집혀 **무관한 repo 성장에 회귀 테스트가 깨짐**(상설 회귀 픽스처 원칙 위배). 프로덕션(실 diff ref)은 base ref 로 결정적 → 거버넌스 구멍 아님 → 비차단. 픽스처가 top-level dir 집합을 결정적으로 고정하도록 권장. (`broad-intent-root` 는 root-glob 이라 커버리지 무관·안정.)
+
+### 부차 (보정 불요)
+- 비정수 임계값 → `int()` 예외 → `except`→ blocked(exit 1). 광역 판정이 차단으로 흐르는 소지지만 정상 운용 밖 입력.
+- `broad_scope_threshold_percent:0` 은 falsy → `or` 사슬서 기본 80 취급(0 설정 불가). 안전 방향.
+
+### 검증 로그
+`git worktree` 상 `bash tests/run-tests.sh` → **77/77 PASS**(default 71·metamorphic 3·negative 3). ADV1/2/3 는 브랜치 게이트를 scratchpad 사본으로 직접 실행해 재현.
+
+---
+
 ## TASK-017 (D-040) 뮤테이션(음성검증) 자동화 `tests/mutation-check.sh` — 통과
 
 **대상**: `codex/2026-07-11-task017-mutation-check` · impl `459a519` · 핸드오프 `4bd00c0`. 신규 `tests/mutation-check.sh` + `run-tests.sh` 선택실행/그룹요약/`capability_ids`·`capability_levels` assert + cases 6종 + 픽스처 8 + README 1줄.
