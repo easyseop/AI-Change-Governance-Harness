@@ -44,7 +44,7 @@
 |---|---|---|---|---|
 | **1. 결정적 변경 감시** | 민감 경로·intent 이탈 감지 | 규칙(경로 패턴) | **차단/승인요구** | **MVP-0** |
 | **2. 능력/데이터 감지** | 인증·암복호·외부송신·PII 신규도입 | 규칙+catalog | 승인요구 | MVP-1 |
-| **3. 의도이탈/영향범위** | scope-creep·공유모듈 blast radius | 점수/경고 | 사람 리뷰 유도 | MVP-2 |
+| **3. 의도이탈/영향범위** | scope-creep·공유모듈 blast radius·**간접영향(sink 역도달성)** | 점수/경고·승인요구 | 사람 리뷰 유도 | MVP-2 → `docs/mvp2-impact-tracing-design.md` |
 
 **보정 규칙(Claude 추가):**
 - **tier는 규칙마다 policy에 선언**한다. 한 규칙을 확신이 쌓이면 `advisory → blocking` 으로 승격 가능.

@@ -252,10 +252,49 @@
 3. 기존 TASK-001 판정 로직 무변경(추가 검사만, 하위호환). blocked 로 승격 금지(선언 문제는 차단 사유 아님 — 확인 요청일 뿐).
 4. 픽스처(광역→approval / 정상 넓음→pass / 기존 케이스 전부 무영향) + 음성검증.
 
-## MVP-2 설계 시 검토 기록 (미결 — 설계 단계에서 결정)
-- **🔴 `@gov` ↔ sink 관계 (형 지시로 기록, 2026-07-07)**: `@gov`(이름표)는 그 함수 **직접 수정만** 잡고, 그 함수를 떠받치는 상류 함수 수정(간접 영향)은 sink 등록 + 종단 역추적이 있어야 잡힌다. 대표 시나리오: 다운로드 함수에 `@gov` 를 달아도 `check_permission()` 을 고치는 변경은 현행 무탐지. **설계 질문**: ① `@gov` 함수를 자동으로 sink 취급(편의↑, 콜그래프 비용·간접경고 오탐↑) ② 분리 유지 + `@gov(sink=true)` 옵트인 ③ level 별 차등(frozen 은 자동 sink 등). MVP-2 설계 문서에서 결정·근거 기록.
-- cross-commit 누적 위험(여러 PR 에 쪼개 넣기)은 sink 그래프의 누적 비교와 함께 검토(GPT 위험⑥).
-- 비-Python·비-코드 artifact(SQL·YAML·notebook·IaC) 함수-수준 정밀화는 경로 겹이 이미 커버하는 범위 확인 후 언어별 로드맵으로.
+## MVP-2 — 영향 추적(간접 영향 / sink 역도달성)
+
+> **설계문서**: `docs/mvp2-impact-tracing-design.md` (Draft — 형 확정 대기, 2026-07-13).
+> **왜 MVP-2인가**: MVP-0·1·1.5 는 **직접** 신호(경로·@gov 직접수정·새 능력·의도이탈)만 잡는다. sink 이 의존하는 **상류 함수를 고쳐 간접적으로** 민감 행동을 무너뜨리는 건 현행 완전 무탐지 — 이 층이 그 구멍을 메운다.
+> **확정 방향(형 승인 2026-07-13)**: ① @gov↔sink = **레벨 차등**(frozen 자동 sink + `@gov(sink=true)` 옵트인, 일반 @gov·protected 는 sink 아님) · ② **최소 스코프**(단일 diff·N=1홉 시작·shadow 성숙도로 시작·래칫). **차단 절대 금지 → 승인요구 상한**.
+> **명시 비범위**(설계 §7): cross-commit 누적(→ Phase B/MVP-3, baseline 저장 필요) · 비-Python artifact 함수수준(→ 언어별 후속) · 동적 호출 완전복원(→ 영구 한계, coverage 노출).
+
+### TASK-022 ☐ sink 등록 스키마 (`@gov(sink=true)` + frozen 자동 + `sink-registry`)  (Codex)  *(MVP-2)*
+**목적**: 간접 영향 추적의 **대상(sink)** 을 등록만 한다(판정 미변경). 콜그래프를 소수 고가치에만 걸어 신호대잡음 보존.
+**수용기준**:
+1. `@gov(sink=true)` 파싱 — 기존 @gov 데코레이터 인식(TASK-005 계열) 확장, **하위호환**(`sink` 미지정=기존 동작·직접수정만, 무회귀).
+2. **frozen 존 함수 자동 sink** — `sensitive-zones.yaml` frozen 경로 내 함수는 등록 없이 sink.
+3. 정책 `sink-registry`(신규 스키마 또는 sensitive-zones 확장) — @gov 못 다는 코드용 명시 등록. Claude 가 스키마 확정.
+4. 일반 `@gov`(sink 미지정)·protected 존 함수는 **sink 아님**(직접수정 게이트가 커버). sink 집합에서 제외 검증.
+5. sink 목록을 결정적 산출(다음 태스크 입력). 픽스처: 옵트인 sink / frozen 자동 / 비-sink 각각 + 하위호환 무회귀 + 음성검증.
+
+### TASK-023 ☐ intra-repo 정적 콜그래프 빌더 (결정론·이름기반 + coverage 정직)  (Codex)  *(MVP-2)*
+**목적**: repo 내 함수 호출 엣지를 결정적으로 빌드. 판정 미연결(그래프 산출만).
+**수용기준**:
+1. AST 로 함수정의별 호출 수집, 기존 import 해소(별칭·from-import) 재사용 → **repo 내 함수정의로 해소되는 호출만 엣지**(caller→callee).
+2. **해소 실패 호출**(getattr·동적·외부·미상 메서드)은 **버리지 않고** 함수별 `unresolved_calls` 로 기록 → coverage.unevaluated 노출(조용한 누락 금지, ADR-001 D4).
+3. **결정론**: 같은 입력 → 같은 그래프(엣지·정렬 안정). md5 반복검증.
+4. 동명 오버로드·조건부 정의는 **보수적 병합**(합집합, 기존 추출기 `strongest_level` 방식 정합).
+5. 픽스처: 단순 체인·별칭 호출·미해소(getattr) 노출·조건부 def + 결정론 반복.
+
+### TASK-024 ☐ 역도달성 게이트 (간접 영향 → 승인요구)  (Codex)  *(MVP-2)*
+**목적**: 바뀐 함수가 sink 의 (전이적 N홉) 상류면 승인요구 라우팅.
+**수용기준**:
+1. 바뀐 함수(diff·기존 함수매핑 재사용) ∈ (sink 로부터 forward 도달 **N홉**, N=1 시작) → `indirect_impact` finding, 최소 `approval_required`. **차단 금지**.
+2. finding 에 `sink_id`·`changed_function`·`path`(sink→…→changed)·`hops` — 감사카드 30초 판독.
+3. 라우팅 = 영향받은 **sink 의 owner/reviewer**. 분석 실패면 ADR-001 F-2(최소 approval·route=tool_owner).
+4. **shadow 성숙도**(TASK-020) 지원 — 신규 sink 는 shadow 로 시작(verdict 미반영·`shadow_hits`). enforcing 승격은 정책.
+5. **N홉 경계 정확**: N=1 에서 2홉 상류는 미발화(경계) · sink 무관 수정 미발화(과탐경계). 픽스처 + 음성검증(역도달 필터 무력화 시 참케이스 뒤집힘).
+
+### TASK-025 ☐ 과탐 통제 + 고정 적대 입력 세트  (Codex)  *(MVP-2)*
+**목적**: 도입 실패 1순위(과탐으로 게이트 꺼버림) 방지 + 상설 회귀.
+**수용기준**:
+1. 설계 §9 **고정 적대 입력 세트 7종**을 상설 회귀 픽스처로(직접경로·N홉경계·동적 미탐 coverage노출·옵트인경계·과탐경계·음성검증·동명조건부).
+2. 거리 N 은 **정책값**(기본 1) — 래칫 가능하게 파라미터화. 하드코딩 금지.
+3. 동적 호출 미탐이 **coverage.unevaluated 로 노출**됨을 테스트로 고정(정직성 회귀 — 조용한 통과 아님).
+4. 고팬인 dampening 은 **하지 않음**(초기) — 진짜 경로 은폐 위험. 후속 검토 주석만.
+
+**의존·순서**: 022 → 023 → 024 → 025 (각 통과·머지 후 다음 착수, 기존 배치 규율).
 
 ## MVP-1 공통 (MVP-0 공통 규칙에 더해)
 - **Python AST 허용** (MVP-0의 "AST 금지"는 MVP-0 한정). 단 LLM·추정은 여전히 금지(결정적).
