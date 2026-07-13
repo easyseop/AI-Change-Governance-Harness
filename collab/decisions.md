@@ -4,6 +4,17 @@
 
 ---
 
+## D-043 (2026-07-13) TASK-021 G-broad-1 follow-up — broad-intent 픽스처 라이브-repo 결합 제거 — **통과 · Claude main 머지**
+대상: 브랜치 `codex/2026-07-13-task021-broad-fixture` — `2395c6e`(test) · 헤드 `82d598b`(docs). **멱등성**: `2395c6e`·`82d598b` 재처리 금지. **범위 = 테스트 하네스만**(D-042 에서 비차단 차기 AC 가드로 남긴 G-broad-1: `broad-intent-*` 회귀 픽스처가 라이브 repo 최상위 디렉토리 수에 결합돼 디렉토리 추가 시 87%→77% 로 뒤집혀 깨지던 불안정성 제거).
+**판정 = 통과, `main` 머지·push 완료. 더 할 일 없음.**
+**무엇을 바꿨나**: `run-tests.sh` 의 `check-change-intent` 케이스가 `fixture_dir` 를 받으면 기존 `prepare_function_mapping_fixture` 헬퍼(재사용·재발명 없음)로 **격리 git repo** 를 만들어 그 `base..head` 에서 게이트를 실행. `broad-intent-root/coverage/normal-wide` 를 고정 8개 최상위 디렉토리(`.harness app collab docs policies scripts summaries templates`) 픽스처로 전환하고 `scope_top_level_dir_count`·`scope_coverage_percent`·`scope_covered_top_level_dirs` 기대값을 100/87/75% 로 명시 고정. **게이트 판정 로직(`check-change-intent.py`)·`policies/*`·Claude 소유 전부 0-diff 확인**(구현자가 판단 로직 동결).
+**설계 정합(왜 이게 결합을 끊나)**: 게이트의 `repo_top_level_dirs()` 가 `git ls-tree -d <base_ref>` 를 **cwd 에서** 실행 → 격리 repo 안(`cd work_dir`)에서 돌리면 **분모(top_level_dir_count)가 픽스처 base 트리에서 나온다**. 라이브 repo 가 9번째 최상위 디렉토리를 얻어도 이 회귀는 불변. 부가효과: 실 CI 경로(git diff ref)를 그대로 재현 = 예전 name-status 파일(파일존재→HEAD 폴백으로 라이브트리 참조)보다 프로덕션 충실도↑.
+**적대 검증(fresh·픽스처 밖·격리 worktree)**: coverage 픽스처 repo 를 손으로 빌드해 게이트 실행 → `top_level_dir_count:8`(픽스처 셋에 **`app` 포함** — 라이브 repo 엔 `app` 없고 `tests` 존재) `coverage_percent:87`·`threshold:80`·exit 2·`changed_files:['docs/release-notes.md']`. **분모의 dir 셋이 라이브 repo(`tests` 포함)가 아니라 픽스처(`app` 포함)에서 나옴을 실증 = 결합 소멸(R-2/G-broad-1 폐쇄).** coverage 픽스처는 R-1 공격값 `broad_scope_threshold_percent:101`+중첩 `scope_policy` 보존 → 상설 R-1 회귀도 유지(threshold 여전히 고정 80, 101 무시).
+**음성검증(rig-and-revert)**: ① `scope_coverage_percent` 87→88 변조 → `broad-intent-coverage` **단독 FAIL**(got 87), ② `scope_covered_top_level_dirs` 의 `templates`→`BOGUS` 변조 → `broad-intent-root` **단독 FAIL**, 원복 후 PASS = 신규 단언이 load-bearing(항상-green 아님). 신규 단언은 분자(covered dirs)+분모(count)+percent 를 함께 고정해 예전보다 **더 엄격**(더 많은 회귀 포착).
+**보수적 개발(§1)**: 델타 = `run-tests.sh`(fixture_dir 분기 +12줄·검증 단언 +21줄) + `cases.yaml`(fixture_dir 전환·단언) + 신규 픽스처 트리 + 공동소유(handoff·summaries). 무관 리팩터·포맷·이름변경 없음·scope-creep 없음·헬퍼 재사용. `run-tests.sh` **77/77 PASS**·`git diff --check` clean·`py_compile`·`bash -n` OK(격리 worktree 재현).
+**비차단(O-1·신규)**: 기존 `tests/fixtures/broad-intent-*/name-status.txt` 3파일이 이제 **미참조(dead)** — 무해(어떤 케이스도 안 봄)·거버넌스 구멍 아님. 차기 정리 시 삭제 권장(보정 필수 아님).
+**머지 판정(D-007)**: 순수 **CI 테스트-하네스 안정화**(게이트 판단 로직·정책 무접촉·verdict 파이프라인 미연결·자동차단/채택 없음·정산·인증/인가·암호화·DB migration·infra 전부 무관) → CLAUDE.md §3 **비민감**. TASK-014~021 게이트/픽스처 계열 Claude 머지 선례(D-035~D-042). 구현자(Codex)≠머지자(Claude) → **Claude 가 `main` 머지·push. G-broad-1 마감.** 상세: `review-notes.md` TASK-021 G-broad-1(D-043) 절.
+
 ## D-042 (2026-07-13) TASK-021 R-1 보정 재제출 재리뷰 — **R-1 해소 확인 · 통과 · Claude main 머지 (TASK-021 완결)**
 대상: 브랜치 `codex/2026-07-11-task021-broad-intent` — 보정 `1c08afa`(fix) · 헤드 `c4655ad`(handoff). **멱등성**: `616ff43`·`1b954c3`·`1c08afa`·`c4655ad` 재처리 금지. **재제출은 R-1 보정 델타만 재리뷰**(D-041/A-0012 계약대로 검출 엔진은 재론 없음).
 

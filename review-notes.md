@@ -5,6 +5,29 @@
 
 ---
 
+## TASK-021 G-broad-1 (D-043) — broad-intent 픽스처 라이브-repo 결합 제거 · 통과 · Claude main 머지
+
+**대상**: `codex/2026-07-13-task021-broad-fixture` — `2395c6e`(test) · 헤드 `82d598b`(docs). 범위 = **테스트 하네스만**(D-042 비차단 차기 AC 가드 G-broad-1). 게이트 판단 로직·정책 무접촉(0-diff 확인).
+
+**의도한 위험 (왜 이 follow-up 인가)**: D-042 에서 남긴 R-2/G-broad-1 — `broad-intent-coverage` 회귀가 라이브 repo 최상위 디렉토리 수(당시 8)에 결합돼 있어, repo 에 디렉토리가 하나 추가되면 7/8=87% → 7/9=77%<80 으로 뒤집혀 **회귀 테스트가 조용히 pass 로 깨질** 위험. 프로덕션(실 diff ref)은 결정적이라 구멍은 아니었지만 상설 회귀가 불안정.
+
+**무엇을 잡는가 (설계 정합)**: 게이트 `repo_top_level_dirs()` 는 `git ls-tree -d <base_ref>` 를 **cwd 기준** 실행. 신규 하네스는 `fixture_dir` 케이스를 `prepare_function_mapping_fixture`(기존 헬퍼 재사용)로 **격리 git repo** 를 만들어 `cd work_dir` 안에서 `base..head` 로 게이트 실행 → **분모가 픽스처 base 트리(고정 8)에서 나온다.** 라이브 repo 변화에 불변. 실 CI 의 git-diff 경로를 그대로 태우므로 예전 name-status 파일(파일존재→HEAD 폴백=라이브트리) 대비 프로덕션 충실도도 향상.
+
+**적대 검증(fresh·픽스처 밖)**: coverage 픽스처 repo 손수 빌드→게이트 실행: `top_level_dir_count:8`(셋에 **`app` 포함**·라이브엔 `app` 없음/`tests` 있음)·`coverage_percent:87`·`threshold:80`·exit 2·`changed_files:['docs/release-notes.md']`. 분모 dir 셋이 픽스처에서 나옴 실증 = **결합 소멸.** coverage 픽스처는 R-1 공격값 `broad_scope_threshold_percent:101`+중첩 보존 → R-1 회귀도 상설 유지.
+
+**음성검증(rig-and-revert)**: `scope_coverage_percent` 87→88 → `broad-intent-coverage` 단독 FAIL / `scope_covered_top_level_dirs` `templates`→`BOGUS` → `broad-intent-root` 단독 FAIL / 원복 PASS = 신규 단언 load-bearing. 단언이 분자(covered)+분모(count)+percent 를 함께 고정 → 예전보다 엄격.
+
+**보수적 개발**: `run-tests.sh`(fixture_dir 분기+검증 단언)·`cases.yaml`·신규 픽스처 트리·공동 handoff/summaries 만. 무관 리팩터/scope-creep 없음·헬퍼 재사용·Claude 소유 0-diff.
+
+**비차단(O-1·신규)**: `tests/fixtures/broad-intent-*/name-status.txt` 3파일 이제 미참조(dead). 무해·구멍 아님 → 차기 정리 삭제 권장(보정 필수 아님).
+
+**머지(D-007)**: CI 테스트-하네스 안정화·비민감 → 구현자(Codex)≠머지자(Claude) → Claude main 머지. G-broad-1 마감.
+
+### 검증 로그 (D-043)
+`bash tests/run-tests.sh` **77/77 PASS**(default 71·metamorphic 3·negative 3) · `git diff --check` clean · `py_compile`·`bash -n` OK — 격리 worktree 재현. fresh 결합-소멸 실증 1종 + 음성검증 2종 직접 실행. 게이트/정책 0-diff 확인.
+
+---
+
 ## TASK-021 R-1 재리뷰 (D-042) — 보정 재제출 · 통과 · Claude main 머지
 
 **대상**: `codex/2026-07-11-task021-broad-intent` — 보정 `1c08afa` · 헤드 `c4655ad`. 멱등성: 검출 엔진(`616ff43`/`1b954c3`)은 D-041/A-0012 에서 실증 통과 — **R-1 보정 델타만** 재리뷰.
