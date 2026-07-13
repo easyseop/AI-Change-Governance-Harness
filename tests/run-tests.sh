@@ -79,6 +79,18 @@ def case_command(case):
     script = GATES[gate]
 
     if gate == "check-change-intent":
+        if data.get("fixture_dir"):
+            work_dir, rev_range = prepare_function_mapping_fixture(data["fixture_dir"])
+            script_path = f"{ROOT_DIR}/{script}"
+            intent_path = f"{ROOT_DIR}/{data['change_intent']}"
+            return [
+                "bash",
+                "-c",
+                (
+                    f"cd {work_dir!r} && "
+                    f"python3 {script_path!r} {rev_range!r} {intent_path!r} --json"
+                ),
+            ]
         return [
             "python3",
             script,
@@ -284,6 +296,27 @@ def validate_json_gate(case, result, exit_code):
             "scope_too_broad.reasons",
             result.get("scope_too_broad", {}).get("reasons"),
             expect["scope_too_broad_reasons"],
+        )
+    if "scope_top_level_dir_count" in expect:
+        assert_equal(
+            errors,
+            "scope_too_broad.top_level_dir_count",
+            result.get("scope_too_broad", {}).get("top_level_dir_count"),
+            expect["scope_top_level_dir_count"],
+        )
+    if "scope_coverage_percent" in expect:
+        assert_equal(
+            errors,
+            "scope_too_broad.coverage_percent",
+            result.get("scope_too_broad", {}).get("coverage_percent"),
+            expect["scope_coverage_percent"],
+        )
+    if "scope_covered_top_level_dirs" in expect:
+        assert_equal(
+            errors,
+            "scope_too_broad.covered_top_level_dirs",
+            result.get("scope_too_broad", {}).get("covered_top_level_dirs"),
+            expect["scope_covered_top_level_dirs"],
         )
 
     for key in ("frozen_touched", "protected_touched", "watched_touched"):
