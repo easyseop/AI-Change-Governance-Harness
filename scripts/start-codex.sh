@@ -33,7 +33,9 @@ git fetch origin --quiet 2>/dev/null || true
 # handoff-log 맨 위(최신) 줄이 '보정요청'이면 = 새 태스크가 아니라 재수정 차례.
 # 이땐 main 으로 강제 전환하지 않는다(작업 브랜치·미커밋 보존). Codex 가 그 브랜치에서 보정.
 TOP="$(git show origin/main:collab/handoff-log.md 2>/dev/null | grep -m1 '^- \[' || true)"
-if printf '%s' "$TOP" | grep -q '보정요청'; then
+# ★볼드 태그 '(**보정요청**)' 로만 감지 — 맨 문자열 '보정요청' 매칭 시, 산문에서 그 단어를
+#   언급만 해도(예: "재수정 대상 아님" 설명) 오탐한다. HEADC 추출과 동일 태그로 정밀화.
+if printf '%s' "$TOP" | grep -qF '(**보정요청**)'; then
   echo "⚠ 최신 인계 = 보정요청. 새 태스크가 아니라 '재수정' 차례입니다."
   echo "   $TOP"
   # 리뷰기록(A-XXXX·decisions·handoff 신호)은 origin/main 에만 있고 작업 브랜치엔 없다.
