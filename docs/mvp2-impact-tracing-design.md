@@ -1,7 +1,7 @@
 # MVP-2 설계 — 영향 추적(간접 영향 / sink 역도달성)
 
 > **소유:** Claude(판단/정책/리스크). 구현(게이트 코드) = Codex. 최종 승인 = 형.
-> **상태:** **Draft — 형 확정 대기** (2026-07-13). 형 확정 후 `Accepted` + 태스크 착수.
+> **상태:** **Accepted** (2026-07-13 — 형 §10 4항 전부 승인). Codex 에 TASK-022 인계.
 > **관련:** `change-governance-design.md` §3(3층 구조 — 이 문서가 3층을 구체화) · `TASKS.md`(태스크 022~025) · ADR-001(판정상태·coverage 정직) · ADR-002(result 스키마).
 > **확정된 방향(형 승인 2026-07-13):** ① @gov↔sink = **레벨 차등 하이브리드**(frozen 자동 sink + `@gov(sink=true)` 옵트인) · ② 시작 스코프 = **최소부터 래칫**(단일 diff·N=1~2홉·frozen 중심).
 
@@ -47,6 +47,31 @@ sink = "간접 영향까지 지켜야 할 종착 함수". 세 출처로 등록:
 **핵심 설계 의도:** 비싸고 과탐 잦은 콜그래프 분석을 **소수 고가치 sink에만** 건다. 전체 @gov 자동 sink(①안)는 공통 유틸이 모든 sink에서 도달 가능해져 과탐 폭발 → 기각. 옵트인으로 blast radius를 작성자·정책이 통제.
 
 `@gov(sink=true)` 문법은 기존 @gov 데코레이터 파싱(TASK-005 계열)을 확장하되 **하위호환**: `sink` 미지정 = 기존 동작(직접변경만).
+
+### 3.1 sink-registry 스키마 (Claude 확정 — TASK-022 구현 입력)
+
+@gov 를 못 다는 코드(외부 라이브러리 경유·코드생성·데코레이터 부착 불가)를 위한 **명시 등록 파일**. frozen 자동 sink·`@gov(sink=true)` 옵트인으로 커버 안 되는 경우만 쓴다(대부분 비어 있어도 됨).
+
+```yaml
+# policies/sink-registry.yaml — 명시 sink 등록 (MVP-2 간접영향 추적 대상)
+policy_version: "0.1-mvp2"
+defaults:
+  maturity: shadow          # 신규 sink 기본 = shadow (검증 후 enforcing 승격) — §6-3
+  hops: 1                   # 역도달 깊이 기본 N=1 (정책값, 하드코딩 금지 — TASK-025 AC#2)
+sinks:
+  - id: report_download                     # 안정 불변 식별자(리네임돼도 유지)
+    function: "app.reports.download_report"  # 정규화 함수명(module.path.Class.method) — 콜그래프 노드와 동일 규약
+    reason: "PII 리포트 반출 경계"           # 30초 판독용
+    owner: security-reviewer                 # 라우팅 대상
+    maturity: shadow                         # 생략 시 defaults
+    # hops: 2                                # 생략 시 defaults. 이 sink만 깊게 볼 때 개별 지정
+```
+
+**규칙(검증기 — TASK-022):**
+- `id`·`function`·`reason`·`owner` 필수. `function` 이 콜그래프 노드로 **해소 안 되면** 검증오류 기록(조용한 무시 금지) + 그 항목은 fail-safe(로드 실패를 clean 으로 취급 금지).
+- `maturity ∈ {enforcing, shadow}`. 무효값 → 검증오류 + **enforcing 보수 취급**(TASK-020 정합 — 완화 우회 방지).
+- 빈 `sinks:`·파일 부재 = 등록 sink 없음(정상, frozen 자동+옵트인만으로 동작).
+- **`function` 정규화 규약은 TASK-023 콜그래프 노드 정체성과 동일해야 한다** — 노드 식별 방식 확정 시 이 필드도 정합(구현 중 불일치 발견하면 Claude 에 Q 로 확인).
 
 ---
 
@@ -121,11 +146,11 @@ sink = "간접 영향까지 지켜야 할 종착 함수". 세 출처로 등록:
 
 ---
 
-## 10. 확정 체크 (형)
+## 10. 확정 체크 (형) — **전부 승인됨 (2026-07-13)**
 
-1. **@gov↔sink = 레벨 차등**(frozen 자동 + `@gov(sink=true)` 옵트인) — 이 방향? *(형 승인함)*
-2. **최소 스코프**(단일 diff·N=1·frozen 중심·shadow 시작) — 이대로? *(형 승인함)*
-3. **cross-commit·비-Python 명시 비범위**(§7) — 동의?
-4. **간접영향 층은 shadow 성숙도로 시작**(§6-3) — 동의?
+1. **@gov↔sink = 레벨 차등**(frozen 자동 + `@gov(sink=true)` 옵트인) — ✅ 승인.
+2. **최소 스코프**(단일 diff·N=1·frozen 중심·shadow 시작) — ✅ 승인.
+3. **cross-commit·비-Python 명시 비범위**(§7) — ✅ 승인.
+4. **간접영향 층은 shadow 성숙도로 시작**(§6-3) — ✅ 승인.
 
-→ OK 주시면 이 문서 `Accepted` 전환 + TASK-022~025 AC 확정 → Codex 인계(TASK-022 부터).
+→ **Accepted.** TASK-022 부터 Codex 착수. sink 등록 스키마(§3.1)는 Claude 확정분 — Codex 는 이 스키마로 구현.

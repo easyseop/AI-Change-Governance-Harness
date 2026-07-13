@@ -9,7 +9,8 @@
 **형 확정 결정(2026-07-13)**:
 - **D-044a @gov↔sink = 레벨 차등 하이브리드**(TASKS.md L256 🔴 미결 항목 해소): frozen 존 함수 = **자동 sink**, protected/@gov = `@gov(sink=true)` **옵트인**, 일반 @gov·protected 는 **sink 아님**(직접수정 게이트가 커버). 근거: 비싸고 과탐 잦은 콜그래프를 소수 고가치에만 걸어 신호대잡음 보존. ①안(@gov 전부 자동 sink)은 공통유틸 과탐 폭발로 기각.
 - **D-044b 최소 스코프부터 래칫**: 단일 diff · N=1홉 시작 · **shadow 성숙도로 시작** · 차단 절대 금지(승인요구 상한). cross-commit 누적·비-Python artifact·동적 완전복원은 **명시 비범위**(설계 §7).
-**산출**: `docs/mvp2-impact-tracing-design.md`(**Draft — 형 확정 대기**) + `TASKS.md` TASK-022~025(sink 등록→콜그래프 빌더→역도달성 게이트→과탐통제·고정적대세트) AC 확정. **아직 코드 착수 전** — 형이 설계 §10 확정 체크 OK 하면 Accepted 전환 후 Codex 에 TASK-022 인계.
+**산출**: `docs/mvp2-impact-tracing-design.md` + `TASKS.md` TASK-022~025(sink 등록→콜그래프 빌더→역도달성 게이트→과탐통제·고정적대세트) AC.
+**2026-07-13 형 §10 4항 전부 승인 → 설계 Accepted.** sink-registry 스키마(§3.1) Claude 확정분 추가. **다음 = Codex TASK-022 착수**(sink 등록 스키마 구현·판정 무변경). 이후 023→024→025 순차.
 **정직 리스크 기록**: 파이썬 콜그래프는 원리적으로 sound+precise 불가(동적 디스패치·getattr) → 근사만 가능. 설계는 "정적 해석호출은 잡고 못 푸는 건 coverage 갭으로 노출"(ADR-001 D4) + shadow 시작 + N 통제로 과탐 방어. 이 층은 하네스 최대 과탐 리스크 지점임을 명시.
 
 ## D-043 (2026-07-13) TASK-021 G-broad-1 follow-up — broad-intent 픽스처 라이브-repo 결합 제거 — **통과 · Claude main 머지**
