@@ -16,5 +16,6 @@ MVP-0 에서 만들 게이트:
 | `extract-gov-annotations.py` | TASK-008 | Python `@gov`/`__gov__` 주석을 추출·검증 |
 | `check-function-gov-level.py` | TASK-009 | 변경 함수와 base/head `@gov` effective level 을 판정 |
 | `bootstrap-sensitive-zones.py` | TASK-014 | 경로 규칙과 CODEOWNERS 로 sensitive-zones 초안 후보를 생성 |
+| `extract-sinks.py` | TASK-022 | MVP-2 간접영향 추적 대상 sink 목록을 등록·검증 |
 
 종료코드 약속: **0 통과 / 1 차단 / 2 승인필요**. 결정적(추정·LLM 금지).

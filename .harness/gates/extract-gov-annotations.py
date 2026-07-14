@@ -50,11 +50,20 @@ def literal_string(node):
     return None
 
 
+def literal_bool(node):
+    if isinstance(node, ast.Constant) and isinstance(node.value, bool):
+        return node.value
+    if isinstance(node, ast.Name) and node.id in ("true", "false"):
+        return node.id == "true"
+    return None
+
+
 def empty_annotation(line, errors=None):
     return {
         "level": None,
         "reason": None,
         "owner": None,
+        "sink": False,
         "line": line,
         "errors": list(errors or []),
         "unresolved": False,
@@ -79,6 +88,7 @@ def parse_gov_call(decorator):
     seen_fields = set()
     level_values = []
     level_field_seen = False
+    sink_values = []
     for keyword in call.keywords:
         if keyword.arg is None:
             parsed["errors"].append("invalid_syntax")
@@ -88,7 +98,7 @@ def parse_gov_call(decorator):
         field = keyword.arg
         if field == "level":
             level_field_seen = True
-        value = literal_string(keyword.value)
+        value = literal_bool(keyword.value) if field == "sink" else literal_string(keyword.value)
         if value is None:
             parsed["errors"].append("unresolved")
             parsed["unresolved"] = True
@@ -109,10 +119,13 @@ def parse_gov_call(decorator):
         elif field == "owner":
             if parsed["owner"] is None:
                 parsed["owner"] = value
+        elif field == "sink":
+            sink_values.append(value)
         else:
             parsed["errors"].append("unknown_field")
 
     parsed["level"] = strongest_level(level_values)
+    parsed["sink"] = any(sink_values)
     if parsed["level"] is None:
         if not level_field_seen:
             parsed["errors"].append("missing_level")
@@ -148,6 +161,8 @@ def merge_gov_annotations(annotations):
                 merged["reason"] = annotation["reason"]
             if annotation["owner"]:
                 merged["owner"] = annotation["owner"]
+        if annotation.get("sink"):
+            merged["sink"] = True
         else:
             if annotation["reason"] and not merged["reason"]:
                 merged["reason"] = annotation["reason"]
@@ -321,6 +336,7 @@ class GovVisitor(ast.NodeVisitor):
                     "level": own_level,
                     "reason": own_gov["reason"] if own_gov else None,
                     "owner": own_gov["owner"] if own_gov else None,
+                    "sink": own_gov["sink"] if own_gov else False,
                     "effective_level": effective_level,
                     "errors": own_gov["errors"] if own_gov else [],
                     "unresolved": own_gov["unresolved"] if own_gov else False,

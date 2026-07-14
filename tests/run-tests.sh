@@ -28,6 +28,7 @@ GATES = {
     "check-policy-change": ".harness/gates/check-policy-change.py",
     "bootstrap-sensitive-zones": ".harness/gates/bootstrap-sensitive-zones.py",
     "bootstrap-sensitive-functions": ".harness/gates/bootstrap-sensitive-functions.py",
+    "extract-sinks": ".harness/gates/extract-sinks.py",
 }
 ROOT_DIR = os.getcwd()
 
@@ -255,6 +256,19 @@ def case_command(case):
             command.extend(["--tables", data["tables"]])
         if data.get("previous"):
             command.extend(["--previous", data["previous"]])
+        return command
+
+    if gate == "extract-sinks":
+        command = [
+            "python3",
+            script,
+            data.get("repo", "."),
+            "--sensitive-zones",
+            data.get("sensitive_zones", "policies/sensitive-zones.yaml"),
+            "--sink-registry",
+            data.get("sink_registry", "policies/sink-registry.yaml"),
+            "--json",
+        ]
         return command
 
     raise ValueError(f"unsupported gate: {gate}")
@@ -801,6 +815,40 @@ def validate_bootstrap_sensitive_functions(case, result, exit_code):
     return errors
 
 
+def sink_summary(result):
+    return [
+        {
+            "id": sink.get("id"),
+            "function": sink.get("function"),
+            "source": sink.get("source"),
+            "maturity": sink.get("maturity"),
+            "hops": sink.get("hops"),
+            "owner": sink.get("owner"),
+        }
+        for sink in result.get("sinks", [])
+    ]
+
+
+def validate_extract_sinks(case, result, exit_code):
+    expect = case["expect"]
+    errors = []
+    assert_equal(errors, "exit_code", exit_code, expect["exit_code"])
+
+    if "sinks" in expect:
+        assert_equal(errors, "sinks", sink_summary(result), expect["sinks"])
+    if "error_kinds" in expect:
+        actual = [error.get("error") for error in result.get("errors", [])]
+        assert_equal(errors, "error_kinds", actual, expect["error_kinds"])
+    if "errors_present" in expect:
+        assert_equal(errors, "errors_present", bool(result.get("errors")), expect["errors_present"])
+    if expect.get("deterministic_stdout"):
+        first = run_command(case_command(case)).stdout
+        second = run_command(case_command(case)).stdout
+        assert_equal(errors, "deterministic_stdout", first, second)
+
+    return errors
+
+
 def main():
     with open("tests/cases.yaml", "r", encoding="utf-8") as stream:
         cases = yaml.safe_load(stream)["cases"]
@@ -852,6 +900,8 @@ def main():
                 errors = validate_bootstrap_sensitive_zones(case, result, completed.returncode)
             elif case["gate"] == "bootstrap-sensitive-functions":
                 errors = validate_bootstrap_sensitive_functions(case, result, completed.returncode)
+            elif case["gate"] == "extract-sinks":
+                errors = validate_extract_sinks(case, result, completed.returncode)
             else:
                 errors = validate_json_gate(case, result, completed.returncode)
         except Exception as error:
