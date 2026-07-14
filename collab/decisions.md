@@ -4,6 +4,18 @@
 
 ---
 
+## D-045 (2026-07-15) TASK-022 sink 등록 스키마 리뷰 — **보정요청**(@gov 병합 else 오결합 · 코드 머지 보류)
+**대상**: 브랜치 `codex/2026-07-15-task022-sink-registry`(헤드 `44380c0`, 구현 `4651ea6`) — 신규 게이트 `.harness/gates/extract-sinks.py`(403줄) + `extract-gov-annotations.py` sink 파싱 확장(+18줄) + fixtures `tests/fixtures/sinks/` + tests(cases +71·run-tests +50). **MVP-2 첫 게이트(sink 등록·판정 무변경)** — 설계 `docs/mvp2-impact-tracing-design.md` §3.1(D-044).
+**판정: 보정요청(1건 블로킹) — 코드 브랜치 머지 보류, 리뷰기록만 main 머지.**
+**심층·적대 리뷰 결과**:
+- **통과(실증)**: `run-tests.sh` 79/79. AC #1 파싱·**하위호환 무회귀**(비-sink 경로 행동보존 실증), #2 frozen 자동 sink(settlement 발화·auth 비발화), #3 registry 스키마(§3.1 — missing/unresolved/invalid-maturity 오류처리·조용한무시 없음·enforcing 보수), #4 일반@gov·protected 비-sink, #5 결정성 — fresh 적대입력으로 직접 실증. 보수적 개발 OK(`policies/*`·Claude 소유 무접촉; gov-gate 확장은 AC #1 인가 범위).
+- **🟠 R-1 블로킹**: `merge_gov_annotations` 에 sink 블록이 `if annotation_is_stronger: … else:` **사이에 삽입**돼 `else` 가 `if annotation.get("sink")` 에 **오결합**. 결과 = sink=True 인 (약한) annotation 의 **reason/owner backfill 스킵** → sink `owner`(§5 라우팅 대상)·`reason`(감사카드) **조용히 유실**. **적대 실증**: 다중 @gov 데코레이터(약한 쪽 `sink=true`+owner) → 헤드 출력 `owner=None`. **음성검증**: else 를 `annotation_is_stronger` 로 원복 시 owner 복원 = 오결합 load-bearing. sink **멤버십은 항상 정확**(top-level if)이라 누락/오탐은 없으나 라우팅 메타 손실 = **거버넌스 영향 논리결함** → 비차단 불가(CLAUDE §2B). 이 결함은 §2B 상설 적대세트("데코레이터/오버로드") 범주인데 **회귀 픽스처 부재** → 보정 시 다중-@gov 회귀 케이스 신설 요구.
+- **🟡 R-2 비차단(권장)**: `sink-registration-defaults` 테스트가 `--sensitive-zones` 기본값(라이브 `policies/sensitive-zones.yaml`)에 결합 → frozen 자동 sink 기대값이 라이브 정책의 settlement frozen 유지에 의존. **실증**: 대체 zones(auth=frozen) 주입 시 frozen sink 뒤바뀜. **TASK-021 G-broad-1(D-042/D-043)** 이 닫은 라이브결합 부류 — loud-fail 이라 비차단이나 fixture-local zones 로 결합 끊기 권장(또는 TASK-023 fixture 가드 G-sink-1 이월).
+- **비차단 관찰**: O-1 frozen+@gov(sink) 동시 = `gov:`·`frozen:` 이중 sink(maturity 상이) → TASK-024 강한 maturity 채택 고려. O-2 `normalize_hops` bool 통과.
+**보정요청 상세**: `collab/answers/A-0013.md`. 근거·실증 전문: `review-notes.md` TASK-022(D-045) 절. **멱등성**: `4651ea6`·`44380c0` 재처리 금지 — 재제출은 보정 델타만 재리뷰. **머지 판정(D-007)**: 리뷰기록(A-0013·decisions·review-notes·handoff)만 main 머지, **코드 브랜치는 보정까지 보류**.
+
+---
+
 ## D-044 (2026-07-13) MVP-2 영향추적(sink 역도달성) 설계 착수 — 방향 확정 (형 승인) · 설계문서 Draft
 **맥락**: MVP-1.5 코드·서류 완결 후 로드맵 갈림길에서 형이 **정공법(MVP-2)** 선택. MVP-2 = 간접 영향 추적층(sink 이 의존하는 상류 함수 수정을 현행이 완전 무탐지하는 구멍을 메움 — "다운로드에 @gov 달아도 `check_permission()` 수정은 못 잡는다"의 답을 "예, 승인요구로"로 전환).
 **형 확정 결정(2026-07-13)**:
