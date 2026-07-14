@@ -5,6 +5,29 @@
 
 ---
 
+## TASK-022 (D-045) — sink 등록 스키마 · **보정요청**(@gov 병합 else 오결합) · 코드 머지 보류
+
+**대상**: `codex/2026-07-15-task022-sink-registry` — 구현 `4651ea6`·헤드 `44380c0`. 신규 게이트 `extract-sinks.py` + `extract-gov-annotations.py` sink 파싱 확장 + `tests/fixtures/sinks/`. **MVP-2 첫 게이트(등록·판정무변경)** — 설계 §3.1(D-044).
+
+**의도한 위험 (무엇을 잡아야 하나)**: 이 게이트는 판정을 안 한다 — 다음 층(TASK-023 콜그래프·TASK-024 역도달성)의 **입력(sink 목록·라우팅 메타)** 을 결정적으로 산출한다. 그러므로 리뷰 초점 = ① sink **멤버십**(옵트인/frozen 자동/registry, 비-sink 제외)이 설계 레벨차등(D-044a)과 정확히 일치하나, ② 하위호환 무회귀(기존 @gov 동작 불변), ③ 하류가 소비할 **메타(owner=라우팅·reason=감사·maturity=성숙도)** 가 정확·결정적인가.
+
+**통과 (fresh 적대입력 실증)**: `run-tests.sh` 79/79.
+- **멤버십 정확**: fixture `download_report`(@gov sink=True)→`gov:` sink / `direct_only`(@gov sink 미지정)→비발화 / `services/settlement/*`(frozen)→`frozen:` sink / `services/auth/login`(protected)→비발화. 설계 레벨차등 그대로.
+- **하위호환 무회귀(실증)**: sink 미지정 annotation 은 `sink=False`. 비-sink 경로에서 병합은 행동보존 — stronger-branch 가 truthy reason/owner 를 먼저 채우고 backfill 은 empty 시에만 → 오결합 else 가 항상 실행돼도 non-sink 결과 동일(그래서 기존 테스트 무회귀·아래 결함은 sink 경로에만 발화).
+- **registry 스키마(§3.1)**: missing 필드→`missing_required_field`, 미해소 function→`unresolved_registry_function`+드롭(**조용한 무시 아님**), invalid maturity→`invalid_maturity`+**enforcing 보수**, 빈/부재→정상. exit 0(추출기·판정없음)이나 오류는 `errors[]` 로 노출(조용한 green 아님).
+- **결정성**: `os.walk` 정렬·`unique_sorted_sinks` 키정렬·오류 json-키정렬·`deterministic_stdout` 2회 동치.
+- **보수적 개발**: 신규 게이트+gov-gate 확장(AC #1 인가)+`tests/*`+README+공동소유만. `policies/*`·Claude 소유 무접촉.
+
+**🟠 R-1 결함 (블로킹) — else 오결합으로 sink owner/reason 유실**: `merge_gov_annotations` 에서 sink 블록이 기존 `if annotation_is_stronger: … else: …` **사이에 삽입**돼 `else` 가 `if annotation.get("sink")` 에 결합. → sink=True 인 **약한** annotation 의 reason/owner backfill 스킵. **적대 실증(픽스처 밖·다중 @gov 데코레이터)**: `@gov(level=frozen)` + `@gov(level=protected, reason="PII export", owner="security-reviewer", sink=true)` → 헤드 출력 `reason=None owner=None sink=True`. **음성검증(rig-and-revert)**: sink 라인을 if/else 밖으로 분리해 else 를 `annotation_is_stronger` 로 원복 → `reason="PII export" owner="security-reviewer"` 복원 = 오결합이 결함(우연 아님). **§2B 필수질문**: sink 멤버십은 항상 정확(top-level if)이라 누락/오탐 없음. 그러나 유실 `owner` 는 §5 라우팅 대상·`reason` 은 감사카드 필드 → 라우팅 fail-safe 강등 = 거버넌스 메타 손실. 명백한 제어흐름 버그(논리 비정합) → 비차단 불가. + §2B 상설 적대세트(데코레이터/오버로드) 범주인데 회귀 픽스처 없음. → **보정: sink 설정을 if/else 밖으로 분리 + 다중-@gov 회귀 픽스처 신설**(A-0013 R-1).
+
+**🟡 R-2 (비차단·권장)**: `sink-registration-defaults` 가 `--sensitive-zones` 기본값(라이브 `policies/sensitive-zones.yaml`)에 결합 → frozen 자동 sink 기대값이 라이브 정책 settlement frozen 유지에 의존. **실증**: 대체 zones(auth=frozen) 주입 → frozen sink 가 `services.auth.login` 로 뒤바뀜(기대 셋이 fixture 아닌 라이브에서 나옴). TASK-021 G-broad-1(D-042/D-043) 이 닫은 라이브결합 부류 — loud-fail 이라 비차단. **권장**: fixture-local `sensitive-zones.yaml` 로 결합 끊기(또는 TASK-023 fixture 가드 G-sink-1 이월).
+
+**비차단 관찰**: O-1 frozen+@gov(sink) 동시 = `gov:`·`frozen:` 이중 sink(maturity shadow vs enforcing) → TASK-024 강한 maturity 채택 고려. O-2 `normalize_hops` `isinstance(int)` 는 bool 통과(`hops:true`→1) 무해.
+
+**머지(D-007)**: **보류** — R-1 은 논리결함이라 코드 브랜치 머지 보류, 리뷰기록(A-0013·decisions·review-notes·handoff)만 main 머지. 재제출은 보정 델타만 재리뷰(멱등성 `4651ea6`·`44380c0` 재처리 금지).
+
+---
+
 ## TASK-021 G-broad-1 (D-043) — broad-intent 픽스처 라이브-repo 결합 제거 · 통과 · Claude main 머지
 
 **대상**: `codex/2026-07-13-task021-broad-fixture` — `2395c6e`(test) · 헤드 `82d598b`(docs). 범위 = **테스트 하네스만**(D-042 비차단 차기 AC 가드 G-broad-1). 게이트 판단 로직·정책 무접촉(0-diff 확인).
