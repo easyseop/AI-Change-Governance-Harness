@@ -1653,6 +1653,91 @@ cases:
       candidate_functions:
         - app/risky.py::load_customer
 
+  - name: gov-annotations-multi-sink-metadata
+    gate: extract-gov-annotations
+    input:
+      source_file: tests/fixtures/gov-annotations/multi_sink.py
+      display_path: app/reports.py
+    expect:
+      exit_code: 0
+      annotation_count: 1
+      annotation_metadata:
+        download_bulk:
+          sink: true
+          reason: PII bulk export
+          owner: security-reviewer
+
+  - name: sink-registration-defaults
+    gate: extract-sinks
+    input:
+      repo: tests/fixtures/sinks/repo
+      sink_registry: tests/fixtures/sinks/missing-sink-registry.yaml
+    expect:
+      exit_code: 0
+      sinks:
+        - id: gov:app.reports.download_report
+          function: app.reports.download_report
+          source: gov_annotation
+          maturity: shadow
+          hops: 1
+          owner: security-reviewer
+        - id: frozen:services.settlement.calculate.settle_async
+          function: services.settlement.calculate.settle_async
+          source: frozen_zone
+          maturity: enforcing
+          hops: 1
+          owner: null
+        - id: frozen:services.settlement.calculate.settle_batch
+          function: services.settlement.calculate.settle_batch
+          source: frozen_zone
+          maturity: enforcing
+          hops: 1
+          owner: null
+      errors_present: false
+      deterministic_stdout: true
+
+  - name: sink-registration-registry
+    gate: extract-sinks
+    input:
+      repo: tests/fixtures/sinks/repo
+      sink_registry: tests/fixtures/sinks/sink-registry.yaml
+    expect:
+      exit_code: 0
+      sinks:
+        - id: gov:app.reports.download_report
+          function: app.reports.download_report
+          source: gov_annotation
+          maturity: shadow
+          hops: 1
+          owner: security-reviewer
+        - id: invalid_maturity_registry
+          function: app.reports.registry_sink
+          source: sink_registry
+          maturity: enforcing
+          hops: 1
+          owner: security-reviewer
+        - id: report_registry
+          function: app.reports.registry_sink
+          source: sink_registry
+          maturity: enforcing
+          hops: 2
+          owner: security-reviewer
+        - id: frozen:services.settlement.calculate.settle_async
+          function: services.settlement.calculate.settle_async
+          source: frozen_zone
+          maturity: enforcing
+          hops: 1
+          owner: null
+        - id: frozen:services.settlement.calculate.settle_batch
+          function: services.settlement.calculate.settle_batch
+          source: frozen_zone
+          maturity: enforcing
+          hops: 1
+          owner: null
+      error_kinds:
+        - invalid_maturity
+        - unresolved_registry_function
+
   - name: metamorphic-import-alias
     group: metamorphic
     gate: extract-python-capabilities

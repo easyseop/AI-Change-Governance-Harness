@@ -259,7 +259,7 @@
 > **확정 방향(형 승인 2026-07-13)**: ① @gov↔sink = **레벨 차등**(frozen 자동 sink + `@gov(sink=true)` 옵트인, 일반 @gov·protected 는 sink 아님) · ② **최소 스코프**(단일 diff·N=1홉 시작·shadow 성숙도로 시작·래칫). **차단 절대 금지 → 승인요구 상한**.
 > **명시 비범위**(설계 §7): cross-commit 누적(→ Phase B/MVP-3, baseline 저장 필요) · 비-Python artifact 함수수준(→ 언어별 후속) · 동적 호출 완전복원(→ 영구 한계, coverage 노출).
 
-### TASK-022 ☐ sink 등록 스키마 (`@gov(sink=true)` + frozen 자동 + `sink-registry`)  (Codex)  *(MVP-2)*
+### TASK-022 ☑ sink 등록 스키마 (`@gov(sink=true)` + frozen 자동 + `sink-registry`)  (Codex)  *(MVP-2)*  — **통과·머지완료(D-045 보정요청 → D-046 재리뷰통과, 2026-07-15)**
 **목적**: 간접 영향 추적의 **대상(sink)** 을 등록만 한다(판정 미변경). 콜그래프를 소수 고가치에만 걸어 신호대잡음 보존.
 **수용기준**:
 1. `@gov(sink=true)` 파싱 — 기존 @gov 데코레이터 인식(TASK-005 계열) 확장, **하위호환**(`sink` 미지정=기존 동작·직접수정만, 무회귀).
@@ -268,17 +268,18 @@
 4. 일반 `@gov`(sink 미지정)·protected 존 함수는 **sink 아님**(직접수정 게이트가 커버). sink 집합에서 제외 검증.
 5. sink 목록을 결정적 산출(다음 태스크 입력). 픽스처: 옵트인 sink / frozen 자동 / 비-sink 각각 + 하위호환 무회귀 + 음성검증.
 
-### TASK-022b ☐ 배포용 킷(`kit/run.sh`) 교차리뷰 — **역할 역전(Codex 가 Claude 코드를 감사)**  *(D-046 후속)*
-**배경**: `kit/` (브랜치 `claude/governance-harness-setup-sum81n`, D-046)는 배포용 킷 초안 — 개발 게이트 13종을 co-located 로 묶고 `run.sh` 가 그 판정을 조립한다. **`run.sh` 의 verdict-combine·분석실패 처리 로직은 Claude 가 직접 작성**했다. 이 하네스의 상호견제 원칙("Claude 는 게이트 코드를 직접 작성하지 않는다")상, 판정 조립 로직도 예외가 아니다 — main 머지 직전 거버넌스 분류기가 이 자기작성·자기머지 시도를 실제로 차단했다(2026-07-15).
-**목적**: 평소와 반대로 **Codex 가 감사자**가 되어 `kit/run.sh`(및 `kit/sync-from-dev.sh`·`kit/bootstrap.sh`·`kit/selftest.sh`)를 판정 의도 대비 검수한다. 통과하면 Codex 가 `collab/answers/` 에 감사 기록을 남기고, Claude 가 그 기록을 근거로 `kit/` 를 main 에 머지한다(형식적 상호승인).
-**검수 대상·체크리스트**:
-1. `run.sh` 의 최종판정 = `max(카드3축, 능력게이트, 정책게이트)` (차단 > 승인 > 통과) 조립이 각 게이트의 실제 exit code 의미와 정확히 일치하는가 — 코드 대조.
-2. `run_gate` 헬퍼의 "분석 실패"(게이트 파일 부재·Traceback·비정상 종료) 판정이 **모든** 실패 모드를 잡는가 — 놓친 실패 형태(예: 무한루프·타임아웃) 있는지 적대적으로 찾을 것.
-3. `--policies` 오버라이드가 세 게이트(카드3축·능력·정책) 전부에 일관 적용되는지, 일부만 적용돼 조용히 불일치하는 경로는 없는지.
-4. `sync-from-dev.sh` 의 "dev 게이트 수 == kit 게이트 수" 누락검증이 **개수만** 보고 **내용 드리프트**(파일명 같은데 내용 다름)는 못 잡는 것 아닌지 — 필요시 개선 제안(체크섬 비교 등, 강제 아님·관찰로 기록 가능).
-5. fresh 적대 입력으로 직접 재현(우리 repo 밖 합성 시나리오 권장): frozen 접촉 차단·신규 능력 승인요구·정책완화 승인요구·게이트 삭제 시 분석실패 명시 — 각 rig-and-revert 1회 이상.
-**산출**: `collab/answers/A-00XX.md` (감사 결과) + `collab/decisions.md` D-XXX. 통과면 Claude 가 `kit/` 를 main 머지, 결함 발견 시 Claude 에게 보정요청(§2B 절차와 동일하게 역방향 적용).
-**비고**: 이 태스크는 TASKS.md 의 통상 "Codex 구현·Claude 검수" 흐름의 **역방향**이다 — 신규 기능 구현이 아니라 기존 셸 로직 감사이므로 AC 형식이 다른 태스크와 다르다.
+### TASK-022b ☐ 배포용 킷(`kit/run.sh`) 교차리뷰 + 개선 구현 — **역할 역전(Codex 가 Claude 코드를 감사·보강)**  *(D-047)*
+**대상 브랜치**: `claude/2026-07-15-kit-draft` (kit/ 만 최신 main 위에 얹은 클린 브랜치·충돌 없음). **설계 근거**: D-047.
+**배경**: `kit/` 는 배포용 킷 초안(D-047) — 개발 게이트 13종을 co-located 로 묶고 `run.sh` 가 그 판정을 조립한다. **`run.sh` 의 verdict-combine 로직은 Claude 가 직접 작성**했다. 이 하네스의 상호견제 원칙("Claude 는 게이트 코드를 직접 작성하지 않는다")상 판정 조립 로직도 예외가 아니다 — main 머지 직전 거버넌스 분류기가 이 자기작성·자기머지 시도를 실제로 차단했다(2026-07-15). 그래서 **Codex 가 감사자**가 되어 검수하고, 아래 2개 개선을 **Codex 가 구현**한다(verdict-affecting 셸을 Codex 가 저자하게 되어 상호견제 정합).
+**목적**: `kit/run.sh`(및 `sync-from-dev.sh`·`bootstrap.sh`·`selftest.sh`)를 판정 의도 대비 감사 + 적대검증(D-046 시절 5/5)이 짚은 2갭을 보강한다. 통과·보강 후 Codex 가 `collab/answers/` 에 기록, Claude 가 그 근거로 `kit/` 를 main 머지(상호승인).
+**검수 + 구현 체크리스트**:
+1. **[감사]** `run.sh` 최종판정 = 가장 센 것(차단 > 승인 > 통과), `max(ge_exit, cap_exit, pol_exit)` 조립이 각 게이트 실제 exit code 의미(카드3축 0/1/2·능력 0/2·정책 0/2)와 정확히 일치하는가 — 코드 대조. 특히 `HAS_RANGE`(`..` 없으면 능력·정책 게이트 생략) 조건이 조용한 누락을 만들지 않는지.
+2. **[구현 — 갭①: 분석실패 정직성]** 현재 `run.sh` 는 **게이트 크래시(exit 1/2)와 진짜 판정을 구분 못 한다**(적대검증 실증: 게이트 `.py` 삭제 시 python 크래시 exit 를 판정으로 오흡수 + 감사카드가 Traceback 으로 대체돼도 종료코드가 가림 — ADR-001 D4 정직성 위배). 게이트 파일 부재·`Traceback`·비정상 종료(0/1/2 밖)를 **'분석 실패'로 명시하고 fail-closed(승인요구)+tool_owner 표시**하도록 보강. 놓친 실패모드(무한루프·타임아웃 등)도 적대적으로 점검.
+3. **[구현 — 갭②: 대상 repo 정책 오버라이드]** 현재 `run.sh` 는 킷 정책(`kit/policies`)만 집행 → **대상 repo 자기선언 frozen 이 무보호 통과하는 온보딩 함정**(적대검증 실증). `--policies <dir>` 옵션 추가해 대상 repo 정책 집행 가능하게(3게이트 전부 일관 적용).
+4. **[감사/관찰]** `sync-from-dev.sh` 의 "dev 게이트 수 == kit 게이트 수" 누락검증이 **개수만** 보고 **내용 드리프트**(파일명 같은데 내용 다름)는 못 잡음 — 개선 제안(체크섬 비교 등, 강제 아님·차기 관찰로 기록 가능).
+5. **[실증]** fresh 적대 입력(우리 repo 밖 합성 시나리오)으로 rig-and-revert 재현: frozen 차단·신규 능력 승인요구·정책완화 승인요구·게이트 삭제 시 **분석실패 명시**(갭① 보강 검증)·`--policies` 로 대상 frozen 보호(갭② 보강 검증) — 각 1회 이상.
+**산출**: `collab/answers/A-00XX.md`(감사·보강 결과) + `collab/decisions.md` D-XXX + 보강 커밋을 `claude/2026-07-15-kit-draft` 에 push(같은 브랜치). 통과면 Claude 가 `kit/` 를 main 머지.
+**비고**: 통상 "Codex 구현·Claude 검수" 의 **역방향**(Codex 가 Claude 코드 감사 + verdict-affecting 개선 구현). 신규 기능이 아니라 셸 감사·보강이라 AC 형식이 다르다. 유실 경위: D-046 시절 개선(run_gate·--policies)을 커밋(7e1bfe8)했으나 브랜치 재작성 중 미푸시로 유실 → 재구현을 Codex 몫으로 돌려 상호견제 정합.
 
 ### TASK-023 ☐ intra-repo 정적 콜그래프 빌더 (결정론·이름기반 + coverage 정직)  (Codex)  *(MVP-2)*
 **목적**: repo 내 함수 호출 엣지를 결정적으로 빌드. 판정 미연결(그래프 산출만).
