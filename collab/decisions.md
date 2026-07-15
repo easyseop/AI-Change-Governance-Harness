@@ -4,6 +4,17 @@
 
 ---
 
+## D-051 (2026-07-15) 킷 외부 오픈소스 E2E 검증 + 실사용 함정 2건 안내 보강 (형 지시)
+**맥락**: 형 지시("오픈소스 들고와서 변경 여러 군데 해보고 kit 테스트")로 실제 외부 저장소 4종에 킷을 소급 적용 — click·requests·flask(Python)·gorilla-mux(Go), 각각 얕은 클론 후 통제된 변경 시나리오 주입.
+**결과(실측)**:
+- **Python 3종 × 4시나리오 = 12/12 기대 일치**: S1 무해(in-scope 주석)→PASS · S2 신규능력(subprocess.run 주입)→APPROVAL(`subprocess_exec` 정확 표기) · S3 선언범위 밖(README)→APPROVAL(out_of_scope) · S4 frozen 존 접촉→BLOCKED. 판정 게이트 4층이 외부 코드에서 정확히 분리 동작.
+- **Go 한계 실측(정직)**: 경로층(frozen 차단) 언어 무관 작동 ✓ / **능력층은 `os/exec`·`exec.Command` 미탐(PASS)** — "능력·함수층 Python 전용" 알려진 갭의 외부 실증. 비-Python repo 의 방어선 = 경로층만.
+**발견된 실사용 함정 2건(킷 버그 아님 — 도입자 혼동 지점)**:
+1. `change-intent.yaml` 스키마 오기: `allowed_paths` 를 top-level 에 두면(정식은 `change_intent:` 아래 중첩) 게이트가 빈 선언으로 읽어 **전 변경 out_of_scope(승인요구)**. fail-safe 라 구멍은 아니나 "왜 다 승인요구?" 혼란 — 테스트 중 검증자(Claude 본인)도 두 번 헛짚음.
+2. 감사카드 기본 출력이 대상 repo 안(`change-evidence.yaml`) → `git add -A` 시 커밋에 섞여 **다음 diff 오염**(실측 재현).
+**처리(상호견제 준수 — 분류기 차단 수용)**: Claude 가 러너 `⚠` 안내 2건을 직접 구현·실증(경고 3케이스·selftest 무회귀)까지 했으나, `run.sh` 는 **D-050 에서 Codex 저자로 확정된 파일** — 커밋 시점에 거버넌스 분류기가 자기작성·자기머지로 차단(정당). **우회하지 않고 코드는 원복**, 스펙을 `collab/answers/A-0017.md` 로 Codex 에 이월(비차단·TASK-023 세션 동반 권장·~10분). 이번 머지는 **문서·표시정합만**: `kit/README.md` 함정 2건("Codex 구현 대기" 명시)·E2E 결과 절 + `TASKS.md` TASK-022b ☐→☑(D-048~050) + 본 결정 + A-0017.
+**교훈 기록**: 같은 세션에서 같은 파일로 두 번째 차단 — "안내 echo 정도는 괜찮겠지"도 게이트-인접 파일이면 예외 없음이 이 하네스의 규칙이고, 분류기가 그걸 정확히 집행했다(dogfooding 실증).
+
 ## D-050 (2026-07-15) TASK-022b R-1 보정 재제출 재리뷰 — **통과 · Claude main 머지 (TASK-022b 완결 · 배포용 킷 v0 수용)**
 **대상**: 브랜치 `claude/2026-07-15-kit-draft` — 보정 델타 `f1bf533`(fix) + `39c2285`(docs). 통과분 `00bde19`·`88a7d4e` 는 D-049(A-0016) 멱등성대로 재론 없음 — 델타만 재리뷰.
 **판정: 통과 — 비민감 → Claude `main` 머지·push 완료. TASK-022b 완결, 킷 v0(kit/) main 수용.**
