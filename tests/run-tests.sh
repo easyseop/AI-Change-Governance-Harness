@@ -30,6 +30,7 @@ GATES = {
     "bootstrap-sensitive-functions": ".harness/gates/bootstrap-sensitive-functions.py",
     "extract-sinks": ".harness/gates/extract-sinks.py",
     "extract-callgraph": ".harness/gates/extract-callgraph.py",
+    "check-indirect-impact": ".harness/gates/check-indirect-impact.py",
 }
 ROOT_DIR = os.getcwd()
 
@@ -277,6 +278,21 @@ def case_command(case):
             "python3",
             script,
             data.get("repo", "."),
+            "--json",
+        ]
+
+    if gate == "check-indirect-impact":
+        work_dir, rev_range = prepare_function_mapping_fixture(data["fixture_dir"])
+        return [
+            "python3",
+            f"{ROOT_DIR}/{script}",
+            rev_range,
+            "--repo",
+            work_dir,
+            "--sensitive-zones",
+            f"{ROOT_DIR}/{data.get('sensitive_zones', 'policies/sensitive-zones.yaml')}",
+            "--sink-registry",
+            f"{ROOT_DIR}/{data['sink_registry']}",
             "--json",
         ]
 
@@ -916,6 +932,54 @@ def validate_extract_callgraph(case, result, exit_code):
     return errors
 
 
+def impact_summary(records):
+    return [
+        {
+            "sink_id": record.get("sink_id"),
+            "changed_function": record.get("changed_function"),
+            "path": record.get("path"),
+            "hops": record.get("hops"),
+            "reviewer": record.get("reviewer"),
+            "maturity": record.get("maturity"),
+        }
+        for record in records
+    ]
+
+
+def validate_indirect_impact(case, result, exit_code):
+    expect = case["expect"]
+    errors = []
+    assert_equal(errors, "exit_code", exit_code, expect["exit_code"])
+    assert_equal(errors, "verdict", result.get("verdict"), expect["verdict"])
+
+    if "indirect_impact" in expect:
+        assert_equal(
+            errors,
+            "indirect_impact",
+            impact_summary(result.get("indirect_impact", [])),
+            expect["indirect_impact"],
+        )
+    if "shadow_hits" in expect:
+        assert_equal(
+            errors,
+            "shadow_hits",
+            impact_summary(result.get("shadow_hits", [])),
+            expect["shadow_hits"],
+        )
+    if "reviewer_required" in expect:
+        assert_equal(errors, "reviewer_required", result.get("reviewer_required"), expect["reviewer_required"])
+    if "fail_closed_present" in expect:
+        assert_equal(errors, "fail_closed_present", bool(result.get("fail_closed")), expect["fail_closed_present"])
+    if "errors_present" in expect:
+        assert_equal(errors, "errors_present", bool(result.get("errors")), expect["errors_present"])
+    if expect.get("deterministic_stdout"):
+        first = run_command(case_command(case)).stdout
+        second = run_command(case_command(case)).stdout
+        assert_equal(errors, "deterministic_stdout", first, second)
+
+    return errors
+
+
 def main():
     with open("tests/cases.yaml", "r", encoding="utf-8") as stream:
         cases = yaml.safe_load(stream)["cases"]
@@ -971,6 +1035,8 @@ def main():
                 errors = validate_extract_sinks(case, result, completed.returncode)
             elif case["gate"] == "extract-callgraph":
                 errors = validate_extract_callgraph(case, result, completed.returncode)
+            elif case["gate"] == "check-indirect-impact":
+                errors = validate_indirect_impact(case, result, completed.returncode)
             else:
                 errors = validate_json_gate(case, result, completed.returncode)
         except Exception as error:
