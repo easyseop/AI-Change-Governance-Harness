@@ -53,6 +53,7 @@ python3 .harness/gates/check-new-capabilities.py <base>..<head> policies/sensiti
 python3 .harness/gates/check-policy-change.py <base>..<head> --json
 python3 .harness/gates/bootstrap-sensitive-zones.py path/to/repo --rules path/to/bootstrap-rules.yaml --json
 python3 .harness/gates/bootstrap-sensitive-functions.py path/to/repo policies/sensitive-capabilities.yaml --json
+python3 .harness/gates/extract-sinks.py path/to/repo --json
 bash tests/run-tests.sh
 bash tests/mutation-check.sh
 ```
