@@ -26,7 +26,7 @@ change-intent.yaml (변경 의도 선언)  +  git diff
 docs/        설계·협업 프로토콜 (Claude)
 policies/    sensitive-zones · change-intent · approval-routing (Claude 초안, 🟡 조직값)
 templates/   change-evidence 감사카드 스키마 (Claude)
-.harness/gates/  게이트 3종 (Codex 구현)
+.harness/gates/  게이트 (Codex 구현)
 tests/       fixtures + 러너 (Codex)
 collab/      questions·answers·decisions·handoff-log·locks·needs-human (협업)
 summaries/   날짜별 작업 요약 (푸시마다 누적)
@@ -55,6 +55,7 @@ python3 .harness/gates/bootstrap-sensitive-zones.py path/to/repo --rules path/to
 python3 .harness/gates/bootstrap-sensitive-functions.py path/to/repo policies/sensitive-capabilities.yaml --json
 python3 .harness/gates/extract-sinks.py path/to/repo --json
 python3 .harness/gates/extract-callgraph.py path/to/repo --json
+python3 .harness/gates/check-indirect-impact.py <base>..<head> --json
 bash tests/run-tests.sh
 bash tests/mutation-check.sh
 ```

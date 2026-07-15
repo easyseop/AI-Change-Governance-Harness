@@ -1807,6 +1807,94 @@ cases:
       errors_present: false
       deterministic_stdout: true
 
+  - name: indirect-impact-direct
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/indirect-impact/direct
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones.yaml
+      sink_registry: tests/fixtures/indirect-impact/direct/sink-registry.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      indirect_impact:
+        - sink_id: report_download
+          changed_function: app.utils.check_permission
+          path:
+            - app.reports.download_report
+            - app.utils.check_permission
+          hops: 1
+          reviewer: security-reviewer
+          maturity: enforcing
+      shadow_hits: []
+      reviewer_required:
+        - security-reviewer
+      fail_closed_present: false
+      errors_present: false
+      deterministic_stdout: true
+
+  - name: indirect-impact-shadow
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/indirect-impact/shadow
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones.yaml
+      sink_registry: tests/fixtures/indirect-impact/shadow/sink-registry.yaml
+    expect:
+      verdict: pass
+      exit_code: 0
+      indirect_impact: []
+      shadow_hits:
+        - sink_id: report_download_shadow
+          changed_function: app.utils.check_permission
+          path:
+            - app.reports.download_report
+            - app.utils.check_permission
+          hops: 1
+          reviewer: security-reviewer
+          maturity: shadow
+      reviewer_required: []
+      fail_closed_present: false
+      errors_present: false
+
+  - name: indirect-impact-two-hop-boundary
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/indirect-impact/two-hop-boundary
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones.yaml
+      sink_registry: tests/fixtures/indirect-impact/two-hop-boundary/sink-registry.yaml
+    expect:
+      verdict: pass
+      exit_code: 0
+      indirect_impact: []
+      shadow_hits: []
+      reviewer_required: []
+      fail_closed_present: false
+      errors_present: false
+
+  - name: indirect-impact-analysis-error
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/indirect-impact/analysis-error
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones.yaml
+      sink_registry: tests/fixtures/indirect-impact/analysis-error/sink-registry.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      indirect_impact:
+        - sink_id: report_download
+          changed_function: app.utils.check_permission
+          path:
+            - app.reports.download_report
+            - app.utils.check_permission
+          hops: 1
+          reviewer: security-reviewer
+          maturity: enforcing
+      shadow_hits: []
+      reviewer_required:
+        - security-reviewer
+        - tool_owner
+      fail_closed_present: true
+      errors_present: true
+
   - name: metamorphic-import-alias
     group: metamorphic
     gate: extract-python-capabilities
