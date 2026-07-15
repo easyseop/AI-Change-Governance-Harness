@@ -1808,6 +1808,7 @@ cases:
       deterministic_stdout: true
 
   - name: indirect-impact-direct
+    group: adversarial
     gate: check-indirect-impact
     input:
       fixture_dir: tests/fixtures/indirect-impact/direct
@@ -1894,6 +1895,142 @@ cases:
         - tool_owner
       fail_closed_present: true
       errors_present: true
+
+  - name: indirect-impact-method-sink
+    group: adversarial
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/indirect-impact/method-sink
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones.yaml
+      sink_registry: tests/fixtures/indirect-impact/method-sink/sink-registry.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      indirect_impact:
+        - sink_id: method_report_export
+          changed_function: app.utils.check_permission
+          path:
+            - app.reports.ReportService.export
+            - app.utils.check_permission
+          hops: 1
+          reviewer: security-reviewer
+          maturity: enforcing
+      shadow_hits: []
+      reviewer_required:
+        - security-reviewer
+      fail_closed_present: false
+      errors_present: false
+
+  - name: indirect-impact-frozen-auto-sink
+    group: adversarial
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/indirect-impact/frozen-auto
+      sensitive_zones: tests/fixtures/indirect-impact/frozen-auto/sensitive-zones.yaml
+      sink_registry: tests/fixtures/indirect-impact/frozen-auto/sink-registry.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      indirect_impact:
+        - sink_id: frozen:app.settlement.core.transfer
+          changed_function: app.utils.compute_fee
+          path:
+            - app.settlement.core.transfer
+            - app.utils.compute_fee
+          hops: 1
+          reviewer: settlement-reviewer
+          maturity: enforcing
+      shadow_hits: []
+      reviewer_required:
+        - settlement-reviewer
+      fail_closed_present: false
+      errors_present: false
+
+  - name: indirect-impact-gov-opt-in-boundary
+    group: adversarial
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/indirect-impact/gov-opt-in
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones.yaml
+      sink_registry: tests/fixtures/indirect-impact/gov-opt-in/sink-registry.yaml
+    expect:
+      verdict: pass
+      exit_code: 0
+      indirect_impact: []
+      shadow_hits:
+        - sink_id: gov:app.reports.download_report
+          changed_function: app.utils.check_permission
+          path:
+            - app.reports.download_report
+            - app.utils.check_permission
+          hops: 1
+          reviewer: security-reviewer
+          maturity: shadow
+      reviewer_required: []
+      fail_closed_present: false
+      errors_present: false
+
+  - name: indirect-impact-consumer-overdetect-boundary
+    group: adversarial
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/indirect-impact/consumer-overdetect
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones.yaml
+      sink_registry: tests/fixtures/indirect-impact/consumer-overdetect/sink-registry.yaml
+    expect:
+      verdict: pass
+      exit_code: 0
+      indirect_impact: []
+      shadow_hits: []
+      reviewer_required: []
+      fail_closed_present: false
+      errors_present: false
+
+  - name: indirect-impact-dynamic-coverage
+    group: adversarial
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/indirect-impact/dynamic-coverage
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones.yaml
+      sink_registry: tests/fixtures/indirect-impact/dynamic-coverage/sink-registry.yaml
+    expect:
+      verdict: pass
+      exit_code: 0
+      indirect_impact: []
+      shadow_hits: []
+      reviewer_required: []
+      fail_closed_present: false
+      errors_present: false
+      coverage_unevaluated:
+        - caller: app.reports.dispatch
+          kind: dynamic
+          name: getattr(...)
+
+  - name: indirect-impact-conditional-same-name
+    group: adversarial
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/indirect-impact/conditional-same-name
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones.yaml
+      sink_registry: tests/fixtures/indirect-impact/conditional-same-name/sink-registry.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      indirect_impact:
+        - sink_id: conditional_report
+          changed_function: app.conditional.fallback
+          path:
+            - app.reports.download_report
+            - app.conditional.load_value
+            - app.conditional.fallback
+          hops: 2
+          reviewer: security-reviewer
+          maturity: enforcing
+      shadow_hits: []
+      reviewer_required:
+        - security-reviewer
+      fail_closed_present: false
+      errors_present: false
 
   - name: metamorphic-import-alias
     group: metamorphic

@@ -972,6 +972,16 @@ def validate_indirect_impact(case, result, exit_code):
         assert_equal(errors, "fail_closed_present", bool(result.get("fail_closed")), expect["fail_closed_present"])
     if "errors_present" in expect:
         assert_equal(errors, "errors_present", bool(result.get("errors")), expect["errors_present"])
+    if "coverage_unevaluated" in expect:
+        actual = [
+            {
+                "caller": item.get("caller"),
+                "kind": item.get("kind"),
+                "name": item.get("name"),
+            }
+            for item in result.get("coverage", {}).get("unevaluated", [])
+        ]
+        assert_equal(errors, "coverage.unevaluated", actual, expect["coverage_unevaluated"])
     if expect.get("deterministic_stdout"):
         first = run_command(case_command(case)).stdout
         second = run_command(case_command(case)).stdout
