@@ -231,7 +231,10 @@ class CallVisitor(ast.NodeVisitor):
     def visible_local_names(self, name):
         names = [name]
         for index in range(len(self.parents), 0, -1):
-            names.append(".".join(self.parents[:index] + [name]))
+            prefix = ".".join(self.parents[:index])
+            if prefix in self.class_names:
+                continue
+            names.append(f"{prefix}.{name}")
         return names
 
 

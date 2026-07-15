@@ -1751,9 +1751,12 @@ cases:
         - app.conditional.load_value
         - app.conditional.load_value
         - app.conditional.normalize
+        - app.overloads.C.caller
         - app.overloads.C.foo
+        - app.overloads.C.sink
         - app.overloads.bar
         - app.overloads.foo
+        - app.overloads.sink
         - app.reports.ReportService.export
         - app.reports.download_report
         - app.reports.dynamic_dispatch
@@ -1768,6 +1771,9 @@ cases:
         - caller: app.conditional.load_value
           callee: app.conditional.normalize
           call: normalize
+        - caller: app.overloads.C.caller
+          callee: app.overloads.sink
+          call: sink
         - caller: app.overloads.bar
           callee: app.overloads.foo
           call: foo
