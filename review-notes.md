@@ -1347,3 +1347,30 @@ R-2 델타 = 게이트 3줄 + 픽스처 5줄 + cases 6줄. `policies/*`·Claude 
 
 ### 검증 로그
 `tests/run-tests.sh` 81/81(worktree `wt-task023`) · 음성검증(class-스코프 skip 되돌림→callgraph 단독 FAIL 80/81) · fresh 적대 4종(bare method-caller·깊은중첩·메서드내중첩함수·형제클래스 unresolved) R-2 정답 · **R-3 fresh 실증** repoB/repoD(module-qualified→클래스메서드 오염, governed `reports.export` 유실) · **후보수정 실증**(build_module_locals 메서드 skip 2줄 → 81/81 유지 + repoB/repoD 교정, repoA 무회귀) — 전부 격리 worktree.
+
+---
+
+## TASK-023 R-3 보정 재제출 재재재리뷰 — R-3 **해소 확인** · **통과 · Claude main 머지** (MVP-2 TASK-023 완결) (2026-07-16, D-055 · A-0020 §R-3 해소)
+
+- **대상**: 브랜치 `codex/2026-07-15-task023-callgraph`, 헤드 `456a965`, R-3 보정 impl `5c58b2c`. 선행 D-054/A-0020(R-3 보정요청). **재리뷰 범위 = R-3 보정 델타(코드 부분)만** — R-2 bare 해소·엔진 본체·getattr·조건부 union·결정성·kit 는 D-052~D-054 통과 확정, 재론 없음. 멱등성: `5c58b2c`·`456a965` 재처리 금지.
+- **판정 = 통과, Claude `main` 머지·push. 더 할 일 없음.**
+
+### 델타 한 줄씩 (R-3 = A-0020 권장 ①+③ 채택)
+- `extract-callgraph.py` `build_module_locals`(285–286): `if "." in node["name"]: continue` **2줄** 추가. `node["name"]` 이 scoped name(`C.sink`·`Outer.Inner.deep`) 이면 skip → `module.<basename>` 후보에서 메서드·중첩 def 제외. Python 의미상 `mod.<name>` 은 모듈 속성=최상위 함수만 → 메서드 등록은 **항상 틀림**이므로 제외가 정론. 메서드는 여전히 `definitions` 직접경로(220–221)로 `mod.C.sink` 해소(무손실).
+- `overloads.py` **+7**: `from app import overloads as overloads_module` + `qualified_bar(): return overloads_module.sink()`(자기-import 로 module-qualified 경로 발화).
+- `cases.yaml` **+4**: 노드 `app.overloads.qualified_bar`, 엣지 `qualified_bar -> app.overloads.sink`(call=`app.overloads.sink`). → §2B 동명 오버로드 **3변형 상설화 완성**(bare-module R-1 · bare-method R-2 · module-qualified R-3).
+
+### 실증 (격리 worktree `wt-task023` · 헤드 `456a965`)
+- `py_compile` OK · `TEST_CASE_NAME=callgraph-repo-static` 1/1 · `tests/run-tests.sh` **81/81 PASS**.
+- **적대 재검증(fresh·픽스처 밖)** — module-qualified 동명 오버로드 4종 전부 정답:
+  - repoB `from app import mod; mod.sink()`(`class C` 를 `def sink` **앞** 배치 → 정렬운 배제) → `run -> app.mod.sink` ✓
+  - **repoD(거버넌스)** governed 모듈 `reports.export`(settlement) vs `class Report.export`, `reports.export()` → `run -> app.reports.export` ✓ (**settlement 엣지 보존 = TASK-024 역도달 민감 포착 복구**, R-3 이 유실시키던 바로 그 엣지)
+  - repoE 대상이 **메서드만** 존재 `only.onlym()` → **`unresolved`** ✓ (거짓엣지 주입 없음 · 조용한 오염 폐쇄)
+  - repoF 깊은중첩 `Outer.Inner.deep` vs 모듈 `deep`, `d.deep()` → `run -> app.deep.deep` ✓
+- **rig-and-revert 음성검증**: 2줄 가드 제거 → 동일 4종이 각각 `C.sink`/`Report.export`/`C.onlym`/`Outer.Inner.deep` 로 **오염 재현**(∴ fresh 입력 비-rigged, 버그 실재 확인) + `callgraph-repo-static` **단독 FAIL(0/1)**; 원복 **81/81 PASS** = 수정·픽스처 load-bearing(항상-PASS 아님).
+
+### 판정·하류·보수적 개발
+- **하류(TASK-024 역도달)**: module-qualified governed sink(`reports.export` 류)로의 caller 엣지가 복구 → 역도달 민감 변경 포착의 구멍 폐쇄. 형제 메서드로의 거짓엣지·조용한 오염 제거.
+- **보수적 개발(§1)**: 코드 델타 게이트 2줄 + 픽스처 7줄 + cases 4줄 = 수정계약 정확 준수. bare 경로·getattr·union·판정로직 무변경. `policies/*`·`docs/*`·`CLAUDE.md`·`templates/*` name-only diff **무접촉**. scope-creep 없음. 함께 유입된 A-0018/19/20·D-052~054 는 **재제출 전 `origin/main` merge**(D-050 함정 **이번엔 회피** — Codex 가 지침대로 병합)로 들어온 기존 기록(변조 없음).
+- **비차단**: O-1(중첩 데코레이터/기본인자 유실 — 틀린 엣지 없이 누락만) TASK-025 고정 적대세트 이월 유지(§2B 필수질문=아니오).
+- **머지(D-007)**: 정적 콜그래프 분석 게이트 = **비민감**(정산·인증/인가·암호화·DB migration·infra 무해당) → 구현자(Codex)≠머지자(Claude)로 Claude `main` 머지. **MVP-2 TASK-023 완결 → 다음 = TASK-024 역도달성.**
