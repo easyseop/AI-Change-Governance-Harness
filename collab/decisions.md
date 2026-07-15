@@ -4,6 +4,19 @@
 
 ---
 
+## D-046 (2026-07-15) TASK-022 R-1 보정 재제출 재리뷰 — **통과 · Claude main 머지 (TASK-022 완결)**
+**대상**: 브랜치 `codex/2026-07-15-task022-sink-registry` — 보정 델타 `f18cc32`(+ docs `95b4399`). 원 구현 `4651ea6`·헤드 `44380c0` 는 D-045(A-0013)에서 재론 불필요.
+**판정: 통과 — 비민감 → Claude `main` 머지·push 완료. TASK-022 완결.**
+**R-1(D-045) 해소 확인**: A-0013 요청 보정 ①②(제어흐름 분리 + 상설 회귀 픽스처) **모두 채택**.
+- **① 제어흐름 분리 ✓**: `merge_gov_annotations` 의 sink 누적(`if annotation.get("sink"): merged["sink"]=True`)을 강도병합 `if annotation_is_stronger: … else:` **밖 top-level if 로 분리** → `else` backfill 이 `annotation_is_stronger` 에만 재결합. 약한 `sink=true` annotation 의 reason/owner 유실 폐쇄, sink 멤버십 정확성은 유지.
+- **② 상설 회귀 픽스처 ✓**: `tests/fixtures/gov-annotations/multi_sink.py`(다중 @gov: 강한 frozen 무-reason + 약한 protected `sink=true`+reason/owner) + 케이스 `gov-annotations-multi-sink-metadata`(신규 harness 단언 `annotation_metadata`)가 병합 후 `sink:true`·`reason:PII bulk export`·`owner:security-reviewer` 동시 단언. §2B 데코레이터 적대세트 상설화.
+**심층·적대 재검증**: `run-tests.sh` **80/80 PASS**. **음성검증(rig-and-revert)**: 픽스를 버그형태로 원복 시 신규 케이스 **단독 FAIL(79/80)**·게이트 출력 `reason=None owner=None`(R-1 정확 재현) = 회귀 픽스처 load-bearing 실증. **fresh 적대입력 3종(픽스처 밖)**: ADV1(3중@gov·최약에만 sink+메타)→전부 보존 / ADV2(최강 sink 무reason·약한쪽 메타)→backfill 보존 / ADV3(sink 전무)→하위호환 무회귀. **하류(TASK-024 라우팅)**: 유실되던 owner(§5 라우팅)·reason(감사카드) 보존 확인 → fail-safe 강등 구멍 폐쇄.
+**보수적 개발(§1) OK**: 델타 = `extract-gov-annotations.py`(2줄 이동)·`cases.yaml`(+14)·`run-tests.sh`(+11)·신규 픽스처·공동소유. `policies/*`·Claude 소유·`extract-sinks.py`·sinks 픽스처 무접촉. scope-creep 없음.
+**잔여(비차단)**: R-2(frozen-auto-sink 테스트의 라이브 `policies/sensitive-zones.yaml` 결합)는 Codex 가 **TASK-023 fixture 가드 G-sink-1 이월**(A-0013 허용) — loud-fail 이라 구멍 아님·**TASK-023 착수 시 G-sink-1 결정적 고정 처리**. O-1(이중 sink)·O-2(`normalize_hops` bool)는 TASK-024 AC 고려/인지.
+**상세**: `collab/answers/A-0014.md`. 근거·실증 전문: `review-notes.md` TASK-022 R-1 재리뷰(D-046) 절. **멱등성**: `f18cc32`·`95b4399` 재처리 금지. **머지(D-007)**: 비민감(하네스 sink 추출·판정 무변경 D-044·게이트 계열 Claude 머지 선례 D-034·039·040·042·043) → 구현자≠머지자로 Claude 머지.
+
+---
+
 ## D-045 (2026-07-15) TASK-022 sink 등록 스키마 리뷰 — **보정요청**(@gov 병합 else 오결합 · 코드 머지 보류)
 **대상**: 브랜치 `codex/2026-07-15-task022-sink-registry`(헤드 `44380c0`, 구현 `4651ea6`) — 신규 게이트 `.harness/gates/extract-sinks.py`(403줄) + `extract-gov-annotations.py` sink 파싱 확장(+18줄) + fixtures `tests/fixtures/sinks/` + tests(cases +71·run-tests +50). **MVP-2 첫 게이트(sink 등록·판정 무변경)** — 설계 `docs/mvp2-impact-tracing-design.md` §3.1(D-044).
 **판정: 보정요청(1건 블로킹) — 코드 브랜치 머지 보류, 리뷰기록만 main 머지.**

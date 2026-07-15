@@ -5,6 +5,42 @@
 
 ---
 
+## TASK-022 R-1 재리뷰 (D-046) — 보정 재제출 **통과** · Claude main 머지 (TASK-022 완결)
+
+**대상**: 보정 델타 `f18cc32`(+docs `95b4399`). **재리뷰 범위 = 델타만**(멱등성 — A-0013 지시). 원 구현·`extract-sinks.py`·sinks 픽스처는 D-045 에서 fresh 적대입력으로 통과 확인·재론 안 함.
+
+**델타 내용**: `merge_gov_annotations` 2줄 이동(sink 누적을 강도병합 `if/else` 밖 top-level if 로 분리) + 신규 회귀 픽스처 `tests/fixtures/gov-annotations/multi_sink.py` + 케이스 `gov-annotations-multi-sink-metadata`(harness 신규 단언 `annotation_metadata`) + 공동소유.
+
+**R-1(D-045) 해소 — 한 줄씩 확인**:
+```python
+        if annotation.get("sink"):          # top-level if — 매 iteration 독립, sink 멤버십 정확성 유지
+            merged["sink"] = True
+        if annotation_is_stronger:          # 강도병합 (원래대로)
+            ...
+        else:                               # ← 이제 annotation_is_stronger 에 재결합 (backfill 복원)
+            if annotation["reason"] and not merged["reason"]: merged["reason"] = annotation["reason"]
+            if annotation["owner"] and not merged["owner"]:   merged["owner"] = annotation["owner"]
+```
+A-0013 요청 보정 ①(제어흐름 분리)·②(상설 회귀 픽스처) **정확히 이행**. sink 여부와 backfill 여부의 오결합 제거 → 약한 `sink=true` annotation 의 reason/owner 유실 폐쇄.
+
+**적대 검증(무발견≠통과 — 능동적으로 깨봄)**:
+- **전체 스위트 80/80 PASS**(머지 후 트리 재실행도 80/80).
+- **음성검증(rig-and-revert)**: 픽스를 버그형태(sink 블록을 `if/else` 사이로 원복)로 되돌림 → `gov-annotations-multi-sink-metadata` **단독 FAIL(79/80)**, 게이트 픽스처 출력 `{reason:None, owner:None, sink:True}` = 원 R-1 결함 정확 재현. **신규 회귀 픽스처가 오결합을 잡는 load-bearing 실증**(항상-PASS 아님).
+- **fresh 적대입력 3종(픽스처 밖, gate 직접 실행)**:
+  - **ADV1**(3중 @gov, 최약 annotation 에만 `sink=true`+reason/owner) → `{level:frozen, reason:'export PII', owner:'sec-team', sink:True}` — 원 R-1 시나리오를 3-데코레이터로 확장했으나 전부 보존.
+  - **ADV2**(최강 frozen 에 `sink=true`·reason 무, 약한 protected 에 reason/owner) → `{reason:'weak reason', owner:'weak-owner', sink:True}` — backfill 경로 정상.
+  - **ADV3**(sink 전무 — 하위호환) → `{reason:'r', owner:'o', sink:False}` — 비-sink 경로 행동보존 무회귀.
+- **하류 영향(§2B)**: 유실되던 owner(§5 라우팅 대상)·reason(감사카드)이 다중-@gov 에서 보존 → TASK-024 라우팅 fail-safe(tool_owner) 강등 구멍 폐쇄 확인.
+- **harness 단언 vacuous 아님 확인**: `annotation_metadata` 검증은 name 매칭 dict 비교라 name 불일치/누락 시 `{}` vs 기대 → FAIL. 버그형태에서 실제 FAIL 로 실증.
+
+**보수적 개발(§1)**: 델타 파일 경계 준수 — `policies/*`·Claude 소유·`extract-sinks.py`·sinks 픽스처 무접촉. 요청한 보정만 정확히. scope-creep/over-reach 없음.
+
+**잔여(비차단·보정 불요)**: R-2(frozen-auto-sink 테스트의 라이브 `policies/sensitive-zones.yaml` 결합) → Codex 가 **TASK-023 G-sink-1 이월**(A-0013 허용). loud-fail·구멍 아님. **TASK-023 착수 시 G-sink-1 로 결정적 고정 처리 잊지 말 것.** O-1(이중 sink)·O-2(bool hops)는 TASK-024 AC 고려/인지.
+
+**판정**: 통과·비민감 → Claude `main` 머지·push. **TASK-022 완결 → 다음 TASK-023.** 멱등성 `f18cc32`·`95b4399` 재처리 금지.
+
+---
+
 ## TASK-022 (D-045) — sink 등록 스키마 · **보정요청**(@gov 병합 else 오결합) · 코드 머지 보류
 
 **대상**: `codex/2026-07-15-task022-sink-registry` — 구현 `4651ea6`·헤드 `44380c0`. 신규 게이트 `extract-sinks.py` + `extract-gov-annotations.py` sink 파싱 확장 + `tests/fixtures/sinks/`. **MVP-2 첫 게이트(등록·판정무변경)** — 설계 §3.1(D-044).
