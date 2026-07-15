@@ -52,6 +52,19 @@ run_pipe_latency_case(){
   fi
 }
 
+run_absent_case(){
+  local name="$1" unexpected_text="$2" runner="$3" repo="$4"; shift 4
+  local output
+  TOTAL=$((TOTAL + 1))
+  output="$(ACGH_GATE_TIMEOUT_SECONDS=1 bash "$runner" HEAD~1..HEAD --repo "$repo" "$@" 2>&1)"
+  if ! printf '%s\n' "$output" | grep -q -- "$unexpected_text"; then
+    echo "PASS $name"; PASS=$((PASS + 1))
+  else
+    echo "FAIL $name (unexpected=$unexpected_text)"
+    printf '%s\n' "$output" | tail -12 | sed 's/^/  /'
+  fi
+}
+
 # 실제 차단이 승인요구보다 강하게 조립되는지 + 대상 repo 정책 override.
 repo="$WORK/frozen"; make_repo "$repo"
 cat >"$repo/policies/sensitive-zones.yaml" <<'YAML'
@@ -82,6 +95,27 @@ repo="$WORK/pipe-latency"; make_repo "$repo"
 printf '\n# harmless change\n' >>"$repo/app/service.py"
 git -C "$repo" add . && git -C "$repo" commit -qm changed
 run_pipe_latency_case pipe-capture-no-timeout-delay "$KIT/run.sh" "$repo"
+
+# 사용성 안내: change-intent 스키마 오기와 감사카드 repo 내부 출력을 알려야 하며 판정은 바꾸지 않는다.
+repo="$WORK/intent-top-level"; make_repo "$repo"
+cat >"$repo/change-intent.yaml" <<'YAML'
+requirement_id: KIT-TEST
+allowed_paths: ["app/**"]
+forbidden_paths: []
+YAML
+printf '\n# harmless change\n' >>"$repo/app/service.py"
+git -C "$repo" add . && git -C "$repo" commit -qm top-level-intent
+run_case intent-schema-top-level-warning 2 'allowed_paths 가 top-level' "$KIT/run.sh" "$repo" --output "$WORK/top-level-card.yaml"
+
+repo="$WORK/intent-valid"; make_repo "$repo"
+printf '\n# harmless change\n' >>"$repo/app/service.py"
+git -C "$repo" add . && git -C "$repo" commit -qm valid-intent
+run_absent_case intent-schema-valid-no-warning 'allowed_paths 가 top-level' "$KIT/run.sh" "$repo" --output "$WORK/valid-card.yaml"
+
+repo="$WORK/output-warning"; make_repo "$repo"
+printf '\n# harmless change\n' >>"$repo/app/service.py"
+git -C "$repo" add . && git -C "$repo" commit -qm default-output
+run_case default-output-warning 0 '감사카드가 대상 repo 안에 생성됨' "$KIT/run.sh" "$repo"
 
 # 정책 규칙 삭제는 메타 게이트가 승인요구로 올린다.
 repo="$WORK/policy"; make_repo "$repo"

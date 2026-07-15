@@ -54,6 +54,37 @@ HAS_RANGE=0; case "$RANGE" in *..*) HAS_RANGE=1;; esac
 cd "$REPO" || { echo "✗ 대상 repo 없음: $REPO"; exit 66; }
 INTENT=""; [ -f change-intent.yaml ] && INTENT="change-intent.yaml"
 
+warn_change_intent_shape(){
+  [ -n "$INTENT" ] || return 0
+  python3 - "$INTENT" <<'PY'
+import sys
+try:
+    import yaml
+    with open(sys.argv[1], "r", encoding="utf-8") as stream:
+        data = yaml.safe_load(stream) or {}
+except Exception:
+    sys.exit(0)
+
+change_intent = data.get("change_intent")
+change_intent_is_dict = isinstance(change_intent, dict)
+allowed = change_intent.get("allowed_paths") if change_intent_is_dict else None
+top_level_keys = {"allowed_paths", "forbidden_paths", "requirement_id"}
+has_top_level_intent_keys = bool(top_level_keys.intersection(data))
+
+if has_top_level_intent_keys and (not change_intent_is_dict or not allowed):
+    print("⚠ change-intent.yaml: allowed_paths 가 top-level 에 있음 — 'change_intent:' 아래 중첩이 정식 스키마(현재 빈 선언으로 읽혀 전 변경이 승인요구됨). 예: policies/change-intent.example.yaml")
+elif change_intent_is_dict and not allowed:
+    print("⚠ change-intent.yaml: allowed_paths 가 비어있음 — 전 변경이 out_of_scope(승인요구)로 처리됨")
+PY
+}
+
+warn_output_location(){
+  case "$OUT" in
+    /*) return 0;;
+    *) echo "⚠ 감사카드가 대상 repo 안에 생성됨($OUT) — 커밋에 섞이면 다음 diff 오염. --output <외부경로> 또는 .gitignore 등록 권장";;
+  esac
+}
+
 hr(){ printf '─%.0s' $(seq 1 66); echo; }
 GATE_TIMEOUT_SECONDS="${ACGH_GATE_TIMEOUT_SECONDS:-60}"
 case "$GATE_TIMEOUT_SECONDS" in
@@ -115,6 +146,8 @@ echo "════════════════════════�
 echo "  대상 repo : $(basename "$(pwd)")"
 echo "  변경 범위 : $RANGE"
 [ -n "$INTENT" ] || echo "  (change-intent.yaml 없음 — 의도이탈 층은 생략)"
+warn_change_intent_shape
+warn_output_location
 hr
 
 # ── 감사카드 + 3축(의도·민감경로·@gov 함수) 판정 ────────────────────

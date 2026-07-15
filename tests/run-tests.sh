@@ -29,6 +29,7 @@ GATES = {
     "bootstrap-sensitive-zones": ".harness/gates/bootstrap-sensitive-zones.py",
     "bootstrap-sensitive-functions": ".harness/gates/bootstrap-sensitive-functions.py",
     "extract-sinks": ".harness/gates/extract-sinks.py",
+    "extract-callgraph": ".harness/gates/extract-callgraph.py",
 }
 ROOT_DIR = os.getcwd()
 
@@ -270,6 +271,14 @@ def case_command(case):
             "--json",
         ]
         return command
+
+    if gate == "extract-callgraph":
+        return [
+            "python3",
+            script,
+            data.get("repo", "."),
+            "--json",
+        ]
 
     raise ValueError(f"unsupported gate: {gate}")
 
@@ -860,6 +869,53 @@ def validate_extract_sinks(case, result, exit_code):
     return errors
 
 
+def validate_extract_callgraph(case, result, exit_code):
+    expect = case["expect"]
+    errors = []
+    assert_equal(errors, "exit_code", exit_code, expect["exit_code"])
+
+    if "nodes" in expect:
+        assert_equal(errors, "nodes", [node.get("id") for node in result.get("nodes", [])], expect["nodes"])
+    if "edges" in expect:
+        actual = [
+            {
+                "caller": edge.get("caller"),
+                "callee": edge.get("callee"),
+                "call": edge.get("call"),
+            }
+            for edge in result.get("edges", [])
+        ]
+        assert_equal(errors, "edges", actual, expect["edges"])
+    if "unresolved_calls" in expect:
+        actual = [
+            {
+                "caller": item.get("caller"),
+                "kind": item.get("kind"),
+                "name": item.get("name"),
+            }
+            for item in result.get("unresolved_calls", [])
+        ]
+        assert_equal(errors, "unresolved_calls", actual, expect["unresolved_calls"])
+    if "coverage_unevaluated" in expect:
+        actual = [
+            {
+                "caller": item.get("caller"),
+                "kind": item.get("kind"),
+                "name": item.get("name"),
+            }
+            for item in result.get("coverage", {}).get("unevaluated", [])
+        ]
+        assert_equal(errors, "coverage.unevaluated", actual, expect["coverage_unevaluated"])
+    if "errors_present" in expect:
+        assert_equal(errors, "errors_present", bool(result.get("errors")), expect["errors_present"])
+    if expect.get("deterministic_stdout"):
+        first = run_command(case_command(case)).stdout
+        second = run_command(case_command(case)).stdout
+        assert_equal(errors, "deterministic_stdout", first, second)
+
+    return errors
+
+
 def main():
     with open("tests/cases.yaml", "r", encoding="utf-8") as stream:
         cases = yaml.safe_load(stream)["cases"]
@@ -913,6 +969,8 @@ def main():
                 errors = validate_bootstrap_sensitive_functions(case, result, completed.returncode)
             elif case["gate"] == "extract-sinks":
                 errors = validate_extract_sinks(case, result, completed.returncode)
+            elif case["gate"] == "extract-callgraph":
+                errors = validate_extract_callgraph(case, result, completed.returncode)
             else:
                 errors = validate_json_gate(case, result, completed.returncode)
         except Exception as error:
