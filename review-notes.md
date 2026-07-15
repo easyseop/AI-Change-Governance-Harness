@@ -1237,3 +1237,113 @@ R-3 은 Codex 불이행 아님 — A-0006 계약 정확 이행. 인라인 주석
 
 ### 검증 로그
 `bash tests/run-tests.sh` **50/50 PASS** · `git diff --check` clean · `py_compile` OK — 전부 격리 worktree 재현. fresh 오류입력 3종·정상 대조 1종·음성검증 2종 직접 실행.
+
+---
+
+## TASK-023 intra-repo 정적 콜그래프 빌더 — **보정요청** (2026-07-15, D-052 · A-0018)
+
+**대상**: 브랜치 `codex/2026-07-15-task023-callgraph` 헤드 `92b2955`(구현 `2a6cd09`). **판정**: 보정요청 1건(🟠 블로킹) + 비차단 관찰 1건. 코드 머지 보류, 리뷰기록만 main.
+
+### 통과분 (fresh 적대입력 실증 · 격리 worktree 재현)
+- `tests/run-tests.sh` **81/81** · `kit/tests/run-entrypoint-tests.sh` **9/9** · `tests/mutation-check.sh` **131 기대변조 PASS** 전부 재현.
+- **AC #1 해소**: `from app.utils import check_permission as allow`→`allow(user)`=`app.utils.check_permission` 엣지 · `from app.conditional import load_value`·동일모듈 bare 호출 정상.
+- **AC #2 미해소 정직 노출**: `getattr(obj,name)()`→엣지 미추정·`unresolved_calls`+`coverage.unevaluated` 에 `kind=dynamic name=getattr(...)`. 내부 `getattr` builtin 은 BUILTIN_NAMES 로 걸러 미노출.
+- **AC #3 결정론**: fixture 3회 md5 **동일**(`df9433d8c45372760a6da1bdb9a67087`).
+- **AC #4 조건부 def union**: `if/else` 두 `load_value` 가 동일 id 로 합쳐져 엣지 `normalize`+`fallback` 양쪽. (단 **다른-id 동명**(모듈함수 vs 클래스메서드)은 union 아님 → R-1.)
+- **음성검증**: `callgraph-repo-static` 기대 엣지 `format_report`→`WRONG_TARGET` 변조 → 케이스 **단독 FAIL(80/81)** = load-bearing.
+- **동반 G-sink-1**: extract-sinks 2케이스가 `--sensitive-zones tests/fixtures/sinks/sensitive-zones.yaml`(fixture-local). fixture zone `services/settlement/**` frozen 이 `frozen:services.settlement.calculate.settle_async` auto-sink 실제 구동=inert 아님. 라이브 정책 결합 절단 달성(D-046 R-2 이월분).
+- **동반 A-0017**: `warn_change_intent_shape`·`warn_output_location` echo 전용·판정 무영향(배너와 게이트 조립 사이·`sys.exit(0)` 은 python 서브프로세스만). 진입점 3케이스(경고 exit2·정상 무경고 absent·출력경고 exit0) load-bearing.
+- **보수적 개발**: `policies/*`·Claude 소유 무접촉·scope-creep 없음. 변경=신규 게이트+tests+동반 2건.
+
+### 🟠 R-1 (블로킹) — bare 모듈함수 호출이 동명 클래스메서드로 오해소 → 진짜 엣지 유실
+- **위치**: `extract-callgraph.py` `CallVisitor.visible_local_names()`(231–237) + `resolve_repo_function()` `sorted(set(candidates))[0]`(229).
+- **기전**: `visible_local_names` 가 모듈 내 **모든 클래스**에 `{class}.{name}` 후보 무조건 추가. 후보 최소(사전순) pick → 대문자 클래스명(0x43)이 소문자 함수명(0x66)보다 먼저 → 모듈함수 `foo`+`C.foo` 공존 시 bare `foo()`→`C.foo` 오해소.
+- **fresh 실증 `adv1/app/m.py`**: `def foo`+`class C: def foo`+`def bar: return foo()` → 산출 `app.m.bar -> app.m.C.foo`(틀림), 정답 `app.m.bar -> app.m.foo` **부재**(`present: False`).
+- **load-bearing 검증**: 클래스 확장 루프 제거한 사본 → `adv1` 교정(`bar->app.m.foo`) **+ 공식 fixture 7엣지 원본과 바이트 동일** = 이 루프는 정답 엣지에 대해 load-bearing 0, 오염만.
+- **왜 비차단 불가(§2B)**: 모듈함수 sink 시 TASK-024 역도달 상류에서 호출자 누락 = 민감 변경 미포착(하류 직접 구멍). §2B 필수 "동명 오버로드" 적대세트가 제출 픽스처에 없음(conditional.py=동일-id 조건부만). AC #1·#4 불충족.
+- **보정 ①권장**: ① 클래스 확장 루프 제거 ② 스코프조건+동명 union ③ 상설 회귀 픽스처(모듈함수 vs 동명 클래스메서드→모듈함수 엣지).
+
+### 🟡 O-1 (비차단) — 중첩 데코레이터/기본인자 호출 조용한 유실
+- `visit_function` 이 `node.body` 만 방문 → 중첩 정의의 `decorator_list`·기본인자 호출(함수 caller 명확) 유실. fresh `adv4`: `outer` 안 `@make_wrapper def inner` → `outer->make_wrapper` 부재·unresolved 에도 없음.
+- 모듈-스코프는 정당 out-of-scope, 중첩은 좁고 틀린 엣지는 안 만듦 → 비차단. R-1 과 함께 고치거나 **TASK-025 고정 적대세트(데코레이터/기본인자)로 이월**(본 관찰이 AC 근거).
+
+### 검증 로그
+`tests/run-tests.sh` 81/81 · `kit/tests/run-entrypoint-tests.sh` 9/9 · `tests/mutation-check.sh` 131 · fixture md5 3회 동일 · fresh 적대입력 adv1/adv2/adv3/adv4 직접 실행 · 음성검증(엣지 변조 단독 FAIL) — 전부 격리 worktree `wt023` 재현.
+
+---
+
+## TASK-023 R-1 보정 재제출 재리뷰 — R-1 **부분해소** · R-2 잔여 **보정요청** (2026-07-15, D-053 · A-0019)
+
+**대상**: 브랜치 `codex/2026-07-15-task023-callgraph` 헤드 `86eef67`(보정 impl `df7e54c`, docs `86eef67`). 선행 D-052/A-0018. **재리뷰 범위 = R-1 보정 델타(`df7e54c`) + 신설 픽스처만**(멱등성: `2a6cd09`·`92b2955` 재처리 금지). **판정**: R-1 의 **모듈-caller 케이스는 정확히 해소**되었으나, **동일 결함 클래스의 method-caller 변형이 잔존**(R-2, 🟠 블로킹) → **코드 머지 보류·리뷰기록만 main.**
+
+### 보정 델타 (정확히 A-0018 권장 ①+③ 채택)
+- `df7e54c`: `visible_local_names` 의 클래스 확장 루프 **2줄 제거**(권장 ①) + 상설 회귀 픽스처 `tests/fixtures/callgraph/repo/app/overloads.py`(모듈 `foo`+`class C: def foo`+`def bar: return foo()`) 신설(권장 ③) + `cases.yaml` 에 노드 3·엣지 `bar->foo` 단언. O-1 은 A-0018 허용대로 TASK-025 이월(handoff 명시).
+- **보수적 개발 OK**: 델타 = 게이트 2줄 삭제 + 신규 픽스처 1 + cases 6줄. `policies/*`·Claude 소유·엔진 다른 경로 무접촉. scope-creep 없음.
+
+### ✅ R-1 모듈-caller 케이스 해소 확인 (fresh 적대입력 · 격리 worktree 재현)
+- `tests/run-tests.sh` **81/81 PASS**. 비교 로직 `assert_equal`(actual != expected)=**정렬 리스트 완전일치** → nodes/edges 완전집합 단언(spurious 엣지 즉시 FAIL). 강함.
+- **음성검증(rig-and-revert)**: 제거한 클래스 확장 루프를 재삽입 → `callgraph-repo-static` **단독 FAIL(0/1)**, 원복 81/81 = 픽스처+수정 load-bearing(항상-PASS 아님).
+- **fresh 픽스처 밖 입력**: 모듈 `foo` + `class C: def foo` + **class Zebra: def foo**(사전순 뒤 클래스로 순서독립 확인) + `def bar: return foo()` → 산출 엣지 `[app.m.bar -> app.m.foo]`, spurious `bar->` 엣지 **0개**. A-0018 원 R-1(adv1) 교정 확인.
+
+### 🟠 R-2 (블로킹·잔여) — bare 호출이 **method 스코프 안에서** 동명 클래스메서드로 오해소 (R-1 과 동일 결함 클래스)
+- **위치**: `CallVisitor.visible_local_names()`(231–235). 클래스 확장 루프는 제거됐으나, `for index … self.parents[:index]` 의 **parents-prefix 확장이 여전히 클래스명을 포함**한다. `CallVisitor.visit_ClassDef`(179)가 클래스명을 `self.parents` 에 push하기 때문.
+- **기전**: caller 가 **메서드**면 `parents` 에 클래스명이 있어, bare 호출이 `{Class}.{name}` 후보를 만든다. `sorted(set)[0]` 이 대문자 클래스명(0x43)을 소문자 모듈함수(0x73 등)보다 먼저 pick → **형제 메서드로 오해소**. Python 의미상 **메서드 본문의 bare 이름은 클래스 스코프를 건너뛰고**(LEGB, 클래스 스코프 제외) 모듈/전역으로 바인딩되므로 이 해소는 **항상 틀림**.
+- **fresh 실증(픽스처 밖)**: `def sink()`(모듈) + `class C: def sink(self); def caller(self): return sink()` → 산출 엣지 **`app.m.C.caller -> app.m.C.sink`(틀림·silently wrong)**, 정답 `C.caller -> 모듈 sink` **부재**, `unresolved_calls` 에도 **없음**(조용한 오염 — R-1 보다 나쁨: 누락이 아니라 *틀린 엣지 주입*). `self.sink()` 는 정직히 unresolved(정합), bare 만 오염.
+- **왜 R-1 과 동일한 거버넌스 하류 구멍(§2B 필수질문=예)**: 모듈함수 `sink` 가 실제 sink 면, 이를 bare 로 호출하는 **메서드 caller 가 TASK-024 역도달 상류에서 누락**되고(정답 엣지 유실) 동시에 형제 메서드로 **거짓 엣지가 주입**된다 = 민감 변경 미포착. A-0018 R-1 이 없애려던 바로 그 실패모드("진짜 caller→sink 엣지 유실")를 method-caller 경로에서 그대로 재현.
+- **거짓 커버리지 함정**: 신설 `overloads.py` 픽스처는 **모듈-caller `bar` 만** 단언(caller 가 모듈함수). method-caller 변형은 **미커버**라, "동명 오버로드 상설 픽스처를 추가했다"는 표기가 §2B 가 명령하는 커버리지를 **절반만** 채우면서 전체를 채운 듯한 확신을 준다.
+- **왜 비차단 불가**: §2B "비차단 판정 전 필수질문 → 거버넌스에 직접 구멍 → 비차단 금지". 동일 결함 클래스이며 *틀린 엣지를 주입*하므로 R-1 보다 오히려 강한 오염. 저비용·국소로 닫힌다(아래 실증).
+- **보정(택1·①권장, 소델타)**: ① `visible_local_names` 에서 **클래스 스코프를 건너뛴 parents-prefix만** 후보화(bare 이름은 클래스 스코프 미바인딩). 예: prefix 가 `self.class_names` 에 있으면 skip. **Claude 사본 실증**: 이 3줄 변경으로 `tests/run-tests.sh` **81/81 유지** + method-caller 케이스가 `C.caller -> 모듈 sink` 로 교정. ② method-caller 케이스에서 동명 충돌 시 pick-smallest 대신 모듈/전역 우선(또는 union). ③ **상설 회귀 픽스처를 method-caller 변형으로 확장**: 같은 모듈에 모듈 `sink`+`class C{def sink; def caller: sink()}` → 엣지가 **모듈 sink 로** 가고 `C.caller->C.sink` 는 없음을 단언. (§2B "동명 오버로드" 상설화 완성.)
+
+### 🟡 O-1 (비차단·유지) — 중첩 데코레이터/기본인자 호출 조용한 유실
+- A-0018 O-1 그대로. Codex 가 A-0018 허용대로 **TASK-025 고정 적대세트로 이월** 선언(handoff `86eef67`). 재확인·수용. 틀린 엣지 없이 누락만 → 비차단 유지.
+
+### 재제출 지침 (멱등)
+- 재리뷰는 **R-2 보정 델타 + method-caller 회귀 픽스처만**. 통과분(R-1 모듈-caller 해소·엔진 본체·getattr·결정성·조건부 union·G-sink-1·A-0017)은 재검 없음. 멱등성: `df7e54c`·`86eef67` **재처리 금지**.
+- ⚠️ **재제출 전 `origin/main` merge 필수**. 이번 재제출도 `origin/main`(D-052/A-0018 리뷰기록 포함) 미병합 상태로 올라와, 브랜치가 main 대비 `A-0018.md`·D-052·review-notes 를 **삭제**하는 형태였다(D-050 함정 2회째). 머지자가 3-way 로 보존 가능하나(main 단독 추가분 유지), **다음 재제출은 반드시 `origin/main` 먼저 merge**(collab-protocol §5.1).
+
+### 검증 로그
+`tests/run-tests.sh` 81/81(worktree `wt-task023`) · 음성검증(클래스 확장 루프 재삽입→callgraph 케이스 단독 FAIL 0/1) · fresh 적대입력: 모듈-caller(Zebra 순서독립·spurious 0), method-caller(`C.caller->C.sink` 오염 재현), `self.sink()`(정직 unresolved) 직접 실행 · **후보수정 실증**(class-스코프 skip 3줄 → 81/81 유지 + method-caller 교정) — 전부 격리 worktree 재현.
+
+---
+
+## TASK-023 R-2 보정 재제출 재재리뷰 — R-2 **해소 확인** · R-3 신규 **보정요청** (2026-07-15, D-054 · A-0020)
+
+- **대상**: 브랜치 `codex/2026-07-15-task023-callgraph`, 헤드 `a6756c1`, R-2 보정 impl `25f9b32`. 선행 D-053/A-0019(R-2).
+- **재리뷰 범위(멱등)**: R-2 보정 델타(`25f9b32`) + method-caller 픽스처만. 통과분 재검 없음.
+- **판정**: **보정요청 (1건 블로킹 · 🟠 R-3)**. R-2 는 정확 해소, 그러나 동명 오버로드 세트를 module-qualified 변형으로 돌려 세 번째 인스턴스 노출. **코드 머지 보류 · 리뷰기록만 main.**
+
+### ✅ R-2 (bare method-caller) 해소 확인 — A-0019 권장 ①+③ 정확 수용
+- **코드**: `visible_local_names`(231–238) 이 `prefix in self.class_names` 면 `continue` → 메서드 caller 의 bare 이름이 `{Class}.{name}` 후보를 안 만듦(LEGB 정합).
+- **음성검증(rig-and-revert)**: 클래스-스코프 skip 3줄을 원버그로 되돌림 → `callgraph-repo-static` 단독 FAIL(80/81), 원복 81/81 = load-bearing.
+- **fresh 픽스처 밖 4종**(전부 격리 worktree `wt-task023`):
+  - bare method-caller: 모듈 `sink`+`class C{def sink; def caller: sink()}` → `C.caller -> app.mod.sink`(정답), `C.caller->C.sink` 오염 0.
+  - 깊은 중첩: `Outer.Inner.caller -> app.mod.sink`(상위 클래스 스코프 전부 skip).
+  - 메서드 내 중첩함수: `wrapper.nested -> app.mod.sink`.
+  - 형제-클래스 bare(모듈함수 부재): `B.caller` 의 `helper()` → 엣지 0 · `helper` unresolved(cross-class 거짓엣지 없음).
+- **신설 픽스처**: `overloads.py`+`cases.yaml` 에 method-caller 변형(모듈 `sink`·`C.sink`·`C.caller->app.overloads.sink`) 상설화 ✓.
+
+### 🟠 R-3 (신규 블로킹) — module-qualified 동명 호출이 클래스메서드로 오해소 (§2B 동명 오버로드 · module_locals 경로)
+- **위치**: `build_module_locals()`(283–289). `local = node["name"].split(".")[-1]` 로 `C.sink`→`sink` 잘라 `module.sink` 키에 등록 → `module_locals["app.mod.sink"] = ["app.mod.sink","app.mod.C.sink"]`.
+- **기전**: module-qualified 호출 `mod.sink()` 은 resolved=`app.mod.sink`(dot 포함) → bare 가드(`if "." not in name`) 건너뜀 → **module_locals 분기**(227–228) 발동 → `sorted(set)[0]` 이 대문자 `C`(0x43)<소문자 `s`(0x73) 로 **`app.mod.C.sink`(클래스메서드) 먼저 pick**. Python 의미상 `mod.sink`=모듈 속성=최상위 함수만이므로 항상 틀림.
+- **fresh 실증(픽스처 밖)**:
+  - repoB: `from app import mod; mod.sink()` → **`app.other.caller -> app.mod.C.sink`**(틀림) · 정답 `-> app.mod.sink` 부재 · unresolved 미표기(조용한 오염).
+  - repoD(거버넌스 시나리오): 모듈 `export`="settlement export(governed sink)" + `class Report{def export}`, `reports.export()` → **`run -> app.reports.Report.export`** · governed 모듈 sink `-> app.reports.export` **유실** = TASK-024 역도달 상류에서 실 sink caller 소실 = **민감 변경 미포착**.
+- **왜 R-1/R-2 와 동일 구멍(§2B 필수질문=예 → 비차단 불가)**: 틀린 엣지 주입 + 정답 유실 + unresolved 미표기 = R-1 누락보다 나쁜 조용한 오염. bare 경로(R-2)와 독립적인 두 번째 문.
+- **왜 지금 발견(정직성)**: R-1/R-2 fresh 입력은 **bare 호출** 경로만 돌렸다. 이번 라운드에 §2B 고정 적대세트를 **module-qualified 변형**(`mod.name()`)으로 돌려 노출. "무발견≠통과·매 리뷰 고정 적대세트 재실행" 작동 결과.
+- **보정(택1·①권장, Claude 사본 실증)**:
+  ① `build_module_locals` 에서 scoped name 에 `.` 있는 노드(메서드/중첩 def) 제외 — `module.<name>` 로 도달 불가. `for node in nodes: if "." in node["name"]: continue`. **2줄로 81/81 유지 + repoB/repoD 교정, repoA 무회귀**(메서드는 `definitions` 직접경로 220–221 로 `mod.C.sink` 여전히 해소).
+  ② module_locals 충돌 시 pick-smallest 대신 모듈-레벨(name 에 `.` 없는 정의) 우선.
+  ③ 상설 픽스처를 module-qualified 변형으로 확장 → 동명 오버로드 3변형(bare-module-caller·bare-method-caller·module-qualified) 완성.
+
+### 🟡 O-1 (비차단·유지)
+중첩 데코레이터/기본인자 조용한 유실. Codex TASK-025 이월 선언 수용. 틀린 엣지 없이 누락만.
+
+### 보수적 개발(§1)
+R-2 델타 = 게이트 3줄 + 픽스처 5줄 + cases 6줄. `policies/*`·Claude 소유·엔진 다른 경로 무접촉. scope-creep 없음.
+
+### 재제출 지침 (멱등)
+- 재리뷰는 **R-3 보정 델타 + module-qualified 회귀 픽스처만**. 통과분(R-2 bare 해소·엔진 본체·getattr·결정성·조건부 union) 재검 없음. 멱등성: `25f9b32`·`a6756c1` 재처리 금지.
+- ⚠️ **재제출 전 `origin/main` merge 필수(D-050 함정 3회째)** — 이번 R-2 재제출도 미병합이라 브랜치가 main 대비 `A-0018/A-0019`·D-052/D-053·review-notes 삭제 형태. 이번 라운드 A-0020·D-054 추가로 격차 확대. collab-protocol §5.1.
+
+### 검증 로그
+`tests/run-tests.sh` 81/81(worktree `wt-task023`) · 음성검증(class-스코프 skip 되돌림→callgraph 단독 FAIL 80/81) · fresh 적대 4종(bare method-caller·깊은중첩·메서드내중첩함수·형제클래스 unresolved) R-2 정답 · **R-3 fresh 실증** repoB/repoD(module-qualified→클래스메서드 오염, governed `reports.export` 유실) · **후보수정 실증**(build_module_locals 메서드 skip 2줄 → 81/81 유지 + repoB/repoD 교정, repoA 무회귀) — 전부 격리 worktree.

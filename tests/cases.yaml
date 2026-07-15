@@ -1756,6 +1756,7 @@ cases:
         - app.overloads.C.sink
         - app.overloads.bar
         - app.overloads.foo
+        - app.overloads.qualified_bar
         - app.overloads.sink
         - app.reports.ReportService.export
         - app.reports.download_report
@@ -1777,6 +1778,9 @@ cases:
         - caller: app.overloads.bar
           callee: app.overloads.foo
           call: foo
+        - caller: app.overloads.qualified_bar
+          callee: app.overloads.sink
+          call: app.overloads.sink
         - caller: app.reports.ReportService.export
           callee: app.reports.render_report
           call: render_report

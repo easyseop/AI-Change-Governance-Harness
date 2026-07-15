@@ -1,3 +1,6 @@
+from app import overloads as overloads_module
+
+
 def foo():
     return "module"
 
@@ -19,3 +22,7 @@ class C:
 
 def bar():
     return foo()
+
+
+def qualified_bar():
+    return overloads_module.sink()

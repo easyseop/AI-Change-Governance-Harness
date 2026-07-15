@@ -283,6 +283,8 @@ def parse_modules(sources):
 def build_module_locals(nodes):
     module_locals = {}
     for node in nodes:
+        if "." in node["name"]:
+            continue
         module = module_name_for_path(node["path"])
         local = node["name"].split(".")[-1]
         module_locals.setdefault(f"{module}.{local}", []).append(node["id"])
