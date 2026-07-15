@@ -4,6 +4,13 @@
 
 ---
 
+## D-054 (2026-07-15) TASK-023 R-2 보정 재제출 재리뷰 = R-2 해소·R-3 신규 보정요청 (module-qualified 동명 오해소)
+**대상**: 브랜치 `codex/2026-07-15-task023-callgraph` (헤드 `a6756c1`, R-2 보정 impl `25f9b32`). 선행 D-053/A-0019. **재리뷰 범위 = R-2 보정 델타(`25f9b32`)+method-caller 픽스처만**. **판정**: R-2(bare method-caller)는 **정확·load-bearing 해소 확인**(4종 fresh 적대입력·음성검증 통과), 그러나 §2B "동명 오버로드 고정 적대세트" 를 **module-qualified 변형**으로 돌리자 **동일 결함 클래스의 세 번째 인스턴스(R-3·🟠 블로킹)** 노출 → **코드 머지 보류·리뷰기록만 main.**
+**R-3 요지**: `build_module_locals`(283–289)가 클래스메서드 `C.sink` 를 basename 으로 잘라 `module.sink` 키에 등록 → module-qualified 호출 `mod.sink()` 이 `sorted()[0]` 로 대문자 `C.sink`(클래스메서드) 먼저 pick → **모듈-레벨 governed sink 엣지 유실 + 형제 메서드 거짓엣지 주입**(조용한 오염, unresolved 미표기). fresh 실증 repoB/repoD(governed `reports.export` 시나리오)로 재현 = 민감 변경 미포착(§2B 필수질문=예 → 비차단 불가). Python 의미상 `mod.sink` 는 모듈 속성=최상위 함수만 가리키므로 메서드 등록은 항상 틀림.
+**보정 ①권장(소델타)**: `build_module_locals` 에서 scoped name 에 `.` 있는 노드(메서드/중첩 def) 제외 — `module.<name>` 로 도달 불가. Claude 사본 실증: 2줄로 81/81 유지 + repoB/repoD 교정, repoA 무회귀(메서드는 `definitions` 직접경로로 여전히 해소). ② module_locals 충돌 시 모듈-레벨 우선. ③ 상설 픽스처를 module-qualified 변형으로 확장(동명 오버로드 3변형 완성).
+**비차단 유지**: O-1(중첩 데코레이터/기본인자 유실) TASK-025 이월.
+**멱등성**: `25f9b32`·`a6756c1` 재처리 금지. 재제출은 R-3 델타+module-qualified 픽스처만. ⚠️ **재제출 전 `origin/main` merge 필수** — 이번 R-2 재제출도 미병합이라 브랜치가 main 대비 리뷰기록 삭제 형태(D-050 함정 **3회째**); 이번 라운드 A-0020·D-054 추가로 격차 확대. 상세: `collab/answers/A-0020.md` · `review-notes.md` TASK-023 R-2 재재리뷰(D-054) 절.
+
 ## D-053 (2026-07-15) TASK-023 R-1 보정 재제출 재리뷰 = R-1 부분해소·R-2 잔여 보정요청 (method-caller 동명 오해소)
 **대상**: 브랜치 `codex/2026-07-15-task023-callgraph` (헤드 `86eef67`, 보정 impl `df7e54c`). 선행 D-052/A-0018. **재리뷰 범위 = R-1 보정 델타(`df7e54c`)+신설 픽스처만**. **판정**: R-1 **모듈-caller 케이스 해소 확인**, 그러나 **동일 결함 클래스의 method-caller 변형 잔존(R-2·🟠 블로킹)** → **코드 머지 보류·리뷰기록만 main.**
 **보정 델타(A-0018 권장 ①+③ 정확 채택)**: `visible_local_names` 클래스 확장 루프 2줄 제거 + 상설 픽스처 `app/overloads.py`(모듈 `foo`+`C.foo`+`bar()`) + cases 엣지 `bar->foo` 단언. O-1 은 A-0018 허용대로 TASK-025 이월. 보수적 개발 OK(게이트 2줄 삭제+픽스처1+cases6·`policies/*`·Claude소유 무접촉).
