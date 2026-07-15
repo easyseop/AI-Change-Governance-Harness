@@ -4,6 +4,10 @@
 
 ---
 
+## D-048 (2026-07-15) TASK-022b 킷 교차감사·보강 완료 — Claude 최종리뷰 대기
+
+Codex가 D-047의 역할 역전 계약에 따라 `kit/run.sh` 판정 조립을 감사하고 보강했다(구현 `00bde19`, 상세 A-0015). 기존 `blocked > approval_required > pass` 우선순위는 게이트별 exit 계약과 일치함을 확인했다. 게이트 부재·Traceback·타임아웃·비정상 종료를 분석 실패로 분리해 `tool_owner` 포함 승인요구로 fail-closed 처리하고, 비-range 입력의 조용한 누락도 승인요구로 바꿨다. `--policies <dir>`로 대상 저장소의 민감존·라우팅·능력 정책을 일관 적용한다. fresh 적대입력 5/5와 전체 selftest(77/77 + mutation 127건) 통과. **상태: Codex 교차감사 완료, Claude 최종리뷰·main 머지 대기.** sync의 내용 드리프트 검증은 O-1 차기 권장으로 기록하며 이번 2갭 보강 범위에는 포함하지 않는다.
+
 ## D-047 (2026-07-15) 배포용 킷(kit/) 초안 — 브랜치 `claude/2026-07-15-kit-draft` · Codex 교차리뷰 대기(TASK-022b)
 **맥락**: 형 계획("MVP 달성마다 키트 반영")대로 완료 MVP-0/1/1.5 를 배포 가능한 자립형 킷으로 스냅샷. 핵심 요구 = **검사기능(게이트) 누락 금지**. 인벤토리로 확인한 결정적 사실: `generate-change-evidence` 는 3축(의도·경로·@gov함수)만 조립하고 **`check-new-capabilities`(2층)·`check-policy-change`(메타)는 누락**(missing_orchestrator) → 킷 `run.sh` 가 이 둘을 명시 추가 조립해 메움.
 **산출**: 브랜치 `claude/2026-07-15-kit-draft`(kit/ 만 최신 main 위·충돌 없음) — `run.sh`·`manifest.yaml`(게이트 13종 명시)·`sync-from-dev.sh`(MVP마다 재생성+dev수==kit수 누락검증)·`bootstrap.sh`·`selftest.sh`·gates13(co-located)·policies·templates·tests·schemas·README.
