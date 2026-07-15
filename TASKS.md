@@ -280,6 +280,7 @@
 5. **[실증]** fresh 적대 입력(우리 repo 밖 합성 시나리오)으로 rig-and-revert 재현: frozen 차단·신규 능력 승인요구·정책완화 승인요구·게이트 삭제 시 **분석실패 명시**(갭① 보강 검증)·`--policies` 로 대상 frozen 보호(갭② 보강 검증) — 각 1회 이상.
 **산출**: `collab/answers/A-00XX.md`(감사·보강 결과) + `collab/decisions.md` D-XXX + 보강 커밋을 `claude/2026-07-15-kit-draft` 에 push(같은 브랜치). 통과면 Claude 가 `kit/` 를 main 머지.
 **비고**: 통상 "Codex 구현·Claude 검수" 의 **역방향**(Codex 가 Claude 코드 감사 + verdict-affecting 개선 구현). 신규 기능이 아니라 셸 감사·보강이라 AC 형식이 다르다. 유실 경위: D-046 시절 개선(run_gate·--policies)을 커밋(7e1bfe8)했으나 브랜치 재작성 중 미푸시로 유실 → 재구현을 Codex 몫으로 돌려 상호견제 정합.
+**진행상태(2026-07-15)**: Codex 교차감사·보강 `00bde19` 제출(D-048·A-0015) → Claude 최종리뷰 = **보정요청 R-1**(watcher sleep 파이프 점유 회귀·D-049·A-0016). 감사·보강 의도(갭①②)는 달성 확인 — 보정 델타(fd 분리 1줄+회귀가드 1건)만 재리뷰 후 머지 예정.
 
 ### TASK-023 ☐ intra-repo 정적 콜그래프 빌더 (결정론·이름기반 + coverage 정직)  (Codex)  *(MVP-2)*
 **목적**: repo 내 함수 호출 엣지를 결정적으로 빌드. 판정 미연결(그래프 산출만).
