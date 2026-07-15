@@ -1653,6 +1653,20 @@ cases:
       candidate_functions:
         - app/risky.py::load_customer
 
+  - name: gov-annotations-multi-sink-metadata
+    gate: extract-gov-annotations
+    input:
+      source_file: tests/fixtures/gov-annotations/multi_sink.py
+      display_path: app/reports.py
+    expect:
+      exit_code: 0
+      annotation_count: 1
+      annotation_metadata:
+        download_bulk:
+          sink: true
+          reason: PII bulk export
+          owner: security-reviewer
+
   - name: sink-registration-defaults
     gate: extract-sinks
     input:

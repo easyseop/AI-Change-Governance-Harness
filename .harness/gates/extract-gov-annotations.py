@@ -155,14 +155,14 @@ def merge_gov_annotations(annotations):
         annotation_is_stronger = (
             strongest_level([merged["level"], annotation["level"]]) == annotation["level"]
         )
+        if annotation.get("sink"):
+            merged["sink"] = True
         if annotation_is_stronger:
             merged["level"] = annotation["level"]
             if annotation["reason"]:
                 merged["reason"] = annotation["reason"]
             if annotation["owner"]:
                 merged["owner"] = annotation["owner"]
-        if annotation.get("sink"):
-            merged["sink"] = True
         else:
             if annotation["reason"] and not merged["reason"]:
                 merged["reason"] = annotation["reason"]

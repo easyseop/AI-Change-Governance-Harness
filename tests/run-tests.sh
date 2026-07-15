@@ -523,6 +523,17 @@ def validate_gov_annotations(case, result, exit_code):
     if "annotations" in expect:
         actual = [annotation_summary(annotation) for annotation in result.get("annotations", [])]
         assert_equal(errors, "annotations", actual, expect["annotations"])
+    if "annotation_metadata" in expect:
+        actual = {
+            annotation.get("name"): {
+                "sink": annotation.get("sink"),
+                "reason": annotation.get("reason"),
+                "owner": annotation.get("owner"),
+            }
+            for annotation in result.get("annotations", [])
+            if annotation.get("name") in expect["annotation_metadata"]
+        }
+        assert_equal(errors, "annotation_metadata", actual, expect["annotation_metadata"])
 
     if "annotation_count" in expect:
         assert_equal(errors, "annotation_count", len(result.get("annotations", [])), expect["annotation_count"])
