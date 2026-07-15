@@ -4,6 +4,15 @@
 
 ---
 
+## D-049 (2026-07-15) TASK-022b 킷 최종리뷰 — **보정요청(1건 🟡 블로킹) · 코드 머지 보류**
+**대상**: 브랜치 `claude/2026-07-15-kit-draft`(헤드 `88a7d4e`) — 킷 초안 `8269dda`(Claude, D-047) + main 병합 `f39d6cf` + **Codex 교차감사·보강 `00bde19`**(D-048·A-0015 — D-048 은 미머지 브랜치의 decisions.md 에 존재). 역할역전 계약(D-047): verdict-affecting 셸 델타를 Codex 가 저자 → Claude 가 최종리뷰.
+**판정: 보정요청(R-1) — 코드 브랜치 머지 보류, 리뷰기록만 main 머지.**
+**통과 확인(실증)**: ①스냅샷 충실성 — kit 게이트 13종=manifest 명시 13종, 12/13 dev 동일·`extract-gov-annotations` 구버전+`extract-sinks` 부재는 manifest 선언 범위(`0.1-mvp1.5`, TASK-022=MVP-2 제외) 그대로라 결함 아님. 정책 5종·템플릿 dev 동일. selftest 는 심볼릭 링크로 **킷 게이트를** 검증(dev 오지시 없음). ②판정 조립 — 차단>승인>통과, L2·메타 게이트는 exit {0,2}만 방출이라 allowed="0 2" 로 정당한 차단의 강등 구멍 없음, **불변원칙("2·3층 자동차단 금지")을 구조적으로 보장**. ③분석실패 정직성 — fresh 적대입력으로 게이트부재·Traceback·타임아웃·비정상 exit1 위장·비-range 전부 `tool_owner` 포함 승인요구 실증(ADV1~3), **차단+분석실패 동시 → 차단 우선(exit 1)** 실증(ADV4). ④intent 부재 → 증거게이트 catch-all 이 fail-closed **차단 카드(exit 1)** 방출 = manifest 계약 일치 실증(ADV6). ⑤선언 수치 전부 재현 — selftest 77/77·진입점 5/5·mutation 127·dev 스위트 80/80(브랜치). ⑥음성검증 — 정규화 제거→gate-timeout FAIL·우선순위 뒤집기→target-policy-frozen FAIL = 테스트 load-bearing.
+**🟡 R-1 블로킹**: `run_gate()` watcher 서브셸의 자식 `sleep` 이 kill 후에도 생존하며 상속 stdout(호출자 파이프)을 점유 → **파이프 캡처 호출(CI 스텝·spine `$(…)`)마다 EOF 가 GATE_TIMEOUT(기본 60s) 전액 지연**. 실측: 기본값 60s 소요(게이트 실행은 1~2s)·타임아웃 3s 시 4s 로 비례. `00bde19` 가 도입한 운영 회귀이며 기존 진입점 테스트는 전 케이스 `ACGH_GATE_TIMEOUT_SECONDS=1` 이라 가려짐(회귀가드 부재). 판정·exit 는 전부 정확(거버넌스 구멍 아님)하나 킷의 1차 사용경로(CI) 실측 열화 + 가드 부재라 보정요청. **보정 = ① watcher fd 분리 1줄**(`) >/dev/null 2>&1 & watcher=$!` — 사본 실증: 지연 소멸·타임아웃 감지 보존) **② 파이프-지연 회귀가드 테스트 1건**(큰 타임아웃값 명시로 가림 방지).
+**비차단**: O-a run.sh "의도이탈 층은 생략" 문구가 실동작(fail-closed 차단)과 불일치 — 정정 권장. O-b bash 3.2+intent 부재 = 빈배열 `set -u` 즉사(방향은 fail-closed·카드 없음) — 관용구 or bash≥4 명시 권장. O-c 분석실패 시 카드가 비-YAML. O-d(=A-0015 O-1 승인) sync 체크섬 검증은 **MVP-2 킷 재생성 AC 채택**.
+**보수적 개발(§1) OK**: 델타 = kit 진입점·selftest·진입점테스트·README 만. 기존 게이트 Python·정책값·dev 트리 무접촉. scope-creep 없음.
+**상세**: `collab/answers/A-0016.md`. **멱등성**: `00bde19`·`88a7d4e` 재처리 금지 — 재제출은 보정 델타만 재리뷰.
+
 ## D-047 (2026-07-15) 배포용 킷(kit/) 초안 — 브랜치 `claude/2026-07-15-kit-draft` · Codex 교차리뷰 대기(TASK-022b)
 **맥락**: 형 계획("MVP 달성마다 키트 반영")대로 완료 MVP-0/1/1.5 를 배포 가능한 자립형 킷으로 스냅샷. 핵심 요구 = **검사기능(게이트) 누락 금지**. 인벤토리로 확인한 결정적 사실: `generate-change-evidence` 는 3축(의도·경로·@gov함수)만 조립하고 **`check-new-capabilities`(2층)·`check-policy-change`(메타)는 누락**(missing_orchestrator) → 킷 `run.sh` 가 이 둘을 명시 추가 조립해 메움.
 **산출**: 브랜치 `claude/2026-07-15-kit-draft`(kit/ 만 최신 main 위·충돌 없음) — `run.sh`·`manifest.yaml`(게이트 13종 명시)·`sync-from-dev.sh`(MVP마다 재생성+dev수==kit수 누락검증)·`bootstrap.sh`·`selftest.sh`·gates13(co-located)·policies·templates·tests·schemas·README.

@@ -5,6 +5,47 @@
 
 ---
 
+## TASK-022b (D-049) — 킷 최종리뷰 · **보정요청**(watcher sleep 파이프 점유 회귀) · 코드 머지 보류
+
+**대상**: `claude/2026-07-15-kit-draft` 헤드 `88a7d4e` — 리뷰 초점 = **Codex 보강 델타 `00bde19`**(역할역전: verdict-affecting 셸을 Codex 저자, D-047·D-048·A-0015). 킷 초안 `8269dda` 는 Claude 작성이므로 스냅샷 충실성·조립 구조를 별도 검증.
+
+**검증 방법**: 워크트리 격리 체크아웃 → ①dev↔kit 파일별 diff ②run.sh 한줄씩 정독 ③선언 수치 전부 재실행 ④fresh 적대입력 8종(Codex 5종 픽스처 밖) ⑤음성검증 2종(사보타주→테스트 FAIL 확인).
+
+**①스냅샷 충실성 — 통과**:
+- kit/gates 13종 = manifest `gates:` 명시 13종(판정6+내부추출5+온보딩2). 12/13 dev 바이트 동일.
+- `extract-gov-annotations.py` 드리프트(kit=pre-sink) + `extract-sinks.py` 부재(dev 14↔kit 13)는 **manifest 선언 범위 그대로**(`version: 0.1-mvp1.5`, `reflects_mvp: [MVP-0,1,1.5]` — TASK-022=MVP-2 는 미완 마일스톤). 결함 아님, MVP-2 완료 시 `sync-from-dev.sh` 재실행으로 해소되는 구조.
+- 정책 5종·템플릿 = dev 바이트 동일.
+- **selftest 의 오지시 여부 확인**: 번들 테스트는 `.harness/gates` 경로를 하드코딩하지만 selftest.sh 가 임시 작업디렉토리에 `ln -s "$KIT/gates" .harness/gates` 로 심볼릭 연결 → **킷 게이트를 검증함**(dev 를 잘못 가리키지 않음). 통과 = 13종 co-located 실증(하나라도 빠지면 내부 import 붕괴로 FAIL).
+
+**②run.sh 한줄씩 — 통과 (강등/우회 구멍 탐색 결과)**:
+- 최종조립: `ge_exit=1 ∨ cap_exit=1 ∨ pol_exit=1 → 1` / `∃2 → 2` / else 0. 차단>승인>통과 ✓.
+- **적대 질문 "L2 가 정당한 exit 1 을 내면 allowed='0 2' 가 차단을 강등하나?"** → `check-new-capabilities.py`·`check-policy-change.py` 소스 확인: 방출 코드 = {0, 2}뿐(BLOCKED 상수 자체가 없음). 강등할 정당한 차단이 존재하지 않음 + 불변원칙 "2·3층 자동차단 금지"를 run.sh 가 구조적으로 재보장(비정상 exit 1 은 분석실패→승인). ✓
+- **intent 부재 경로**: run.sh 는 `--change-intent` 를 생략 → 게이트 기본값 `change-intent.yaml` → `load_intent` FileNotFoundError → **게이트 내부 catch-all 이 fail-closed 차단 카드(verdict: blocked, exit 1) 방출**. run.sh 출력 문구 "의도이탈 층은 생략"은 오해 소지(O-a)나 실동작은 manifest 계약("없으면 blocked")과 일치 — ADV6 fresh 입력으로 exit 1 실증.
+- `--policies` 오버라이드: POL 전체 치환 + 필수 3파일 검증(부분 혼합 없음), 부재 시 분석실패 exit 2. ✓
+- 카드 파일은 분석실패 시 비-YAML(O-c). `--repo` cd 이후 상대경로 기록(spine 계약 draft 라 관찰만).
+
+**③선언 수치 재현 — 전부 일치**: selftest **77/77** + 진입점 **5/5** + mutation **127건**(+policy/metamorphic/negative/원본불변) + 브랜치 dev 스위트 **80/80**(74+3+3).
+
+**④fresh 적대입력 (Codex 5종이 안 덮는 면)**:
+| ADV | 입력 | 기대 | 결과 |
+|---|---|---|---|
+| 1 | 게이트를 `raise RuntimeError` 로 교체(Traceback 경로 — 5종 미커버) | 분석실패·exit 2 | ✓ `traceback` 기록 |
+| 2 | 비-range(`HEAD` 단일 ref) | 능력·정책 둘 다 `range_required`·exit 2 | ✓ |
+| 3 | Traceback 없는 exit 1 게이트(차단 위장) | `abnormal_exit_1`→exit 2 (차단 아님) | ✓ |
+| 4 | frozen 차단 + 동시 게이트 크래시 | **차단이 이김** exit 1 | ✓ |
+| 6 | intent 없는 대상 repo | fail-closed **BLOCKED** exit 1 | ✓ |
+| 7 | `/bin/bash` 3.2 + intent 부재 | — | ✗ `INTENT_ARGS[@]: unbound variable` 즉사(exit 1·카드 없음) → **O-b**. intent 있으면 3.2 정상 PASS |
+
+**🟡 R-1 (블로킹 — `00bde19` 도입 회귀)**: watcher `( sleep $T; … ) & watcher=$!` — 게이트 조기 종료 시 `kill $watcher` 는 서브셸만 죽이고 자식 `sleep` 은 상속 stdout(호출자 파이프 write end)을 쥔 채 생존 → **명령치환/CI 로그 파이프의 EOF 가 sleep 종료까지 블록**. **실측**: 기본 타임아웃 60s 에서 파이프 캡처 소요 60s(게이트 실행 1~2s), `ACGH_GATE_TIMEOUT_SECONDS=3` 에서 4s(비례 실증), watcher 에 `>/dev/null 2>&1` 부착 사본에서 **0s + 타임아웃 감지 보존**(slow-gate 재검 통과). 진입점 테스트가 전 케이스 timeout=1 로 돌아 가려짐 — **회귀가드 부재**. 판정 무영향(거버넌스 구멍 아님)이나 킷 1차 사용경로(CI 파이프) 실측 열화라 보정요청: ①1줄 fd 분리 ②큰 타임아웃값 명시한 파이프-지연 회귀가드 1건. 상세 `collab/answers/A-0016.md`.
+
+**⑤음성검증(load-bearing)**: run.sh 사보타주 ①정규화 제거(`[ "$RUN_FAILED" = 1 ] && RUN_EXIT=2` → true) → `gate-timeout` FAIL(4/5) ②차단 우선순위 무력화(`if false`) → `target-policy-frozen` FAIL(4/5). 진입점 테스트가 두 축 모두 실제로 잡음 ✓ — "항상 PASS" 아님 증명.
+
+**보수적 개발(§1)**: 델타 = `kit/run.sh`·`kit/selftest.sh`·`kit/tests/run-entrypoint-tests.sh`·`kit/README.md` + 문서. dev 트리·게이트 Python·정책값 무접촉. scope-creep 없음.
+
+**하류 영향**: R-1 은 spine/CI 가 킷을 파이프로 감쌀 때(1차 사용형태) 러너 스텝당 +60s — 대상 repo CI 타임아웃·"킷 느리다" 오인 유발 가능. O-d(sync 체크섬)는 MVP-2 킷 재생성 AC 로 채택해 하류 드리프트 방지.
+
+---
+
 ## TASK-022 R-1 재리뷰 (D-046) — 보정 재제출 **통과** · Claude main 머지 (TASK-022 완결)
 
 **대상**: 보정 델타 `f18cc32`(+docs `95b4399`). **재리뷰 범위 = 델타만**(멱등성 — A-0013 지시). 원 구현·`extract-sinks.py`·sinks 픽스처는 D-045 에서 fresh 적대입력으로 통과 확인·재론 안 함.
