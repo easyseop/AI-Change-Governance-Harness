@@ -1390,3 +1390,38 @@ R-2 델타 = 게이트 3줄 + 픽스처 5줄 + cases 6줄. `policies/*`·Claude 
 **보수적 개발(§1)**: 기존 게이트 importlib 재사용(재구현 아님)·`policies/*`·`templates/*`·`docs/*`·`CLAUDE.md`·기존 `.py` 무접촉·scope-creep 없음. `run-tests.sh` 85/85·`mutation-check` PASS.
 
 **판정 = 통과 · 비민감(D-007) → Claude `main` 머지·push.** 비차단 O-1(method/frozen-auto/@gov sink 상설픽스처 부재)·O-2(self-메서드 verdict 미포착·coverage 노출) → **TASK-025 AC#1·#3 로 명시 고정**(비차단 방류 아님). 상세 `collab/decisions.md` D-056.
+
+## TASK-025 과탐 통제 + 고정 적대 입력 세트 — **통과 · Claude main 머지** (MVP-2 간접영향 상설 회귀) (2026-07-16, D-057)
+
+**대상**: `codex/2026-07-16-task025-adversarial-fixtures` (impl `b15696c`·handoff `8256fe4`·머지 헤드 `11ec86b`). 순수 회귀 픽스처 태스크 — 게이트 로직 무변경(`check-indirect-impact.py` 무접촉).
+
+### 델타 한 줄씩
+- `tests/fixtures/indirect-impact/` 6종 신규(base/head 쌍 + sink-registry): method-sink·frozen-auto·gov-opt-in·consumer-overdetect·dynamic-coverage·conditional-same-name.
+- `tests/cases.yaml` +137: 위 6종 + 기존 `indirect-impact-direct` 에 `group: adversarial` 부여(총 7). 각 케이스 기대값(verdict·indirect_impact·shadow_hits·reviewer_required·coverage_unevaluated) 명시.
+- `tests/run-tests.sh` +10: `validate_indirect_impact` 에 `coverage_unevaluated` 기대값 단언 추가(`result.coverage.unevaluated` 의 caller/kind/name 정확비교).
+- `handoff-log`·`summaries` 갱신.
+
+### 각 픽스처 = §9 시나리오 정합 (게이트 직접실행 raw JSON 대조)
+- **direct(§9.1)**: sink→helper 직접호출·helper 수정→approval. (기존 확인)
+- **method-sink**(TASK-024 O-1): sink=`app.reports.ReportService.export`(메서드)·check_permission 수정→approval·reviewer=security-reviewer·hops1. 클래스-qualified sink 이름조인 상설화.
+- **frozen-auto**(TASK-024 O-1): sink-registry `sinks: []`·sensitive-zones `app/settlement/**` frozen→자동 sink `frozen:app.settlement.core.transfer`·compute_fee 수정→approval·reviewer=zone `required_approval`(settlement-reviewer).
+- **gov-opt-in(§9.4 옵트인 경계)**: `@gov(sink=true) download_report`=shadow sink→`shadow_hits`(verdict-neutral) · `@gov`(sink 미지정) `direct_only`=**미발화**. check_permission 이 양쪽 상류지만 opt-in 만 기록·plain @gov 무시 = 밀도 통제 정확. verdict pass·reviewer_required=[].
+- **consumer-overdetect(§9.5 과탐 경계)**: `consumer.run`(sink 의 **소비자/호출자**) 수정→**미발화**(forward-only 방향규율). sink 의존(check_permission)은 무변경.
+- **dynamic-coverage(§9.3 동적 정직성)**: sink→dispatch→`getattr(utils, check_name)(user)` · check_permission 수정 · verdict pass · `coverage.unevaluated=[{caller:app.reports.dispatch,kind:dynamic,name:getattr(...)}]` 노출(조용한 통과 아님).
+- **conditional-same-name(§9.7 동명/조건부)**: `if True: def load_value(): normalize() else: def load_value(): fallback()` · sink hops2 · fallback 수정→approval·path `download_report→load_value→fallback`·hops2. 조건부 양분기 보수적 union 발화.
+
+### 적대적 검증 (격리 worktree `wt-task025`)
+- **raw JSON 대조**(5픽스처 게이트 직접실행): 산출 verdict/indirect_impact/shadow_hits/reviewer_required/coverage.unevaluated 전부 cases.yaml 기대값 **완전일치·거버넌스 정답**.
+- **fresh 변조 3종**(픽스처 밖 독립입력·rigged 아님):
+  1. consumer-overdetect 에서 **의존(check_permission) 수정→approval 발화** — 무발화가 방향규율이지 죽은 게이트 아님 증명.
+  2. conditional-same-name 에서 **if-분기 `normalize` 수정→hop2 발화** — else-분기 fallback 만 우연히 맞은 것 아님·양분기 보수적 union 실증.
+  3. dynamic-coverage 정적화(`utils.check_permission`)+`hops:2`→hop2 `check_permission` 발화 — module-attr 엣지 정상 해소·getattr 무발화는 hop 한계+동적 이중원인(침묵 누락 아님)임을 확정. (초기 "정적화 무발화" 관찰은 hops=1 한계 때문임을 반증)
+- **음성검증(rig-and-revert)**: dynamic-coverage `coverage_unevaluated`→[] 단독 FAIL(0/1) · conditional-same-name verdict→pass 단독 FAIL(0/1) · 원복 `adversarial` 7/7 = 단언 load-bearing.
+- **suite**: `run-tests.sh` **91/91**·`adversarial` **7/7**·`mutation-check` PASS(151).
+
+### 판정·하류·보수적 개발
+- **비민감**(테스트 전용 분석 게이트 픽스처·frozen-auto settlement 는 테스트 데이터) → 구현자≠머지자로 Claude `main` 머지(D-007).
+- **보수적 개발 OK**: 델타 = 픽스처·cases·러너 단언만·scope-creep 없음·게이트/정책/Claude 소유 무접촉.
+- **하류**: 이 세트가 콜그래프(TASK-023)·역도달(TASK-024)의 민감엣지 보존·정직성 회귀를 상설 고정 → 이후 리팩터 시 침묵 회귀 방지.
+- **비차단 O-1**(adversarial 그룹 ≠ §9 문자적 7종·두 개념 타 위치 상설)·**O-2**(dynamic-coverage hops=1 이중원인). §2B 필수질문=아니오. 상세 D-057.
+- **멱등성**: `b15696c`·`8256fe4`·`11ec86b` 재처리 금지.
