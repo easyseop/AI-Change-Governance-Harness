@@ -1671,6 +1671,7 @@ cases:
     gate: extract-sinks
     input:
       repo: tests/fixtures/sinks/repo
+      sensitive_zones: tests/fixtures/sinks/sensitive-zones.yaml
       sink_registry: tests/fixtures/sinks/missing-sink-registry.yaml
     expect:
       exit_code: 0
@@ -1700,6 +1701,7 @@ cases:
     gate: extract-sinks
     input:
       repo: tests/fixtures/sinks/repo
+      sensitive_zones: tests/fixtures/sinks/sensitive-zones.yaml
       sink_registry: tests/fixtures/sinks/sink-registry.yaml
     expect:
       exit_code: 0
@@ -1737,6 +1739,73 @@ cases:
       error_kinds:
         - invalid_maturity
         - unresolved_registry_function
+
+  - name: callgraph-repo-static
+    gate: extract-callgraph
+    input:
+      repo: tests/fixtures/callgraph/repo
+    expect:
+      exit_code: 0
+      nodes:
+        - app.conditional.fallback
+        - app.conditional.load_value
+        - app.conditional.load_value
+        - app.conditional.normalize
+        - app.overloads.C.caller
+        - app.overloads.C.foo
+        - app.overloads.C.sink
+        - app.overloads.bar
+        - app.overloads.foo
+        - app.overloads.qualified_bar
+        - app.overloads.sink
+        - app.reports.ReportService.export
+        - app.reports.download_report
+        - app.reports.dynamic_dispatch
+        - app.reports.format_report
+        - app.reports.render_report
+        - app.utils.check_permission
+        - app.utils.unrelated
+      edges:
+        - caller: app.conditional.load_value
+          callee: app.conditional.fallback
+          call: fallback
+        - caller: app.conditional.load_value
+          callee: app.conditional.normalize
+          call: normalize
+        - caller: app.overloads.C.caller
+          callee: app.overloads.sink
+          call: sink
+        - caller: app.overloads.bar
+          callee: app.overloads.foo
+          call: foo
+        - caller: app.overloads.qualified_bar
+          callee: app.overloads.sink
+          call: app.overloads.sink
+        - caller: app.reports.ReportService.export
+          callee: app.reports.render_report
+          call: render_report
+        - caller: app.reports.download_report
+          callee: app.conditional.load_value
+          call: app.conditional.load_value
+        - caller: app.reports.download_report
+          callee: app.reports.render_report
+          call: render_report
+        - caller: app.reports.download_report
+          callee: app.utils.check_permission
+          call: app.utils.check_permission
+        - caller: app.reports.render_report
+          callee: app.reports.format_report
+          call: format_report
+      unresolved_calls:
+        - caller: app.reports.dynamic_dispatch
+          kind: dynamic
+          name: getattr(...)
+      coverage_unevaluated:
+        - caller: app.reports.dynamic_dispatch
+          kind: dynamic
+          name: getattr(...)
+      errors_present: false
+      deterministic_stdout: true
 
   - name: metamorphic-import-alias
     group: metamorphic
