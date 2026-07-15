@@ -1374,3 +1374,19 @@ R-2 델타 = 게이트 3줄 + 픽스처 5줄 + cases 6줄. `policies/*`·Claude 
 - **보수적 개발(§1)**: 코드 델타 게이트 2줄 + 픽스처 7줄 + cases 4줄 = 수정계약 정확 준수. bare 경로·getattr·union·판정로직 무변경. `policies/*`·`docs/*`·`CLAUDE.md`·`templates/*` name-only diff **무접촉**. scope-creep 없음. 함께 유입된 A-0018/19/20·D-052~054 는 **재제출 전 `origin/main` merge**(D-050 함정 **이번엔 회피** — Codex 가 지침대로 병합)로 들어온 기존 기록(변조 없음).
 - **비차단**: O-1(중첩 데코레이터/기본인자 유실 — 틀린 엣지 없이 누락만) TASK-025 고정 적대세트 이월 유지(§2B 필수질문=아니오).
 - **머지(D-007)**: 정적 콜그래프 분석 게이트 = **비민감**(정산·인증/인가·암호화·DB migration·infra 무해당) → 구현자(Codex)≠머지자(Claude)로 Claude `main` 머지. **MVP-2 TASK-023 완결 → 다음 = TASK-024 역도달성.**
+
+## TASK-024 역도달성 게이트 `check-indirect-impact.py` — **통과 · Claude main 머지** (MVP-2 간접영향) (2026-07-16, D-056)
+**대상**: `codex/2026-07-16-task024-indirect-impact` · impl `74bdcf2` · 헤드 `7f12e73`. `git fetch --prune` 후 미머지 `origin/codex/*` 는 이것 하나 · handoff 최신 = Codex 신규 제출(보정요청 아님) → **Claude 리뷰 차례**. 브랜치는 `origin/main`(`0e7e258`) 클린 후손(재제출 전 병합 준수).
+
+**게이트 로직(한 줄씩 확인)**:
+- `reachable_paths(adjacency, sink, max_hops)`: sink 를 루트로 **forward BFS**(FIFO·sorted 인접). `depth >= max_hops` 서 확장 중단 → N홉 이내 callee 만 `paths`. 최단경로 유지. 사이클 sink→A→sink 시 sink 가 paths 키로 돌아와도 상위 루프의 `function_id == sink.function → continue` 로 자기-영향 배제(방어적).
+- 각 sink 마다 `sink.get("hops", 1)` 홉 → changed_by_id ∩ reachable → `finding_for_sink`. `maturity=="shadow"` → `shadow_hits`(verdict-neutral), else `enforcing_findings`.
+- verdict: `indirect_impact or fail_closed` → `approval_required`(exit 2), else pass(exit 0). **exit 1 없음 = 차단금지.** 최상위 except 도 exit 2.
+
+**심층·적대 검증(격리 worktree `wt-task024` + fresh advrepo1~3)** — 상세 판정근거는 `collab/decisions.md` D-056. 요지:
+- 방향 반전 아님(sink 소비자 미발화·의존 발화) · method/module-level/frozen-auto sink 이름조인 정확 · AC#1~#5 전부 fresh 정답 · `hops:2` 파라미터 실배선 · 경계필터·픽스처 load-bearing(rig-and-revert 2종·mutation-check 139) · self-메서드 미해소는 `coverage.unevaluated` 로 정직 노출.
+- 게이트간 이름 조인 무결: map/classify/callgraph/sinks 4게이트 동일 `full_function_name`+class-qualified. TASK-023 R-1~R-3 오해소 폐쇄가 여기서 **민감 엣지 보존**으로 결실.
+
+**보수적 개발(§1)**: 기존 게이트 importlib 재사용(재구현 아님)·`policies/*`·`templates/*`·`docs/*`·`CLAUDE.md`·기존 `.py` 무접촉·scope-creep 없음. `run-tests.sh` 85/85·`mutation-check` PASS.
+
+**판정 = 통과 · 비민감(D-007) → Claude `main` 머지·push.** 비차단 O-1(method/frozen-auto/@gov sink 상설픽스처 부재)·O-2(self-메서드 verdict 미포착·coverage 노출) → **TASK-025 AC#1·#3 로 명시 고정**(비차단 방류 아님). 상세 `collab/decisions.md` D-056.
