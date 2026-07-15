@@ -28,6 +28,8 @@ cd "$WORK"
 rc=0
 echo "── 러너 스위트 (tests/run-tests.sh) ──"
 bash tests/run-tests.sh || rc=1
+echo "── 킷 진입점 적대검증 (tests/run-entrypoint-tests.sh) ──"
+bash "$KIT/tests/run-entrypoint-tests.sh" || rc=1
 if [ "$QUICK" = 0 ] && [ -f tests/mutation-check.sh ]; then
   echo "── 뮤테이션 점검 (tests/mutation-check.sh) ──"
   bash tests/mutation-check.sh || rc=1

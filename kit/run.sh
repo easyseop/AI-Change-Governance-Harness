@@ -11,7 +11,7 @@
 #   [메타] 정책 자기무력화                        → check-policy-change    (카드 밖 — 여기서 명시 추가)
 #   최종 = 세 결과의 가장 센 판정(차단 > 승인 > 통과).
 #
-# 사용:  ./run.sh <base>..<head> [--repo <대상repo>] [--output <카드경로>]
+# 사용:  ./run.sh <base>..<head> [--repo <대상repo>] [--policies <정책dir>] [--output <카드경로>]
 # 종료코드: 0 통과 / 1 차단 / 2 승인필요
 # =====================================================================
 set -uo pipefail
@@ -22,13 +22,31 @@ ZONES="$POL/sensitive-zones.yaml"
 CAPS="$POL/sensitive-capabilities.yaml"
 ROUTING="$POL/approval-routing.yaml"
 
-RANGE="${1:?사용: ./run.sh <base>..<head> [--repo <repo>] [--output <카드>]}"; shift
+RANGE="${1:?사용: ./run.sh <base>..<head> [--repo <repo>] [--policies <정책dir>] [--output <카드>]}"; shift
 REPO="."; OUT="change-evidence.yaml"
 while [ $# -gt 0 ]; do case "$1" in
   --repo)   REPO="$2"; shift 2;;
+  --policies) POL="$2"; shift 2;;
   --output) OUT="$2"; shift 2;;
   *) echo "알 수 없는 인자: $1"; exit 64;;
 esac; done
+
+if [ ! -d "$POL" ]; then
+  echo "✗ 분석 실패: 정책 디렉토리 없음: $POL"
+  echo "  tool_owner: change-governance-kit-owner"
+  exit 2
+fi
+POL="$(cd "$POL" && pwd)"
+ZONES="$POL/sensitive-zones.yaml"
+CAPS="$POL/sensitive-capabilities.yaml"
+ROUTING="$POL/approval-routing.yaml"
+for required_policy in "$ZONES" "$CAPS" "$ROUTING"; do
+  if [ ! -f "$required_policy" ]; then
+    echo "✗ 분석 실패: 필수 정책 파일 없음: $required_policy"
+    echo "  tool_owner: change-governance-kit-owner"
+    exit 2
+  fi
+done
 
 # base..head 범위여야 함수·능력·정책 게이트가 돈다(git 두 ref 필요).
 HAS_RANGE=0; case "$RANGE" in *..*) HAS_RANGE=1;; esac
@@ -37,6 +55,60 @@ cd "$REPO" || { echo "✗ 대상 repo 없음: $REPO"; exit 66; }
 INTENT=""; [ -f change-intent.yaml ] && INTENT="change-intent.yaml"
 
 hr(){ printf '─%.0s' $(seq 1 66); echo; }
+GATE_TIMEOUT_SECONDS="${ACGH_GATE_TIMEOUT_SECONDS:-60}"
+case "$GATE_TIMEOUT_SECONDS" in
+  ''|*[!0-9]*|0) echo "✗ 분석 실패: ACGH_GATE_TIMEOUT_SECONDS는 양의 정수여야 함"; exit 2;;
+esac
+ANALYSIS_FAILURES=()
+RUN_OUTPUT=""; RUN_EXIT=0; RUN_FAILED=0
+
+# 정상 판정 exit와 실행 실패를 분리한다. 실패는 승인요구로 정규화하되,
+# 다른 게이트의 실제 차단(exit 1)이 있으면 최종 우선순위에서 차단이 이긴다.
+run_gate(){
+  local gate="$1" allowed="$2" script="$3"; shift 3
+  local tmp pid watcher rc timed_out=0
+  tmp="$(mktemp)"
+  if [ ! -f "$script" ]; then
+    RUN_OUTPUT="게이트 파일 없음: $script"; RUN_EXIT=2; RUN_FAILED=1
+    ANALYSIS_FAILURES+=("$gate: gate_missing")
+    rm -f "$tmp"
+    return
+  fi
+
+  python3 "$script" "$@" >"$tmp" 2>&1 & pid=$!
+  (
+    sleep "$GATE_TIMEOUT_SECONDS"
+    if kill -0 "$pid" 2>/dev/null; then
+      printf 'timeout' >"$tmp.timeout"
+      kill -TERM "$pid" 2>/dev/null || true
+      sleep 1
+      kill -KILL "$pid" 2>/dev/null || true
+    fi
+  ) & watcher=$!
+  wait "$pid"; rc=$?
+  kill "$watcher" 2>/dev/null || true
+  wait "$watcher" 2>/dev/null || true
+  [ -f "$tmp.timeout" ] && timed_out=1
+  RUN_OUTPUT="$(cat "$tmp")"
+  rm -f "$tmp" "$tmp.timeout"
+
+  RUN_FAILED=0; RUN_EXIT="$rc"
+  if [ "$timed_out" = 1 ]; then
+    RUN_FAILED=1; ANALYSIS_FAILURES+=("$gate: timeout")
+  elif printf '%s\n' "$RUN_OUTPUT" | grep -q 'Traceback (most recent call last)'; then
+    RUN_FAILED=1; ANALYSIS_FAILURES+=("$gate: traceback")
+  elif ! case " $allowed " in *" $rc "*) true;; *) false;; esac; then
+    RUN_FAILED=1; ANALYSIS_FAILURES+=("$gate: abnormal_exit_$rc")
+  fi
+  [ "$RUN_FAILED" = 1 ] && RUN_EXIT=2
+}
+
+show_analysis_failure(){
+  local gate="$1"
+  echo "    ✗ 분석 실패: $gate (fail-closed → approval_required)"
+  echo "      tool_owner: change-governance-kit-owner"
+  [ -n "$RUN_OUTPUT" ] && printf '%s\n' "$RUN_OUTPUT" | head -6 | sed 's/^/      /'
+}
 echo "════════════════════════════════════════════════════════════════"
 echo "  변경 감사카드 · AI Change Governance Kit"
 echo "════════════════════════════════════════════════════════════════"
@@ -47,31 +119,45 @@ hr
 
 # ── 감사카드 + 3축(의도·민감경로·@gov 함수) 판정 ────────────────────
 INTENT_ARGS=(); [ -n "$INTENT" ] && INTENT_ARGS=(--change-intent "$INTENT")
-CARD="$(python3 "$G/generate-change-evidence.py" "$RANGE" \
-          --sensitive-zones "$ZONES" --approval-routing "$ROUTING" \
-          "${INTENT_ARGS[@]}" --repo . 2>&1)"; ge_exit=$?
+run_gate "generate-change-evidence" "0 1 2" "$G/generate-change-evidence.py" "$RANGE" \
+  --sensitive-zones "$ZONES" --approval-routing "$ROUTING" \
+  "${INTENT_ARGS[@]}" --repo .
+CARD="$RUN_OUTPUT"
+ge_exit="$RUN_EXIT"; ge_failed="$RUN_FAILED"
 printf '%s\n' "$CARD" > "$OUT"
 echo "▸ [1층] 의도이탈·민감경로·@gov 함수 (감사카드 3축)"
-printf '%s\n' "$CARD" | grep -E 'verdict:|status:|frozen_touched|protected_touched|out_of_scope|forbidden_touched|reviewer_required' | sed 's/^/    /' | head -20
+if [ "$ge_failed" = 1 ]; then show_analysis_failure "generate-change-evidence"; else
+  printf '%s\n' "$CARD" | grep -E 'verdict:|status:|frozen_touched|protected_touched|out_of_scope|forbidden_touched|reviewer_required' | sed 's/^/    /' | head -20
+fi
 
 # ── [2층] 신규 위험 능력 (감사카드에 미포함 → 여기서 명시 조립) ─────
 cap_exit=0
 echo "▸ [2층] 신규 위험 능력 (외부호출·암복호·실행 등 신규 도입?)"
 if [ "$HAS_RANGE" = 1 ]; then
-  CAP_OUT="$(python3 "$G/check-new-capabilities.py" "$RANGE" "$CAPS" --repo . 2>&1)"; cap_exit=$?
-  printf '%s\n' "$CAP_OUT" | head -6 | sed 's/^/    /'
+  run_gate "check-new-capabilities" "0 2" "$G/check-new-capabilities.py" "$RANGE" "$CAPS" --repo .
+  CAP_OUT="$RUN_OUTPUT"; cap_exit="$RUN_EXIT"
+  if [ "$RUN_FAILED" = 1 ]; then show_analysis_failure "check-new-capabilities"; else
+    printf '%s\n' "$CAP_OUT" | head -6 | sed 's/^/    /'
+  fi
 else
-  echo "    (base..head 범위 아님 — 능력 층 생략·coverage 갭)"
+  cap_exit=2; ANALYSIS_FAILURES+=("check-new-capabilities: range_required")
+  echo "    ✗ 분석 실패: base..head 범위 아님 (능력 층 미실행)"
+  echo "      tool_owner: change-governance-kit-owner"
 fi
 
 # ── [메타] 정책 자기무력화 (감사카드에 미포함 → 여기서 명시 조립) ───
 pol_exit=0
 echo "▸ [메타] 정책 자기무력화 (게이트/정책 완화·집행우회?)"
 if [ "$HAS_RANGE" = 1 ]; then
-  POL_OUT="$(python3 "$G/check-policy-change.py" "$RANGE" --repo . 2>&1)"; pol_exit=$?
-  printf '%s\n' "$POL_OUT" | head -6 | sed 's/^/    /'
+  run_gate "check-policy-change" "0 2" "$G/check-policy-change.py" "$RANGE" --repo .
+  POL_OUT="$RUN_OUTPUT"; pol_exit="$RUN_EXIT"
+  if [ "$RUN_FAILED" = 1 ]; then show_analysis_failure "check-policy-change"; else
+    printf '%s\n' "$POL_OUT" | head -6 | sed 's/^/    /'
+  fi
 else
-  echo "    (base..head 범위 아님 — 정책변경 층 생략·coverage 갭)"
+  pol_exit=2; ANALYSIS_FAILURES+=("check-policy-change: range_required")
+  echo "    ✗ 분석 실패: base..head 범위 아님 (정책변경 층 미실행)"
+  echo "      tool_owner: change-governance-kit-owner"
 fi
 
 # ── 최종 판정 = 가장 센 것 (차단 1 > 승인 2 > 통과 0) ────────────────
@@ -84,6 +170,7 @@ fi
 
 hr
 echo "  게이트 판정 : 카드3축=$ge_exit · 능력=$cap_exit · 정책=$pol_exit  (0통과/1차단/2승인)"
+[ "${#ANALYSIS_FAILURES[@]}" -gt 0 ] && echo "  분석 실패   : ${ANALYSIS_FAILURES[*]}"
 echo "  최종 판정   : $label   (exit $final)"
 echo "  감사카드    : $OUT"
 echo "════════════════════════════════════════════════════════════════"
