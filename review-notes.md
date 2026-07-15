@@ -1237,3 +1237,35 @@ R-3 은 Codex 불이행 아님 — A-0006 계약 정확 이행. 인라인 주석
 
 ### 검증 로그
 `bash tests/run-tests.sh` **50/50 PASS** · `git diff --check` clean · `py_compile` OK — 전부 격리 worktree 재현. fresh 오류입력 3종·정상 대조 1종·음성검증 2종 직접 실행.
+
+---
+
+## TASK-023 intra-repo 정적 콜그래프 빌더 — **보정요청** (2026-07-15, D-052 · A-0018)
+
+**대상**: 브랜치 `codex/2026-07-15-task023-callgraph` 헤드 `92b2955`(구현 `2a6cd09`). **판정**: 보정요청 1건(🟠 블로킹) + 비차단 관찰 1건. 코드 머지 보류, 리뷰기록만 main.
+
+### 통과분 (fresh 적대입력 실증 · 격리 worktree 재현)
+- `tests/run-tests.sh` **81/81** · `kit/tests/run-entrypoint-tests.sh` **9/9** · `tests/mutation-check.sh` **131 기대변조 PASS** 전부 재현.
+- **AC #1 해소**: `from app.utils import check_permission as allow`→`allow(user)`=`app.utils.check_permission` 엣지 · `from app.conditional import load_value`·동일모듈 bare 호출 정상.
+- **AC #2 미해소 정직 노출**: `getattr(obj,name)()`→엣지 미추정·`unresolved_calls`+`coverage.unevaluated` 에 `kind=dynamic name=getattr(...)`. 내부 `getattr` builtin 은 BUILTIN_NAMES 로 걸러 미노출.
+- **AC #3 결정론**: fixture 3회 md5 **동일**(`df9433d8c45372760a6da1bdb9a67087`).
+- **AC #4 조건부 def union**: `if/else` 두 `load_value` 가 동일 id 로 합쳐져 엣지 `normalize`+`fallback` 양쪽. (단 **다른-id 동명**(모듈함수 vs 클래스메서드)은 union 아님 → R-1.)
+- **음성검증**: `callgraph-repo-static` 기대 엣지 `format_report`→`WRONG_TARGET` 변조 → 케이스 **단독 FAIL(80/81)** = load-bearing.
+- **동반 G-sink-1**: extract-sinks 2케이스가 `--sensitive-zones tests/fixtures/sinks/sensitive-zones.yaml`(fixture-local). fixture zone `services/settlement/**` frozen 이 `frozen:services.settlement.calculate.settle_async` auto-sink 실제 구동=inert 아님. 라이브 정책 결합 절단 달성(D-046 R-2 이월분).
+- **동반 A-0017**: `warn_change_intent_shape`·`warn_output_location` echo 전용·판정 무영향(배너와 게이트 조립 사이·`sys.exit(0)` 은 python 서브프로세스만). 진입점 3케이스(경고 exit2·정상 무경고 absent·출력경고 exit0) load-bearing.
+- **보수적 개발**: `policies/*`·Claude 소유 무접촉·scope-creep 없음. 변경=신규 게이트+tests+동반 2건.
+
+### 🟠 R-1 (블로킹) — bare 모듈함수 호출이 동명 클래스메서드로 오해소 → 진짜 엣지 유실
+- **위치**: `extract-callgraph.py` `CallVisitor.visible_local_names()`(231–237) + `resolve_repo_function()` `sorted(set(candidates))[0]`(229).
+- **기전**: `visible_local_names` 가 모듈 내 **모든 클래스**에 `{class}.{name}` 후보 무조건 추가. 후보 최소(사전순) pick → 대문자 클래스명(0x43)이 소문자 함수명(0x66)보다 먼저 → 모듈함수 `foo`+`C.foo` 공존 시 bare `foo()`→`C.foo` 오해소.
+- **fresh 실증 `adv1/app/m.py`**: `def foo`+`class C: def foo`+`def bar: return foo()` → 산출 `app.m.bar -> app.m.C.foo`(틀림), 정답 `app.m.bar -> app.m.foo` **부재**(`present: False`).
+- **load-bearing 검증**: 클래스 확장 루프 제거한 사본 → `adv1` 교정(`bar->app.m.foo`) **+ 공식 fixture 7엣지 원본과 바이트 동일** = 이 루프는 정답 엣지에 대해 load-bearing 0, 오염만.
+- **왜 비차단 불가(§2B)**: 모듈함수 sink 시 TASK-024 역도달 상류에서 호출자 누락 = 민감 변경 미포착(하류 직접 구멍). §2B 필수 "동명 오버로드" 적대세트가 제출 픽스처에 없음(conditional.py=동일-id 조건부만). AC #1·#4 불충족.
+- **보정 ①권장**: ① 클래스 확장 루프 제거 ② 스코프조건+동명 union ③ 상설 회귀 픽스처(모듈함수 vs 동명 클래스메서드→모듈함수 엣지).
+
+### 🟡 O-1 (비차단) — 중첩 데코레이터/기본인자 호출 조용한 유실
+- `visit_function` 이 `node.body` 만 방문 → 중첩 정의의 `decorator_list`·기본인자 호출(함수 caller 명확) 유실. fresh `adv4`: `outer` 안 `@make_wrapper def inner` → `outer->make_wrapper` 부재·unresolved 에도 없음.
+- 모듈-스코프는 정당 out-of-scope, 중첩은 좁고 틀린 엣지는 안 만듦 → 비차단. R-1 과 함께 고치거나 **TASK-025 고정 적대세트(데코레이터/기본인자)로 이월**(본 관찰이 AC 근거).
+
+### 검증 로그
+`tests/run-tests.sh` 81/81 · `kit/tests/run-entrypoint-tests.sh` 9/9 · `tests/mutation-check.sh` 131 · fixture md5 3회 동일 · fresh 적대입력 adv1/adv2/adv3/adv4 직접 실행 · 음성검증(엣지 변조 단독 FAIL) — 전부 격리 worktree `wt023` 재현.
