@@ -1751,6 +1751,9 @@ cases:
         - app.conditional.load_value
         - app.conditional.load_value
         - app.conditional.normalize
+        - app.overloads.C.foo
+        - app.overloads.bar
+        - app.overloads.foo
         - app.reports.ReportService.export
         - app.reports.download_report
         - app.reports.dynamic_dispatch
@@ -1765,6 +1768,9 @@ cases:
         - caller: app.conditional.load_value
           callee: app.conditional.normalize
           call: normalize
+        - caller: app.overloads.bar
+          callee: app.overloads.foo
+          call: foo
         - caller: app.reports.ReportService.export
           callee: app.reports.render_report
           call: render_report

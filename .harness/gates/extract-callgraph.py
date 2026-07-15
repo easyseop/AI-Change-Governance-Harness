@@ -232,8 +232,6 @@ class CallVisitor(ast.NodeVisitor):
         names = [name]
         for index in range(len(self.parents), 0, -1):
             names.append(".".join(self.parents[:index] + [name]))
-        for class_name in sorted(self.class_names):
-            names.append(f"{class_name}.{name}")
         return names
 
 
