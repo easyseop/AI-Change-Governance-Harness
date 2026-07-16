@@ -1632,3 +1632,29 @@ AC#1 배열 전수점검(위 probe) · AC#3 콘솔 grep · AC#4 **96/96 + 진입
 
 ### 판정
 **통과** — 비민감(킷 러너 견고성·판정 로직 무변경 실증) → D-007 Claude `main` 머지. **TASK-033 완결** · 다음 = TASK-034. **멱등성**: `9769ece`·`fe9f1c6` 재처리 금지.
+
+---
+
+## TASK-034 — 의도 선언 누락 판정 정규화 (D-067) · **보정요청**
+
+**대상**: `codex/2026-07-16-task034-intent-not-declared` · `22fe433`·`a4037ce`
+
+### 재현된 주장 (수용)
+무해+미선언 exit 2 · 96/96 하위호환 · 킷 selftest·진입점 13/13·mutation 161 · dev↔kit md5 동일 · 합성 선언 없음(D-065 재유입 없음) · 음성검증 4종 구조 양호.
+
+### R-1 (차단) — 미선언이 1층 frozen 차단을 무력화
+`build_evidence()` 첫 줄 `load_intent()` → 미선언 시 예외로 카드 전체 대체 = **민감경로층·@gov 함수층까지 미실행**. `run.sh` 는 1층 판정을 카드 게이트 하나(`ge_exit`)에만 의존 → **frozen 차단 주체 소멸**.
+**fresh 실증**: `app/settlement/`(🔴 정산) 수정 + intent 삭제 → **main BLOCKED(1) → 브랜치 APPROVAL(2)**. `@gov(level=frozen)` 함수도 동일(1→2). 킷 게이트 md5 동일 = 배포 최전선 전파. 카드는 `frozen_touched: []`·`files_changed: 0` 라 **승인자가 정산 변경을 볼 수 없음**. §2B 필수질문 = **예** → 비차단 불가.
+
+### R-2 (차단) — 카드 허위 (AC#2)
+`files_changed: 0`·`changed_files: []` 주장 vs 실제 1건. 픽스처가 이 허위를 계약으로 고정(`good/name-status.txt` = 1건인데 기대 0) ⇒ **96/96 초록인데 구멍 = 미측정**.
+
+### 보정안 (프로토타입 실증)
+abort 금지 → 의도층만 `not_declared` 표시 후 파이프라인 계속 · verdict = frozen/forbidden > not_declared(approval) · `intent_not_declared_evidence()` 삭제 · `in_allowed_paths: null` 권장 · **합성 선언 주입 금지**(D-065).
+실측: 무해+미선언 **2** / frozen+미선언 **1** / @gov frozen+미선언 **1** ⇒ **AC#1 과 1층 불변식 비상충**.
+
+### 보수적 개발
+scope-creep 없음. **단 over-reach** — "판정 정규화" 요청이 "1층 차단 완화" 동반 = **D-065 와 동일 패턴**.
+
+### 판정
+**보정요청** — 코드 머지 보류 · 리뷰 기록만 main. TASK-034 AC#6 신설·AC#2 보강. **멱등성**: `22fe433`·`a4037ce` 재처리 금지.
