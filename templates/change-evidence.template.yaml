@@ -32,6 +32,9 @@ change_evidence:
     status: pass                      # pass / fail
     out_of_scope_paths: []            # allowed 밖을 건드린 경로
     forbidden_touched: []             # forbidden_paths 를 건드린 경로
+    expected_paths: []                # 반드시 변경돼야 할 경로 선언(각 항목별 1개 이상 매칭)
+    missing_expected: []              # 변경 파일에 매칭되지 않은 expected_paths
+    expected_paths_semantics: each pattern is satisfied by at least one changed file; literal paths are recommended because globs are coarse; renames use the destination path and deletes count as a path change
   sensitive_zone_check:
     status: pass                      # pass / blocked / approval_required
     frozen_touched: []                # 🔴 차단 사유
@@ -49,7 +52,7 @@ change_evidence:
     verdict_statement: no governance violation detected
     checked:
       - gate: check-change-intent
-        checked: changed paths against declared allowed_paths and forbidden_paths
+        checked: changed paths against declared allowed_paths, forbidden_paths, and optional expected_paths (one changed-file match per pattern; literal paths recommended because globs are coarse; renames use destination paths and deletes count as path changes)
       - gate: check-sensitive-zones
         checked: changed paths against sensitive-zones policy
       - gate: check-function-gov-level

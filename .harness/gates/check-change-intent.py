@@ -58,6 +58,7 @@ def load_intent(path):
     return {
         "allowed_paths": intent.get("allowed_paths") or [],
         "forbidden_paths": intent.get("forbidden_paths") or [],
+        "expected_paths": intent.get("expected_paths") or [],
         "broad_scope_threshold_percent": DEFAULT_BROAD_SCOPE_THRESHOLD_PERCENT,
         "requirement_id": intent.get("requirement_id"),
         "author": intent.get("author"),
@@ -194,10 +195,16 @@ def broad_scope_result(files, intent, diff_input):
 def check_files(files, intent, diff_input):
     allowed_paths = intent["allowed_paths"]
     forbidden_paths = intent["forbidden_paths"]
+    expected_paths = intent["expected_paths"]
     scope_too_broad = broad_scope_result(files, intent, diff_input)
 
     forbidden_touched = []
     out_of_scope = []
+    missing_expected = sorted(
+        pattern
+        for pattern in expected_paths
+        if not any(match_glob(path, pattern) for path in files)
+    )
 
     for path in files:
         in_forbidden = any(match_glob(path, pattern) for pattern in forbidden_paths)
@@ -211,7 +218,7 @@ def check_files(files, intent, diff_input):
     if forbidden_touched:
         verdict = "blocked"
         exit_code = BLOCKED
-    elif out_of_scope or scope_too_broad["too_broad"]:
+    elif out_of_scope or scope_too_broad["too_broad"] or missing_expected:
         verdict = "approval_required"
         exit_code = APPROVAL_REQUIRED
     else:
@@ -224,6 +231,8 @@ def check_files(files, intent, diff_input):
         "changed_files": files,
         "out_of_scope_paths": out_of_scope,
         "forbidden_touched": forbidden_touched,
+        "expected_paths": expected_paths,
+        "missing_expected": missing_expected,
         "scope_too_broad": scope_too_broad,
         "exit_code": exit_code,
     }
@@ -236,7 +245,7 @@ def print_text(result):
     elif verdict == "blocked":
         print("BLOCKED: forbidden_paths 변경이 감지되었습니다.")
     else:
-        print("APPROVAL_REQUIRED: allowed_paths 밖 변경이 감지되었습니다.")
+        print("APPROVAL_REQUIRED: 변경 의도 확인이 필요합니다.")
 
     if not result["changed_files"]:
         print("changed_files: 0")
@@ -244,6 +253,13 @@ def print_text(result):
         print(f"forbidden: {path}")
     for path in result["out_of_scope_paths"]:
         print(f"out_of_scope: {path}")
+    for pattern in result["missing_expected"]:
+        print(f"missing_expected: {pattern}")
+    if result["expected_paths"]:
+        print(
+            "expected_paths_semantics: 각 항목은 변경 파일 중 1개 이상 매칭 시 충족; "
+            "리터럴 경로 권장(glob은 거친 보증); rename은 목적지, delete는 경로 변경으로만 판정"
+        )
     if result["scope_too_broad"]["too_broad"]:
         reasons = ",".join(result["scope_too_broad"]["reasons"])
         print(f"scope_too_broad: {reasons}")
