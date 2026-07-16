@@ -12,11 +12,11 @@ apiVersion: harness-spine/v1
 kind: kit
 metadata:
   name: ai-change-governance
-  version: "0.2-mvp2"                   # 완료 MVP 스냅샷 (sync-from-dev.sh 로 갱신)
+  version: "0.2.1-mvp2"                 # 완료 MVP 스냅샷 (sync-from-dev.sh 로 갱신)
   reflects_mvp: [MVP-0, MVP-1, MVP-1.5, MVP-2]
   description: >
-    AI 가 만든 코드 변경(diff)을 결정적으로 걸러 "선언 의도 밖 / 민감영역 접촉 /
-    신규 위험능력 / sink 간접영향 / 정책 자기무력화"만 사람 승인으로 라우팅하는 게이트. 판정에 LLM 없음.
+    AI 가 만든 코드 변경(diff)을 결정적으로 걸러 "선언 의도 밖 / 필수 변경 파일 부재 /
+    민감영역 접촉 / 신규 위험능력 / sink 간접영향 / 정책 자기무력화"만 사람 승인으로 라우팅하는 게이트. 판정에 LLM 없음.
 
 # ── spine 단계(hook): 이 킷은 verify 단계의 변경 거버넌스 관심사 ──────
 hooks:
@@ -35,7 +35,7 @@ hooks:
 # tools_offline = spine hook 아님(온보딩/CI) — bootstrap.sh·selftest.sh 로 별도 진입
 gates:
   runtime_verdict:
-    - { id: check-change-intent,        layer: L1,        verdict: [pass, approval_required, blocked] }
+    - { id: check-change-intent,        layer: L1,        verdict: [pass, approval_required, blocked], detects: [scope_violation, missing_expected_paths] }
     - { id: check-sensitive-zones,      layer: L1,        verdict: [pass, approval_required, blocked] }
     - { id: check-function-gov-level,   layer: L1,        verdict: [pass, approval_required, blocked] }
     - { id: check-new-capabilities,     layer: L2,        verdict: [pass, approval_required] }

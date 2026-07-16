@@ -65,6 +65,20 @@ run_absent_case(){
   fi
 }
 
+run_expected_missing_case(){
+  local name="$1" runner="$2" repo="$3" card="$4"
+  local output rc
+  TOTAL=$((TOTAL + 1))
+  output="$(ACGH_GATE_TIMEOUT_SECONDS=1 bash "$runner" HEAD~1..HEAD --repo "$repo" --output "$card" 2>&1)"; rc=$?
+  if [ "$rc" = 2 ] && grep -q 'missing_expected:' "$card" && grep -q 'app/required_patch.py' "$card"; then
+    echo "PASS $name"; PASS=$((PASS + 1))
+  else
+    echo "FAIL $name (exit=$rc expected=2, card missing expected_paths evidence)"
+    printf '%s\n' "$output" | tail -12 | sed 's/^/  /'
+    [ -f "$card" ] && tail -20 "$card" | sed 's/^/  card: /'
+  fi
+}
+
 # 실제 차단이 승인요구보다 강하게 조립되는지 + 대상 repo 정책 override.
 repo="$WORK/frozen"; make_repo "$repo"
 cat >"$repo/policies/sensitive-zones.yaml" <<'YAML'
@@ -89,6 +103,18 @@ repo="$WORK/capability"; make_repo "$repo"
 printf 'import subprocess\n\ndef run():\n    return subprocess.run(["true"])\n' >"$repo/app/service.py"
 git -C "$repo" add . && git -C "$repo" commit -qm capability
 run_case new-capability 2 'APPROVAL_REQUIRED' "$KIT/run.sh" "$repo"
+
+# 선언한 필수 변경 파일이 diff 에 없으면 부재 탐지가 승인요구하고 카드에 증거를 남긴다.
+repo="$WORK/expected-missing"; make_repo "$repo"
+python3 - "$repo/change-intent.yaml" <<'PY'
+from pathlib import Path
+import sys
+p = Path(sys.argv[1])
+p.write_text(p.read_text() + "  expected_paths: [app/required_patch.py]\n")
+PY
+printf '\n# changed a different file\n' >>"$repo/app/service.py"
+git -C "$repo" add . && git -C "$repo" commit -qm expected-missing
+run_expected_missing_case expected-path-missing-approval "$KIT/run.sh" "$repo" "$WORK/expected-missing-card.yaml"
 
 # sink 의 직접 의존함수 수정은 3층에서 승인요구로 최종판정에 반영된다.
 repo="$WORK/indirect"; make_repo "$repo"
