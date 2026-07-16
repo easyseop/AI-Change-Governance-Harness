@@ -37,6 +37,21 @@ run_case(){
   fi
 }
 
+run_pipe_latency_case(){
+  local name="$1" runner="$2" repo="$3"
+  local output rc started elapsed
+  TOTAL=$((TOTAL + 1))
+  started="$(date +%s)"
+  output="$(ACGH_GATE_TIMEOUT_SECONDS=30 bash "$runner" HEAD~1..HEAD --repo "$repo" 2>&1)"; rc=$?
+  elapsed=$(( $(date +%s) - started ))
+  if [ "$rc" = 0 ] && [ "$elapsed" -lt 10 ]; then
+    echo "PASS $name"; PASS=$((PASS + 1))
+  else
+    echo "FAIL $name (exit=$rc elapsed=${elapsed}s expected=<10s)"
+    printf '%s\n' "$output" | tail -12 | sed 's/^/  /'
+  fi
+}
+
 # 실제 차단이 승인요구보다 강하게 조립되는지 + 대상 repo 정책 override.
 repo="$WORK/frozen"; make_repo "$repo"
 cat >"$repo/policies/sensitive-zones.yaml" <<'YAML'
@@ -61,6 +76,12 @@ repo="$WORK/capability"; make_repo "$repo"
 printf 'import subprocess\n\ndef run():\n    return subprocess.run(["true"])\n' >"$repo/app/service.py"
 git -C "$repo" add . && git -C "$repo" commit -qm capability
 run_case new-capability 2 'APPROVAL_REQUIRED' "$KIT/run.sh" "$repo"
+
+# 빠른 게이트의 파이프 EOF가 watcher timeout 잔여시간에 묶이지 않아야 한다.
+repo="$WORK/pipe-latency"; make_repo "$repo"
+printf '\n# harmless change\n' >>"$repo/app/service.py"
+git -C "$repo" add . && git -C "$repo" commit -qm changed
+run_pipe_latency_case pipe-capture-no-timeout-delay "$KIT/run.sh" "$repo"
 
 # 정책 규칙 삭제는 메타 게이트가 승인요구로 올린다.
 repo="$WORK/policy"; make_repo "$repo"

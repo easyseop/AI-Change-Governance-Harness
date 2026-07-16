@@ -84,7 +84,7 @@ run_gate(){
       sleep 1
       kill -KILL "$pid" 2>/dev/null || true
     fi
-  ) & watcher=$!
+  ) >/dev/null 2>&1 & watcher=$!
   wait "$pid"; rc=$?
   kill "$watcher" 2>/dev/null || true
   wait "$watcher" 2>/dev/null || true
