@@ -312,6 +312,7 @@
 **의존·순서**: 022 → 023 → 024 → 025 (각 통과·머지 후 다음 착수, 기존 배치 규율).
 
 ### TASK-026 ☐ 킷에 MVP-2 반영 — 역도달성 게이트 배선 (`kit/run.sh` 확장)  (Codex)  *(MVP-2 킷 스냅샷)*
+> 🔴 **철저 개발 요구(형 지시)**: 킷은 배포·실사용의 최전선이라 **빠진 부분 없이 세부까지** 개발할 것. 각 AC 를 체크리스트로 자가검증하고, "될 것 같다"가 아니라 **fresh 적대입력으로 실제 돌려 확인**(§2B). 특히 (a) 새 게이트의 내부 의존(`extract-sinks`·`extract-callgraph` co-located) 이 킷에서 실제 해소되는지, (b) `check-indirect-impact` 가 **HAS_RANGE·정책 부재·sink-registry 오버라이드** 전 경로에서 올바로 배선됐는지, (c) 최종 verdict 조립에 간접영향층이 실제 반영돼 **누락 0** 인지를 한 줄씩 확인. 인계 전 `kit/selftest.sh`(러너+진입점 적대) 전량 green + 간접영향 rig-and-revert 필수.
 **배경**: MVP-2(TASK-022~025) 완결로 dev 게이트가 16종(신규 `extract-sinks`·`extract-callgraph`·`check-indirect-impact`)인데 배포 킷은 MVP-1.5 스냅샷(13종)에 머물러 있다. 형 계획("MVP 달성마다 킷 반영")대로 킷을 MVP-2 상태로 올린다. **★단순 sync 아님**: 새 `check-indirect-impact` 는 **판정 게이트**(exit 0=pass / 2=approval_required, "indirect sink impact")라 `run.sh` 에 **명시 배선**돼야 실제 작동한다. `run.sh` verdict 조립은 D-050 이후 **Codex 저자 파일**이라 이 확장도 Codex 몫(Claude 가 하면 상호견제 위반·분류기 차단 — 세션 중 2회 실증).
 **수용기준**:
 1. `sync-from-dev.sh` 실행 → 16종 게이트 + `policies/sink-registry.yaml` 정책이 킷에 반영(누락검증 dev수==kit수 통과). 필요시 sync 스크립트가 sink-registry 정책도 복사하도록 확장.
