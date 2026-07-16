@@ -4,6 +4,18 @@
 
 ---
 
+## D-050 (2026-07-15) TASK-022b R-1 보정 재제출 재리뷰 — **통과 · Claude main 머지 (TASK-022b 완결 · 배포용 킷 v0 수용)**
+**대상**: 브랜치 `claude/2026-07-15-kit-draft` — 보정 델타 `f1bf533`(fix) + `39c2285`(docs). 통과분 `00bde19`·`88a7d4e` 는 D-049(A-0016) 멱등성대로 재론 없음 — 델타만 재리뷰.
+**판정: 통과 — 비민감 → Claude `main` 머지·push 완료. TASK-022b 완결, 킷 v0(kit/) main 수용.**
+**R-1(D-049) 해소 확인**: A-0016 처방 ①②** 모두 문자 그대로 채택**.
+- **① watcher fd 분리 ✓**: `kit/run.sh` L87 `) >/dev/null 2>&1 & watcher=$!` — 고아 `sleep` 의 호출자 파이프 write-end 점유 제거. 타임아웃 감지(마커파일·TERM/KILL)는 fd 무관이라 보존(`gate-timeout` 케이스 PASS 로 실증).
+- **② 파이프-지연 회귀가드 ✓**: `run_pipe_latency_case`/`pipe-capture-no-timeout-delay` — 파이프 캡처 + **`ACGH_GATE_TIMEOUT_SECONDS=30` 명시**(timeout=1 가림 우회 차단) + `rc=0` + 벽시계 `<10s` 단언, 집계 게이팅 정상 편입.
+**심층·적대 재검증**: 진입점 **6/6 PASS**(전체 4.2s)·selftest **PASS**(77+mutation127). **fresh(픽스처 밖)**: 합성 repo·기본 60s 타임아웃 파이프 캡처 → **elapsed 0s·pass·exit 0**(D-049 실측 60s 대비 회귀 소멸). **음성검증(rig-and-revert)**: fd 분리 원복 → 신규 가드 **단독 FAIL(5/6, `exit=0 elapsed=31s expected=<10s`)**·기존 5케이스는 여전히 PASS(기존 스위트의 사각 재확인) → 가드 load-bearing 실증. elapsed 31s≈timeout 30s = 타임아웃값 종속성 재확인.
+**보수적 개발(§1) OK**: 델타 = run.sh 1줄·진입점 테스트 +21줄·공동소유만. 판정 조립·우선순위·`--policies`·게이트 Python·정책·dev 트리 무접촉(A-0016 "손대지 마라" 준수). scope-creep 없음.
+**잔여(비차단)**: O-a(문구)·O-b(bash3.2 관용구)·O-c(실패 시 비-YAML 카드)는 차기 킷 정비 권장 유지, O-d(sync 체크섬)는 **MVP-2 킷 재생성 AC 채택**(D-049). A-0016 의 "재제출 전 origin/main merge" 미이행은 머지자 충돌해소로 흡수(내용 결함 아님).
+**머지(D-007)**: 비민감(신규 kit/ 폴더·기존 게이트/정책/dev 무변경 — D-047 판정 유지·정산/인증·인가/암호화/migration/infra 무관) → 구현자(Codex 델타)≠머지자(Claude)로 Claude 머지. 병합 충돌 3건(decisions/handoff/summaries)은 양측 보존·시간역순 재배열로 해소.
+**상세**: `review-notes.md` TASK-022b R-1 재리뷰(D-050) 절 · `collab/answers/A-0016.md` §해소. **멱등성**: `f1bf533`·`39c2285` 재처리 금지. **다음**: MVP-2 본선(TASK-023 콜그래프 빌더) 재개.
+
 ## D-049 (2026-07-15) TASK-022b 킷 최종리뷰 — **보정요청(1건 🟡 블로킹) · 코드 머지 보류**
 **대상**: 브랜치 `claude/2026-07-15-kit-draft`(헤드 `88a7d4e`) — 킷 초안 `8269dda`(Claude, D-047) + main 병합 `f39d6cf` + **Codex 교차감사·보강 `00bde19`**(D-048·A-0015 — D-048 은 미머지 브랜치의 decisions.md 에 존재). 역할역전 계약(D-047): verdict-affecting 셸 델타를 Codex 가 저자 → Claude 가 최종리뷰.
 **판정: 보정요청(R-1) — 코드 브랜치 머지 보류, 리뷰기록만 main 머지.**

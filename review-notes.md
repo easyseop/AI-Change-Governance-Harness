@@ -5,6 +5,28 @@
 
 ---
 
+## TASK-022b R-1 재리뷰 (D-050) — 보정 재제출 **통과** · Claude main 머지 (TASK-022b 완결·킷 v0 수용)
+
+**대상**: `claude/2026-07-15-kit-draft` 보정 델타 `f1bf533`(fix) + `39c2285`(docs). 멱등성(D-049): `00bde19`·`88a7d4e` 재처리 금지 — 통과분(판정 조립·우선순위·--policies·스냅샷 충실성)은 재론 없음, 델타만 재리뷰.
+
+### 델타 한 줄씩
+- `kit/run.sh` L87: `) & watcher=$!` → `) >/dev/null 2>&1 & watcher=$!` — **A-0016 처방 ①과 문자 단위 일치.** watcher 서브셸(과 그 자식 `sleep`)의 stdout/stderr 를 /dev/null 로 분리 → kill 후 고아 `sleep` 이 호출자 파이프 write end 를 더는 쥐지 않음. 타임아웃 감지 경로(마커파일 `$tmp.timeout` 기록·TERM/KILL)는 fd 와 무관해 무영향.
+- `kit/tests/run-entrypoint-tests.sh`: `run_pipe_latency_case` 신설 — **파이프 캡처(`$(…)`)** 로 `ACGH_GATE_TIMEOUT_SECONDS=30` 명시(A-0016 처방 ②의 "큰 타임아웃값 명시" 준수 — timeout=1 우회 가림 차단) + `rc=0`(판정 정확성 동시 단언) + 벽시계 `<10s` 단언. FAIL 시 exit·elapsed·출력 tail 진단 출력. 케이스 `pipe-capture-no-timeout-delay` 를 harmless-change 픽스처 repo 로 등록. TOTAL/PASS 집계·요약 라인 `[ "$PASS" = "$TOTAL" ]` 게이팅에 정상 편입.
+
+### 실증 (격리 worktree `39c2285`)
+- **스위트 재현**: 진입점 **6/6 PASS**(전체 벽시계 4.2s — 신규 케이스 포함해 즉시 종료) · `selftest.sh` **PASS**(77 케이스+mutation 127, "킷 게이트 무결").
+- **fresh 적대입력(픽스처 밖)**: 신규 합성 repo(lib/** intent·harmless 델타)에서 **기본 타임아웃(60s)** 파이프 캡처 `out=$(kit/run.sh HEAD~1..HEAD --repo …)` → **elapsed 0s · verdict pass · exit 0**. D-049 실측(동일 호출 60s)과 대비 = 회귀 소멸, R-1 원 증상 기준으로도 폐쇄.
+- **음성검증(rig-and-revert)**: 사본에서 fd 분리만 원복 → `FAIL pipe-capture-no-timeout-delay (exit=0 elapsed=31s expected=<10s)` **단독 FAIL(5/6)**, 나머지 5케이스는 여전히 전부 PASS(=기존 스위트가 이 회귀를 못 보는 구조 재확인). 원복 해제 시 6/6. **신규 가드가 load-bearing 이고 정확히 이 회귀를 잡는 유일한 케이스임을 실증.** elapsed 31s ≈ timeout 30s = 지연이 타임아웃값 종속임도 재확인.
+- **타임아웃 감지 보존**: 보정 코드에서 `gate-timeout` 케이스(slow gate·timeout=1 → `분석 실패: timeout`·exit 2 승인요구) PASS = fd 분리가 타임아웃 검출을 깨지 않음.
+
+### 판정·하류·보수적 개발
+- **하류**: 킷 1차 소비경로(CI 스텝·spine 의 명령치환)가 곧 이 파이프 캡처 — 가드가 소비경로 그대로를 상설 회귀로 고정. `<10s` 임계는 정상 실행(1~2s) 대비 여유 충분, 30s 회귀와는 3배 마진으로 분리 — 플레이크 위험 낮음.
+- **보수적 개발(§1) OK**: 델타 = `kit/run.sh` 1줄 + 진입점 테스트 +21줄 + 공동소유(handoff·summaries)만. 판정 조립·우선순위·`--policies`·게이트 Python·정책·dev 트리 무접촉(A-0016 "손대지 마라" 준수). scope-creep 없음.
+- **비차단 O-a~O-d**: 보정 커밋에 미동봉(A-0016 이 "차기로 미뤄도 좋음" 허용) — O-d 는 MVP-2 킷 재생성 AC 로 이미 채택, O-a/O-b/O-c 는 차기 킷 정비 시 반영 권장으로 유지.
+- **참고**: A-0016 의 "⚠️ 재제출 전 origin/main merge" 는 미이행 — 병합 충돌(decisions/handoff/summaries 3건)은 머지자(Claude)가 해소, 내용 결함 아님이라 비차단.
+
+**판정**: 통과 → **TASK-022b 완결, 킷 v0(kit/) main 수용**. 민감도: 신규 `kit/` 폴더 스냅샷·기존 게이트/정책/dev 트리 무변경(D-047 비민감 판정 유지)·정산/인증·인가/암호화/migration/infra 무관 → **비민감**, 구현자(Codex 델타)≠머지자(Claude)로 Claude `main` 머지(D-007). 멱등성: `f1bf533`·`39c2285` 재처리 금지.
+
 ## TASK-022b (D-049) — 킷 최종리뷰 · **보정요청**(watcher sleep 파이프 점유 회귀) · 코드 머지 보류
 
 **대상**: `claude/2026-07-15-kit-draft` 헤드 `88a7d4e` — 리뷰 초점 = **Codex 보강 델타 `00bde19`**(역할역전: verdict-affecting 셸을 Codex 저자, D-047·D-048·A-0015). 킷 초안 `8269dda` 는 Claude 작성이므로 스냅샷 충실성·조립 구조를 별도 검증.
