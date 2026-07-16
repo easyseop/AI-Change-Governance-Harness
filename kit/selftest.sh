@@ -4,7 +4,7 @@
 # =====================================================================
 # 번들된 테스트 스위트 + 뮤테이션 점검을 돌려, 이 킷의 게이트가 제대로
 # 판정하고(회귀 없음) 시험이 죽지 않았음을 배포 환경에서 직접 확인한다.
-# ★게이트가 서로를 co-located import 하므로, 여기서 통과 = 13종이 온전히
+# ★게이트가 서로를 co-located import 하므로, 여기서 통과 = 16종이 온전히
 #   실린 것의 실증(누락 시 import 깨져 FAIL).
 #
 # 사용:  ./selftest.sh          (전체)
@@ -23,7 +23,7 @@ ln -s "$KIT/policies" "$WORK/policies"
 ln -s "$KIT/templates" "$WORK/templates"
 cp -r "$KIT/tests" "$WORK/tests"
 
-echo "▶ 킷 자체검증 (게이트 13종 co-located 무결성 포함)"
+echo "▶ 킷 자체검증 (게이트 16종 co-located 무결성 포함)"
 cd "$WORK"
 rc=0
 echo "── 러너 스위트 (tests/run-tests.sh) ──"
