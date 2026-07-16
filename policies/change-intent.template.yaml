@@ -19,6 +19,12 @@ change_intent:
   forbidden_paths:
     - 미정                      # 예: backend/app/auth/**
 
+  # 반드시 실제 변경 파일에 나타나야 하는 경로(선택). 벤더 패치 유실 탐지 등에 사용.
+  # 리터럴 경로를 권장한다. glob은 그 아래 아무 파일 1건만 바뀌어도 충족되는 거친 보증이다.
+  # rename은 목적지 경로만, delete는 경로가 변경됐다는 사실만 판정한다.
+  expected_paths:
+    - vendor/package/patches/required_fix.py
+
   # 예상 변경 유형 (실제와 비교해 의외 변경 탐지)
   expected_change_types:
     - 미정                      # api_field_addition / ui_change / test_update / ...

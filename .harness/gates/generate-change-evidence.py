@@ -189,6 +189,7 @@ def load_intent(path):
         "author": intent.get("author"),
         "allowed_paths": intent.get("allowed_paths") or [],
         "forbidden_paths": intent.get("forbidden_paths") or [],
+        "expected_paths": intent.get("expected_paths") or [],
     }
 
 
@@ -290,6 +291,11 @@ def public_record(record):
 def intent_result(files, intent):
     out_of_scope = []
     forbidden_touched = []
+    missing_expected = sorted(
+        pattern
+        for pattern in intent["expected_paths"]
+        if not any(match_glob(path, pattern) for path in files)
+    )
 
     for path in files:
         in_forbidden = any(match_glob(path, pattern) for pattern in intent["forbidden_paths"])
@@ -301,9 +307,15 @@ def intent_result(files, intent):
             out_of_scope.append(path)
 
     return {
-        "status": "fail" if forbidden_touched or out_of_scope else "pass",
+        "status": "fail" if forbidden_touched or out_of_scope or missing_expected else "pass",
         "out_of_scope_paths": sorted(out_of_scope),
         "forbidden_touched": sorted(forbidden_touched),
+        "expected_paths": intent["expected_paths"],
+        "missing_expected": missing_expected,
+        "expected_paths_semantics": (
+            "each pattern is satisfied by at least one changed file; literal paths are recommended "
+            "because globs are coarse; renames use the destination path and deletes count only as a path change"
+        ),
     }
 
 
@@ -396,6 +408,8 @@ def build_reasons(intent_check, sensitive_check):
         reasons.append(f"frozen:{item['path']}:{item['reason']}")
     for path in intent_check["out_of_scope_paths"]:
         reasons.append(f"out_of_scope:{path}")
+    for pattern in intent_check["missing_expected"]:
+        reasons.append(f"missing_expected:{pattern}")
     for item in sensitive_check["protected_touched"]:
         reasons.append(f"protected:{item['path']}:{item['reason']}")
     for item in sensitive_check["watched_touched"]:
@@ -411,7 +425,7 @@ def executed_gate_records(diff_input):
     records = [
         {
             "gate": "check-change-intent",
-            "checked": "changed paths against declared allowed_paths and forbidden_paths",
+            "checked": "changed paths against declared allowed_paths, forbidden_paths, and optional expected_paths (one changed-file match per pattern; literal paths recommended because globs are coarse; renames use destination paths and deletes count as path changes)",
         },
         {
             "gate": "check-sensitive-zones",
@@ -497,7 +511,11 @@ def combine_verdicts(intent_check, sensitive_check, function_gov):
 def verdict_and_exit(intent_check, sensitive_check):
     if intent_check["forbidden_touched"] or sensitive_check["frozen_touched"]:
         return "blocked", BLOCKED
-    if intent_check["out_of_scope_paths"] or sensitive_check["protected_touched"]:
+    if (
+        intent_check["out_of_scope_paths"]
+        or intent_check["missing_expected"]
+        or sensitive_check["protected_touched"]
+    ):
         return "approval_required", APPROVAL_REQUIRED
     return "pass", PASS
 
@@ -631,6 +649,12 @@ def main():
                     "status": "fail",
                     "out_of_scope_paths": [],
                     "forbidden_touched": [],
+                    "expected_paths": [],
+                    "missing_expected": [],
+                    "expected_paths_semantics": (
+                        "each pattern is satisfied by at least one changed file; literal paths are recommended "
+                        "because globs are coarse; renames use the destination path and deletes count only as a path change"
+                    ),
                 },
                 "sensitive_zone_check": {
                     "status": "blocked",

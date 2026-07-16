@@ -319,7 +319,7 @@ def validate_json_gate(case, result, exit_code):
     assert_equal(errors, "exit_code", exit_code, expect["exit_code"])
     assert_equal(errors, "verdict", result.get("verdict"), expect["verdict"])
 
-    for key in ("out_of_scope_paths", "forbidden_touched"):
+    for key in ("out_of_scope_paths", "forbidden_touched", "expected_paths", "missing_expected"):
         if key in expect:
             assert_equal(errors, key, result.get(key), expect[key])
     if "scope_too_broad" in expect:
@@ -384,6 +384,14 @@ def validate_evidence(case, result, exit_code):
     assert_equal(errors, "summary.lines_added", evidence.get("summary", {}).get("lines_added"), expect["lines_added"])
     assert_equal(errors, "summary.lines_removed", evidence.get("summary", {}).get("lines_removed"), expect["lines_removed"])
     assert_equal(errors, "changed_files", evidence.get("changed_files"), expect["changed_files"])
+    for key in ("expected_paths", "missing_expected"):
+        if key in expect:
+            assert_equal(
+                errors,
+                f"intent_check.{key}",
+                evidence.get("intent_check", {}).get(key),
+                expect[key],
+            )
     if "changed_functions" in expect:
         actual = [
             {
