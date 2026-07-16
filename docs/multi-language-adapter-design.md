@@ -8,9 +8,26 @@
 
 ## 1. 불변 원칙 (새 언어에도 그대로)
 
+- **🔴 파이썬 동등성(parity) — 최우선 합격기준**(형 지시 2026-07-16): 새 언어는 Python 과 **동일 성능**을 내야 한다. 2등 시민 금지. 정의·강제장치 = **§1.5**.
 - **판정 불변식 유지**: 1층 `frozen` 만 차단, **2·3층은 자동 차단 금지·승인요구 상한**(D-004). LLM·값추정 금지 — **결정적**.
 - **보수적 개발**: **Python(`ast`) 게이트는 손대지 않는다**(91/91 + 뮤테이션 + D-005~057 검증자산 보존). 새 언어는 **기존 위에 얹기**(대규모 리팩터·통일성 목적 재작성 금지).
 - **정직성(TASK-019 계보)**: 미지원 확장자·미해소 호출·프레임워크 간접(DI/AOP)은 **감사카드 coverage 에 노출**한다. **"지적 없음"을 "분석했고 안전"으로 오해하게 두지 않는다**(조용한 통과 금지).
+
+## 1.5 파이썬 동등성(parity) — 이 설계의 최우선 요구 🔴
+
+> 형 지시(2026-07-16): **"가장 중요한 건 파이썬과 동일한 성능을 내야 한다."** 다국어 확장의 **합격 기준**이자 최우선 제약.
+
+**"동일 성능"의 조작적 정의 — 4개 축**:
+1. **탐지 동등**: 의미상 동등한 위험 변경은 **언어가 달라도 동일 verdict**(pass/approval/blocked). → **교차언어 등가 픽스처**로 강제(아래).
+2. **엄밀성 동등**: 각 언어가 **자기 고정 적대 세트**(그 언어의 우회 벡터) + 음성검증 + fail-closed 를 갖는다. Python 이 `getattr` 난독을 D-024~027 로 4단계 폐쇄했듯, Java 는 **리플렉션·문자열 SQL 난독**을 동급 깊이로 막는다.
+3. **정직성 동등**: 미탐·미해소는 coverage 노출(조용한 통과 금지). 이미 전 언어 공통.
+4. **🔴 안전 방향 동등(가장 중요)**: 정적분석이 불완전할 때 **과탐(approval 남발) 쪽으로 기울고, 과소탐(놓침) 쪽으론 절대 안 기운다.** 놓침 = 위험 통과 = **parity 위반**. 과탐 = 승인 프롬프트 = 허용(승인상한). **불완전성은 항상 안전한 쪽으로 반올림.**
+
+**강제 장치 — 교차언어 등가 픽스처**: 각 위험 클래스(직접 민감함수 수정·신규 위험능력·간접영향·의도이탈)마다 **Python 판 + Java 판을 쌍**으로 만들어 **동일 verdict 를 단언**한다. 하나라도 어긋나면 **parity 회귀 = 스위트 FAIL**. 이게 "동일 성능"의 **자동 증명**(주장이 아니라 실증). 상설 회귀 `tests/parity/` 그룹 신설.
+
+**parity 가 "공짜"인 곳과 "공짜가 아닌" 곳**:
+- 🟢 **공짜(직접 달성)**: 경로층·인벤토리·주석·능력 — 구조·이름 기반이라 언어만 바뀌고 정보량 동일. tree-sitter 로 탐지 parity 직행.
+- 🔴 **공짜 아님 = L3(간접영향) 하나뿐** → §5 에서 **보수적 과대근사**로 안전 parity 달성. (앞 초안의 "Java 는 더 약함"을 방치하지 않고 회복 메커니즘을 명시.)
 
 ## 2. 오늘 이미 언어무관인 것 (코드 0으로 Java/FE 작동)
 
@@ -31,8 +48,9 @@
 
 각 언어 어댑터는 **아래 스키마로만** 산출한다. 그러면 하류 판정 게이트(`map-diff-to-functions` 교집합·classify·`check-function-gov-level`·`check-new-capabilities`·`check-indirect-impact`)는 **언어를 몰라도** 그대로 재사용된다.
 
-1. **인벤토리**: `{path, lang, functions:[{name(정규화), start_line, end_line, decorator_start_line, annotations:[...]}]}`
-   - 현행 Python `extract-python-inventory` 출력이 이미 이 형태(`lang` 필드만 추가). **헝크↔함수 교집합(`touched_functions`)은 순수 라인범위 계산 = 이미 언어무관.**
+1. **인벤토리**: `{path, lang, functions:[{type, name(정규화), start_line, end_line, signature_start_line(어노테이션/데코레이터 첫 줄), signature(오버로드·시그니처변경 판별), annotations:[...]}]}`
+   - 현행 Python `extract-python-inventory` 출력이 이미 이 형태(`lang` 추가·`decorators`→`annotations`·`decorator_start_line`→`signature_start_line` **이름만 중립화·값 동일**). **헝크↔함수 교집합(`touched_functions`)은 순수 라인범위 계산 = 이미 언어무관.**
+   - `signature` = classify(added/modified/deleted·시그니처 vs 본문 변경)용 정규화 시그니처. 각 언어 어댑터가 제공, **classify 비교 로직은 언어중립**(오버로드 매칭 = `(name, signature)` 키 — Python `order_key` 계보).
 2. **능력신호**: `{path, lang, capabilities:[{id, level, signals:[{kind,name,line}]}], unresolved_dynamic, errors, parse_error, unreadable}`
 3. **거버넌스 주석**: `{path, lang, annotations:[{symbol, level, reason, order_key, errors}]}`
 4. **콜그래프**: `{path, lang, edges:[{caller,callee}], unresolved_calls:[...]}`  ← 간접영향(Phase X)용
@@ -67,6 +85,7 @@
 
 - **의존성 등급 정직**: `ast`/`fnmatch` = 표준 라이브러리(설치 0). `pyyaml` = 유일한 순수-파이썬 외부 의존. tree-sitter = 외부 + 네이티브(C) 한 겹 위 — 다만 prebuilt wheel 로 `pip install` 한 줄, 실부담은 "pyyaml 하나 더" 수준. 다중 런타임(JVM/Node) 네이티브 툴과는 급이 다르다.
 - **tree-sitter 한계 = 타입 미해소**. 호출이 정확히 어느 정의로 가는지(타입 추론)는 안 됨 → **이름기반 거친 해소**. 이는 **현행 Python 콜그래프도 동일**하므로 새 손해가 아니다. 정말 필요한 고가치 지점(Java 타입기반 콜그래프)만 후속 네이티브 보강 여지(§7).
+- **🔴 결정성·재현성 parity**: tree-sitter 문법 **버전 고정(pin)** + 감사카드에 **언어별 파서/문법 버전 기록**(Python parser 버전 기록 = TASK-019 AC#3 계보). 같은 소스 + 같은 문법버전 → 같은 파스트리(플랫폼 무관 확인). 문법 업그레이드는 정책 변경으로 취급(재현성 계약).
 
 ## 4. 언어별 어댑터가 채울 것
 
@@ -102,11 +121,24 @@
 
 인벤토리(함수선언·화살표함수·클래스메서드·React 컴포넌트) + **XSS/능력 카탈로그**: `dangerouslySetInnerHTML`·`innerHTML=`·`document.write`(XSS sink→protected)·`eval`·`new Function`(동적실행→protected)·`fetch`/`axios`(외부호출→watched)·`localStorage`/`document.cookie`(민감저장→watched)·`process.env`/`child_process`(node→protected). 주석 규약 = JSDoc `/** @gov {level:"frozen"} */` 또는 `// @gov(level=frozen)`.
 
-## 5. 정직한 한계 (언어별 coverage 노출 — 반드시)
+## 5. parity 가 공짜가 아닌 지점 — L3(간접영향)과 그 회복
 
-- **🔴 Java 간접영향은 Python 보다 *더 불완전***: DI(`@Autowired` 주입)·AOP(`@Transactional` 프록시)·인터페이스 다형성 → 정적 콜그래프가 런타임 호출을 **더 많이 놓침**. 이는 tree-sitter/네이티브 무관하게 정적분석의 구조적 한계. → **간접영향층(Phase X)이 Java 에선 "동등"이 아니라 "더 약함"**을 `coverage.unevaluated` 로 정직 노출. "다 커버"라 말하면 거짓.
-- **TS 타입 미해소**: tree-sitter 는 타입 정보 없음 → 타입기반 호출 해소 불가(네이티브 보강 전까지).
-- **동적**: 리플렉션(Java)·`eval`/`window[...]`(JS) 완전복원 불가 → 존재는 잡되(watched 신호) 대상 값 추정 안 함(현행 Python 원칙 동일).
+앞 절들(경로·인벤토리·주석·능력)은 tree-sitter 로 **탐지 parity 가 직접 달성**된다(구조·이름 기반이라 언어만 바뀔 뿐 정보량 동일). **유일하게 parity 가 공짜가 아닌 곳은 L3 콜그래프**다.
+
+**문제**: Java 관용구(인터페이스 + DI + AOP)는 호출부와 구현을 **의도적으로 분리**한다. 이름기반 정적 콜그래프는 `service.transfer()` 가 어느 구현으로 가는지 모른다(런타임 주입). Python(대부분 직접 호출)보다 **정적으로 놓치는 실제 엣지가 많다** → 그냥 두면 L3 는 Java 에서 **과소탐(놓침) = §1.5 parity 위반.**
+
+**해법 = 보수적 과대근사(안전 parity 달성)**:
+- 인터페이스 메서드 호출 → repo 내 **그 인터페이스의 모든 구현체로 엣지**(어느 게 주입될지 모르니 전부 연결·tree-sitter 로 `implements`/`extends` 열거 가능).
+- `@Autowired`/생성자 주입 필드 → 그 타입의 **모든 구현**으로 해소.
+- `@Transactional`·AOP 프록시 경유 → **직접 엣지로 취급**(프록시 무시).
+- 결과: 산출 콜그래프 = 실제 런타임 엣지의 **상위집합(superset)** → **진짜 엣지를 안 놓침 = 안전 방향 parity 달성**(§1.5 축4). 비용 = 승인 프롬프트 증가(과탐) — 2·3층 승인상한이라 감내.
+
+**정밀 parity(옵션·후속)**: 과탐이 실사용에서 과하면, 후속 **네이티브 심볼솔버**(JavaParser/Spoon)로 인터페이스→실제 구현을 타입으로 좁힌다. tree-sitter 만으로 **안전 parity**, 네이티브는 **정밀 parity**. Java 는 정적타입이라 심볼솔버 도입 시 오히려 **Python L3 를 능가**할 수 있음(Python 동적타입은 이 해소가 근본적으로 더 어려움).
+
+**여전한 정직 노출(coverage — 과대근사로도 못 잡는 것)**:
+- **완전 동적**: 리플렉션 디스패치(Java)·`eval`/`window[...]`(JS)·`getattr`(Python) — 존재는 watched 로 잡되 대상 값 추정 안 함(전 언어 동일 원칙). → `coverage.unevaluated`.
+- **컨테이너 밖 배선**: 설정파일 기반 빈·외부 주입 → 코드에 안 보임. → coverage 노출.
+- **TS 타입 미해소**: tree-sitter CST 는 타입 없음 → 타입기반 호출 해소는 네이티브 보강 전까지 불가(프론트 W1 의 정밀 parity 는 후속).
 
 ## 6. 단계 로드맵 + 태스크 맵
 

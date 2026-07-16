@@ -363,9 +363,11 @@
 # MVP-3 (다국어 확장 — Java/Spring 우선)  *(설계 확정: `docs/multi-language-adapter-design.md`, 형 방향승인 2026-07-16, D-061)*
 
 > **왜 MVP-3인가**: 깊은 층(함수레벨 `@gov`·신규능력·간접영향)이 Python `ast` 전용. 경로층은 이미 언어무관이라 작동하나 Java/Spring·프론트의 **함수·능력·영향**은 못 본다. **판정 엔진 하나 + 언어별 추출기** 구조로 다국어 확장.
+> **🔴 최우선 합격기준 = 파이썬 동등성(parity)**(형 지시 2026-07-16 "가장 중요한 건 파이썬과 동일 성능"): 새 언어는 Python 과 ① 탐지 ② 엄밀성 ③ 정직성 ④ **안전 방향**(불완전 시 과탐 쪽·과소탐 절대 금지) **동등**. **교차언어 등가 픽스처**(같은 위험 클래스의 py판+java판 → 동일 verdict 단언)를 `tests/parity/` 상설 회귀로 강제. 정의 = 설계문서 §1.5.
 > **확정 방향(형 승인)**: ① **Java/Spring 먼저**(은행 핵심 로직·Spring 어노테이션이 민감도 개념과 1:1·정적타입) ② **tree-sitter 백본**(Java/JS 파서), **Python `ast` 는 현행 유지**(무개조·무회귀 — 검증자산 보존).
 > **불변 원칙 유지**: 1층 frozen 만 차단·2·3층 승인상한·LLM/추정 금지·결정적. 미지원/미해소는 **coverage 정직 노출**(TASK-019 계보).
 > **핵심 seam**: 공통 IR 4종(인벤토리·능력·주석·콜그래프) + 확장자 라우터(파일별 분배·미지원=coverage). 상세 = 설계문서 §3.
+> **parity 가 공짜 아닌 유일 지점 = L3(간접영향)**: Java DI/AOP/인터페이스로 이름기반 콜그래프가 실제 엣지를 놓침 → **보수적 과대근사**(인터페이스 호출→모든 구현체 엣지·`@Autowired`→모든 구현·프록시 직접엣지)로 **상위집합 산출 = 안전 parity 달성**(놓침 없음·과탐은 승인상한이라 감내). 정밀 parity 는 후속 네이티브 심볼솔버. 상세 = 설계문서 §5.
 > **명시 비범위(설계 §7)**: cross-commit 누적(→ 후속 마일스톤·baseline 저장 필요)·타입기반 정밀 콜그래프(→ 네이티브 보강)·전 언어 동시.
 
 ### TASK-029 ☐ 다국어 어댑터 seam — 공통 IR 계약 + 확장자 라우터 + tree-sitter 도입  (Codex)  *(MVP-3 · J0)*
@@ -376,6 +378,7 @@
 3. **🔴 미지원 확장자 fail-safe + coverage 노출**: 심층 어댑터 없는 확장자(`.go`·`.java`(J1 전)·기타)는 경로층은 그대로 판정하되 **감사카드 coverage 에 "심층분석 미지원: `<ext>`" 명시**. "지적 없음"을 "분석·안전"으로 오해하게 두지 않음(조용한 통과 금지). 픽스처: 미지원 확장자 변경 → 경로층 판정 유지 + coverage 노출 실증 + 음성검증(coverage 문구 누락 시 FAIL).
 4. **tree-sitter 도입**: 의존 추가(prebuilt wheel) + Java/JS 문법 로드 **스모크 테스트**(파서가 실제 로드·파싱되는지 배포환경 실증). 결정성(같은 소스→같은 파스트리) 확인. `kit` 동봉·설치 경로 문서화(배포 시 의존).
 5. 라우터·coverage 확장이 **기존 카드 스키마와 정합**(임의 키 금지 — 필요 시 `templates/change-evidence.template.yaml` 동시 개정). generate-change-evidence 카드에 coverage 언어 항목 반영.
+6. **🔴 parity 기반장치**(설계 §1.5·§3.3): (a) **`tests/parity/` 그룹 신설** — 교차언어 등가 픽스처 러너 훅(J2·J3 가 케이스를 채움·같은 위험 클래스 py판+java판 동일 verdict 단언). (b) tree-sitter **문법 버전 고정(pin)** + 카드에 **언어별 파서/문법 버전 기록**(재현성 계약·Python parser 버전 계보). 라우터가 언어별 파서 버전을 coverage 에 노출.
 **산출**: 라우터·IR 문서·정책(Codex 저자) + 픽스처 + tree-sitter 도입. **비고**: Python `ast` 무개조가 최우선. Java 파싱 없음(J1).
 
 ### TASK-030 ☐ Java 함수/메서드 인벤토리 추출기 (tree-sitter → 공통 IR)  (Codex)  *(MVP-3 · J1)*
@@ -397,24 +400,27 @@
 4. 변경 메서드에 invalid/unresolved 주석·parse_error → 최소 approval(조용한 pass 금지·fail-closed).
 5. **🔴 고정 적대 세트**(상설 회귀): `@Gov` 부착 메서드·Spring 인가/트랜잭션 어노테이션·오버로드·어노테이션 제거 PR 각각 + 음성검증(기대변조→FAIL).
 6. 결정적 + `--json`. 정직성: 어노테이션은 잡되 **AOP 프록시/DI 간접은 coverage 노출**(§5 — 이 층은 선언 기반이라 런타임 실제 적용 여부는 못 봄).
+7. **🔴 parity 픽스처**(설계 §1.5): 이 층의 Python 대응 위험 케이스(민감함수 직접수정→frozen=blocked/protected=approval · 주석제거 우회→base 지배)와 **동일 verdict** 를 내는 **Java 등가 픽스처를 `tests/parity/` 에 쌍**으로 + 음성검증(한쪽 기대 변조 시 parity FAIL). Spring 카탈로그 신호는 Java 고유 초과분이라 등가 대상 아님 — `@Gov` 대칭 케이스로 parity 단언.
 **의존**: TASK-030 통과 후.
 
 ### TASK-032 ☐ Java 능력 카탈로그 + 신규능력 감지  (Codex)  *(MVP-3 · J3)*
 **목적**: Java 위험 능력을 카탈로그로 추출 → 기존 `check-new-capabilities`(base..head 신규 도입만 approval) 재사용. 2층 불변식(자동 차단 금지·승인상한).
 **수용기준**:
 1. Java 능력 카탈로그(`sensitive-capabilities.yaml` 확장 또는 언어별 분리·source/owner 메타): `Runtime.exec`/`ProcessBuilder`(command_exec) · `ObjectInputStream.readObject`(unsafe_deserialization) · `Class.forName`/`Method.invoke`(reflection) · 문자열 SQL `Statement.execute*`(sql_injection_surface) · `Cipher`/`MessageDigest`(crypto) · `InitialContext.lookup`(jndi_lookup) · `RestTemplate`/`WebClient`/`HttpClient`(outbound_http). 등급은 정책값(protected 상한·frozen 오면 clamp — 2층 불변식).
-2. **신호 3종 이식**(TASK-010 계보): import 신호(`import` 문)·call 신호(정규화 호출이름)·해소불가 동적(리플렉션)→`unresolved_dynamic` 노출. import backstop 원칙.
-3. **🔴 Java 대응 우회 벡터 고정 적대 세트**: 리플렉션 경유 호출(`Method.invoke`)·문자열 조립 SQL·`Class.forName("...")` 동적 로드 각각 + 음성검증. (Python `getattr` 난독의 Java 대응.)
+2. **신호 3종 이식**(TASK-010 계보): import 신호(`import` 문)·call 신호(정규화 호출이름)·해소불가 동적(리플렉션)→`unresolved_dynamic` 노출. import backstop 원칙. **🔴 Java import 뉘앙스**: `java.lang.*`(`Runtime` 등)는 **암시적 import**(import 문 없음) → Python import-backstop 이 그대로 안 통함. `java.lang` 계열은 **call 신호로 커버**(import 없어도 `Runtime.getRuntime().exec` 잡힘). 명시 import 모듈(`java.io.ObjectInputStream` 등)은 import backstop 유효. 이 비대칭을 픽스처로 고정.
+3. **🔴 Java 대응 우회 벡터 고정 적대 세트**: 리플렉션 경유 호출(`Method.invoke`)·문자열 조립 SQL·`Class.forName("...")` 동적 로드 각각 + 음성검증. (Python `getattr` 난독의 Java 대응 — parity 축2 엄밀성 동등.)
 4. **base..head 신규 도입만**(TASK-011 계보): 양쪽 있으면 미감지·head 만 신규·삭제 안전. never-blocked 불변식(approval 상한·exit 1 없음). fail-closed(head 파싱실패→per-path approval).
 5. 결정적 + `--json`. 정직성: 값추정 금지·동적 미탐 coverage 노출.
+6. **🔴 parity 픽스처**(설계 §1.5): Python 신규능력 대응(신규 위험능력 도입→approval · 양쪽 존재→미감지 · 삭제 안전)과 **동일 verdict** 를 내는 **Java 등가 픽스처를 `tests/parity/` 쌍**으로 + 음성검증(한쪽 기대 변조 시 parity FAIL).
 **의존**: TASK-031 통과 후.
 
 **MVP-3 의존·순서**: 029(seam) → 030(인벤토리) → 031(주석/Spring) → 032(능력). 각 통과·머지 후 다음. 이후 W1(프론트)·X(콜그래프→간접영향) 는 J 완결 후 AC 정밀화.
 
 ## MVP-3 공통 (Codex)
-- **tree-sitter 허용**(Java/JS 파서). **Python 은 `ast` 유지**(tree-sitter 로 이관 금지 — 무개조·무회귀).
+- **🔴 파이썬 동등성(parity) = 최우선 합격기준**(형 지시): 각 J-태스크는 Python 대응층과 **동일 성능**을 실증해야 통과. **교차언어 등가 픽스처**(`tests/parity/`·py판+java판 동일 verdict 단언 + 음성검증)가 없으면 미완. 불완전성은 **항상 과탐(approval) 쪽으로 반올림 — 과소탐(놓침) 금지**(놓침 = parity 위반). 정의 = 설계 §1.5.
+- **tree-sitter 허용**(Java/JS 파서). **Python 은 `ast` 유지**(tree-sitter 로 이관 금지 — 무개조·무회귀). 문법 버전 pin + 카드 기록(재현성).
 - 새 언어라도 판정 불변식 동일: 1층 frozen 만 차단·2·3층 승인상한·LLM/추정 금지·결정적.
-- 미지원 확장자·미해소 호출·프레임워크 간접(DI/AOP) 은 **coverage 정직 노출**(조용한 통과 금지).
+- 미지원 확장자·미해소 호출·프레임워크 간접(DI/AOP) 은 **coverage 정직 노출**(조용한 통과 금지). L3 간접영향은 **보수적 과대근사로 안전 parity**(설계 §5).
 - 판정 게이트는 **공통 IR 만 소비**(언어중립) — 언어 종속은 추출기(어댑터)에 격리.
 
 ## MVP-1 공통 (MVP-0 공통 규칙에 더해)
