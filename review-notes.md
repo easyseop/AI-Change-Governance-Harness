@@ -1465,3 +1465,40 @@ R-2 델타 = 게이트 3줄 + 픽스처 5줄 + cases 6줄. `policies/*`·Claude 
 - **O-1** main 기존결함(비델타): intent 없는 repo + bash 3.2 → `INTENT_ARGS[@]` unbound 크래시 exit 1. 과차단 방향이라 비차단이나 진입점 스위트 사각 — 차기 킷 정비 AC 로 명시.
 - **O-2** 킷 전용 자산 snapshot-복원 패턴 취약성(현재 실작동). **O-3** 킷 기본 frozen zone 에 `required_approval` 부재 → 간접영향 reviewer 폴백 tool_owner(정책면 후속·Claude 몫).
 - **멱등성**: `9e04c13`·`259d49e` 재처리 금지.
+
+## TASK-027 `expected_paths` 부재 탐지(패치 생존성) — **통과 · Claude main 머지** (MVP-2 보강 · 첫 부재 탐지 층) (2026-07-16, D-060)
+
+**대상**: `codex/2026-07-16-task027-expected-paths` 구현 `d8e6fa4` · 헤드 `308fc12`. **리뷰 방식**: 격리 worktree(`scratchpad/review-027`)에서 한 줄씩 정독 + fresh 적대입력 11종 직접 실행 + rig-and-revert 음성검증 3종. Codex 작업이 같은 작업트리에서 진행 중이라 dev 체크아웃은 무접촉.
+
+### 한 줄씩 검토 — 판정 배선 정합
+- `check-change-intent.py` `check_files()`: `missing_expected` 를 파일 루프 **밖에서** 선언 리스트 기준으로 계산(L203–207) — 빈 diff 에서도 평가되는 구조라 AC#3 의 "빈 diff + 선언 → 전부 missing" 이 별도 분기 없이 성립. 조기-exit 부재 확인(빈 diff pass 는 "아무 finding 없음"의 귀결이지 단락이 아님 → 선언 시 자연스럽게 뒤집힘). 이게 이 구현의 핵심 정합점.
+- verdict 배선(L218–226): `forbidden_touched` → blocked **최우선** 유지, `missing_expected` 는 `out_of_scope`·`scope_too_broad` 와 동급 approval 사유로만 편입. **missing 으로 exit 1 도달 경로 없음** — 차단금지 불변식 보존.
+- 카드 `generate-change-evidence.py`: `intent_result()` 동일 계산 + `status: fail` 편입, `verdict_and_exit()` approval 사유 편입, `build_reasons()` `missing_expected:{pattern}`, `executed_gate_records` checked 문구, **예외 fail-closed 카드 스키마에도 신규 3키 포함**(스키마 키 일치 계약 유지 — `schema_keys_match_template` 단언과 맞물림). `build_evidence()` 가 `intent_result` 를 무조건 호출하므로 빈 diff 미러링 성립.
+- 러너: `validate_json_gate`·`validate_evidence` 에 신규 키 단언 추가 — expect 에 있을 때만 검사(기존 케이스 무영향·하위호환).
+
+### 실증 로그 (fresh · 픽스처 밖)
+| # | 입력 | 기대 | 결과 |
+|---|---|---|---|
+| ADV1 | R100 rename + origin 경로 선언 | missing·2 (목적지만 changed) | ✓ |
+| ADV1b | 동일 + 목적지 선언 | 충족·0 | ✓ |
+| ADV2 | D delete + 그 경로 선언 | 충족·0 (경로 변경 판정) | ✓ |
+| ADV3 | forbidden+missing 동시 | blocked·1 우선, missing JSON 병기 | ✓ |
+| ADV4 | 빈 diff + 미선언 | 0 (TASK-001 #6 보존) | ✓ |
+| ADV5 | glob `vendor/**` + 무관 하위 파일 | 충족·0 (거친 보증 = 문서화 한계) | ✓ |
+| ADV6 | out_of_scope+missing 동시 | 2·둘 다 보고 | ✓ |
+| ADV7a/b/c | 스칼라 문자열/비문자열 원소/`**`+빈 diff | 2(과탐)/1(과차단)/2 — 전부 안전 방향 | ✓ |
+| ADV8 | **카드** 빈 diff + 선언 (픽스처 미커버) | approval·2 + reasons 병기 | ✓ |
+| ADV9 | **카드** frozen+missing | blocked·1 우선 | ✓ |
+| ADV10 | fresh git repo ref-모드 유실/존재 | 2 / 0 | ✓ |
+| ADV11 | 2회 실행 | `cmp` 동일 | ✓ |
+
+### 음성검증 (rig-and-revert)
+- rig A: intent verdict `or missing_expected` 제거 → `expected-missing`·`expected-empty-diff` 단독 FAIL(94/96) — 신규 픽스처 load-bearing.
+- rig B: 카드 `verdict_and_exit` 에서 제거 → `evidence-expected-missing` 단독 FAIL(95/96) — **카드 미러가 intent 게이트 케이스에 가려지지 않는 독립 가드**(TASK-028 킷 전제의 핵심).
+- rig C: 기대값 변조(missing→[]) → FAIL — 항상-PASS 아님. 원복 96/96 · `mutation-check` 161(+10 신규 편입).
+
+### 대안 검토 ("내가 짠다면")
+동일 구조를 채택했을 것 — 기존 `match_glob`·정렬·러너 검증 구조 재사용이 최소 델타이며 D-059 시맨틱과 문자 정합. 개선 여지는 intent 스키마 타입 검증(O-2)뿐인데 allowed/forbidden 도 동일 거동이라 신규 필드만 고치면 오히려 비대칭 — 차기 일괄이 맞다.
+
+### 잔여 (비차단 — O-1 디렉토리 리터럴 영구 missing / O-2 비문자열 크래시=과차단 / O-3 중복 에코. 전부 §2B 필수질문=아니오, 상세 D-060)
+**멱등성**: `d8e6fa4`·`308fc12` 재처리 금지. **다음 = Codex TASK-028.**

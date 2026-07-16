@@ -329,7 +329,7 @@
 > **불변 원칙 유지**: 판정 상한 = `approval_required`(**차단 없음** — 선언 문제는 확인 요청이지 차단 사유 아님, TASK-021 #3 계보). **기본 off**(미선언=기존 동작 완전 동일·하위호환). LLM·추정 금지(결정적).
 > **구조**: TASK-027(dev 게이트 확장) → TASK-028(킷 스냅샷 반영). MVP-2 를 최종 반영 지점으로.
 
-### TASK-027 ☐ 변경 의도 "필수 변경 파일" 선언 (`change_intent.expected_paths`) — 부재 탐지  (Codex)  *(MVP-2 보강 · 패치 생존성)*
+### TASK-027 ☑ 변경 의도 "필수 변경 파일" 선언 (`change_intent.expected_paths`) — 부재 탐지  (Codex)  *(MVP-2 보강 · 패치 생존성)*
 **목적**: `change_intent.expected_paths` 로 "이 변경이 반드시 건드려야 하는 파일"을 선언하고, 실제 diff 가 그걸 안 건드리면(패치 유실) **승인요구**로 올린다. 존재 탐지만 있던 하네스의 첫 **부재 탐지**.
 **배경**: 형 질문(2026-07-16, 벤더-브랜치 Q2). 상세 논거·적대분석 = `collab/decisions.md` D-059.
 **입력**: 기존 TASK-001/021 동일(`<diff/ref>` + `change-intent.yaml`). **출력**: `--json` 에 `expected_paths`·`missing_expected` 추가.
