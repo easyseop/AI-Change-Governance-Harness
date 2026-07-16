@@ -82,24 +82,45 @@ run_expected_missing_case(){
   fi
 }
 
+validate_no_intent_card(){
+  python3 - "$1" <<'PY'
+import sys
+import yaml
+
+with open(sys.argv[1], encoding="utf-8") as stream:
+    evidence = (yaml.safe_load(stream) or {}).get("change_evidence", {})
+
+coverage = evidence.get("coverage_statement", {})
+reasons = evidence.get("reasons", [])
+changed_files = evidence.get("changed_files", [])
+valid = (
+    evidence.get("verdict") == "approval_required"
+    and evidence.get("intent_check", {}).get("status") == "not_declared"
+    and coverage.get("checked") == []
+    and any("intent_not_declared" in item for item in coverage.get("not_checked", []))
+    and any(reason.startswith("intent_not_declared:") for reason in reasons)
+    and not any(item.get("in_allowed_paths") is True for item in changed_files)
+)
+raise SystemExit(0 if valid else 1)
+PY
+}
+
 run_no_intent_case(){
   local name="$1" runner="$2" repo="$3" card="$4"
   local output rc
   TOTAL=$((TOTAL + 1))
   output="$(ACGH_GATE_TIMEOUT_SECONDS=1 /bin/bash "$runner" HEAD~1..HEAD --repo "$repo" --output "$card" 2>&1)"; rc=$?
-  if [ "$rc" = 1 ] &&
+  if [ "$rc" = 2 ] &&
      ! printf '%s\n' "$output" | grep -q 'unbound variable' &&
      printf '%s\n' "$output" | grep -q '의도 선언 누락 — 카드 게이트가 미선언으로 판정' &&
      printf '%s\n' "$output" | grep -q '\[2층\] 신규 위험 능력' &&
      printf '%s\n' "$output" | grep -q '\[3층\] sink 간접영향' &&
      printf '%s\n' "$output" | grep -q '\[메타\] 정책 자기무력화' &&
      [ -s "$card" ] &&
-     grep -q '의도 선언 누락' "$card" &&
-     ! grep -q '^verdict: pass$' "$card" &&
-     ! grep -q 'in_allowed_paths: true' "$card"; then
+     validate_no_intent_card "$card"; then
     echo "PASS $name"; PASS=$((PASS + 1))
   else
-    echo "FAIL $name (exit=$rc expected=1, missing no-crash/layer/honest-card evidence)"
+    echo "FAIL $name (exit=$rc expected=2, missing no-crash/layer/honest-card evidence)"
     printf '%s\n' "$output" | tail -16 | sed 's/^/  /'
     [ -f "$card" ] && tail -20 "$card" | sed 's/^/  card: /'
   fi
@@ -149,7 +170,7 @@ rm "$repo/change-intent.yaml"
 git -C "$repo" add -A && git -C "$repo" commit -qm no-intent-base
 printf '\n# harmless change\n' >>"$repo/app/service.py"
 git -C "$repo" add app/service.py && git -C "$repo" commit -qm no-intent-change
-run_no_intent_case no-intent-bash32-blocked "$KIT/run.sh" "$repo" "$WORK/no-intent-card.yaml"
+run_no_intent_case no-intent-bash32-approval "$KIT/run.sh" "$repo" "$WORK/no-intent-card.yaml"
 
 # sink 의 직접 의존함수 수정은 3층에서 승인요구로 최종판정에 반영된다.
 repo="$WORK/indirect"; make_repo "$repo"

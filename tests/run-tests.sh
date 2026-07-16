@@ -392,6 +392,13 @@ def validate_evidence(case, result, exit_code):
                 evidence.get("intent_check", {}).get(key),
                 expect[key],
             )
+    if "intent_status" in expect:
+        assert_equal(
+            errors,
+            "intent_check.status",
+            evidence.get("intent_check", {}).get("status"),
+            expect["intent_status"],
+        )
     if "changed_functions" in expect:
         actual = [
             {

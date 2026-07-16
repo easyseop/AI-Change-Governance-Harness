@@ -31,6 +31,14 @@ NOT_CHECKED_STATEMENTS = [
     "complete dynamic obfuscation recovery",
 ]
 
+INTENT_NOT_DECLARED_STATEMENT = (
+    "change intent path scope (intent_not_declared: no declaration; scope was not checked)"
+)
+
+
+class IntentNotDeclaredError(FileNotFoundError):
+    pass
+
 
 def load_gate_module(filename, module_name):
     spec = importlib.util.spec_from_file_location(module_name, GATE_DIR / filename)
@@ -178,7 +186,9 @@ def policy_sha(paths):
 
 def load_intent(path):
     if not os.path.exists(path):
-        raise FileNotFoundError("의도 선언 누락: change-intent.yaml 파일을 찾을 수 없습니다.")
+        raise IntentNotDeclaredError(
+            "의도 선언 누락: change-intent.yaml 파일을 찾을 수 없습니다."
+        )
 
     with open(path, "r", encoding="utf-8") as stream:
         data = yaml.safe_load(stream) or {}
@@ -458,6 +468,56 @@ def coverage_statement(diff_input, verdict, checked=None):
     }
 
 
+def intent_not_declared_evidence(args, error):
+    verdict = "approval_required"
+    return {
+        "change_evidence": {
+            "requirement_id": None,
+            "author": None,
+            "generated_on": args.generated_on or "1970-01-01",
+            "base_commit": "unknown",
+            "tool_version": TOOL_VERSION,
+            "python_version": sys.version.split()[0],
+            "policy_sha": {},
+            "summary": {
+                "files_changed": 0,
+                "lines_added": 0,
+                "lines_removed": 0,
+            },
+            "changed_files": [],
+            "changed_functions": [],
+            "intent_check": {
+                "status": "not_declared",
+                "out_of_scope_paths": [],
+                "forbidden_touched": [],
+                "expected_paths": [],
+                "missing_expected": [],
+                "expected_paths_semantics": (
+                    "each pattern is satisfied by at least one changed file; literal paths are recommended "
+                    "because globs are coarse; renames use the destination path and deletes count only as a path change"
+                ),
+            },
+            "sensitive_zone_check": {
+                "status": "not_checked",
+                "frozen_touched": [],
+                "protected_touched": [],
+                "watched_touched": [],
+            },
+            "blast_radius": {
+                "shared_modules_changed": [],
+                "importers_count": None,
+            },
+            "verdict": verdict,
+            "coverage_statement": {
+                **coverage_statement(args.diff_input, verdict, checked=[]),
+                "not_checked": [INTENT_NOT_DECLARED_STATEMENT] + NOT_CHECKED_STATEMENTS,
+            },
+            "reasons": [f"intent_not_declared:{error}"],
+            "reviewer_required": [],
+        }
+    }
+
+
 def function_reason(prefix, item):
     reason = item.get("reason") or ""
     suffix = f":{reason}" if reason else ""
@@ -628,6 +688,9 @@ def main():
 
     try:
         evidence, exit_code = build_evidence(args)
+    except IntentNotDeclaredError as error:
+        evidence = intent_not_declared_evidence(args, error)
+        exit_code = APPROVAL_REQUIRED
     except Exception as error:
         evidence = {
             "change_evidence": {

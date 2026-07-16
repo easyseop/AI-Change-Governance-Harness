@@ -239,21 +239,25 @@ cases:
       name_status: tests/fixtures/good/name-status.txt
       change_intent: tests/fixtures/evidence-error/missing-change-intent.yaml
     expect:
-      verdict: blocked
-      exit_code: 1
+      verdict: approval_required
+      exit_code: 2
       files_changed: 0
       lines_added: 0
       lines_removed: 0
       changed_files: []
       changed_functions: []
+      intent_status: not_declared
+      reasons_contain:
+        - intent_not_declared
       coverage_checked_gates: []
       coverage_not_checked:
+        - "change intent path scope (intent_not_declared: no declaration; scope was not checked)"
         - runtime execution paths
         - unregistered sensitive business logic
         - cross-commit cumulative risk
         - non-Python semantic analysis
         - complete dynamic obfuscation recovery
-      verdict_statement: governance violation detected
+      verdict_statement: governance review required
       schema_keys_match_template: true
 
   - name: out-of-scope
