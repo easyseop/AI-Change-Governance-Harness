@@ -360,6 +360,63 @@
 **산출**: `kit/*`(Codex 저자·`run.sh` 미변경) + handoff/summaries. Codex 구현 → Claude 리뷰·머지(비민감 킷 스냅샷 — TASK-026 선례).
 **의존**: TASK-027 통과·머지 후 착수(027 → 028).
 
+# MVP-3 (다국어 확장 — Java/Spring 우선)  *(설계 확정: `docs/multi-language-adapter-design.md`, 형 방향승인 2026-07-16, D-061)*
+
+> **왜 MVP-3인가**: 깊은 층(함수레벨 `@gov`·신규능력·간접영향)이 Python `ast` 전용. 경로층은 이미 언어무관이라 작동하나 Java/Spring·프론트의 **함수·능력·영향**은 못 본다. **판정 엔진 하나 + 언어별 추출기** 구조로 다국어 확장.
+> **확정 방향(형 승인)**: ① **Java/Spring 먼저**(은행 핵심 로직·Spring 어노테이션이 민감도 개념과 1:1·정적타입) ② **tree-sitter 백본**(Java/JS 파서), **Python `ast` 는 현행 유지**(무개조·무회귀 — 검증자산 보존).
+> **불변 원칙 유지**: 1층 frozen 만 차단·2·3층 승인상한·LLM/추정 금지·결정적. 미지원/미해소는 **coverage 정직 노출**(TASK-019 계보).
+> **핵심 seam**: 공통 IR 4종(인벤토리·능력·주석·콜그래프) + 확장자 라우터(파일별 분배·미지원=coverage). 상세 = 설계문서 §3.
+> **명시 비범위(설계 §7)**: cross-commit 누적(→ 후속 마일스톤·baseline 저장 필요)·타입기반 정밀 콜그래프(→ 네이티브 보강)·전 언어 동시.
+
+### TASK-029 ☐ 다국어 어댑터 seam — 공통 IR 계약 + 확장자 라우터 + tree-sitter 도입  (Codex)  *(MVP-3 · J0)*
+**목적**: 언어별 파서를 판정 엔진에서 분리하는 **배관**을 깐다. Java 파싱 자체는 J1 — 여기선 seam·라우터·정직성·의존 도입까지.
+**수용기준**:
+1. **공통 IR 4종 스키마 확정**(설계 §3.1) — 인벤토리·능력신호·거버넌스주석·콜그래프. 현행 Python 게이트 출력에 `lang` 필드 추가로 정합(스키마 문서화 + 예시). **기존 Python 게이트 로직 무개조**(필드 추가만·현행 91/91 무회귀 = #1 가드).
+2. **확장자 라우터**: 바뀐 파일을 확장자→어댑터로 **파일별 분배**. 매핑은 **정책 파일**(`policies/language-routing.yaml` 신설 또는 기존 확장 — 하드코딩 금지). `.py`→python(기존 추출기 위임)·`.java`/`.js`/`.ts` 계열은 J1+ 에서 채우되 **자리(stub) 등록**. 결정적(확장자 기준·내용 추정 금지).
+3. **🔴 미지원 확장자 fail-safe + coverage 노출**: 심층 어댑터 없는 확장자(`.go`·`.java`(J1 전)·기타)는 경로층은 그대로 판정하되 **감사카드 coverage 에 "심층분석 미지원: `<ext>`" 명시**. "지적 없음"을 "분석·안전"으로 오해하게 두지 않음(조용한 통과 금지). 픽스처: 미지원 확장자 변경 → 경로층 판정 유지 + coverage 노출 실증 + 음성검증(coverage 문구 누락 시 FAIL).
+4. **tree-sitter 도입**: 의존 추가(prebuilt wheel) + Java/JS 문법 로드 **스모크 테스트**(파서가 실제 로드·파싱되는지 배포환경 실증). 결정성(같은 소스→같은 파스트리) 확인. `kit` 동봉·설치 경로 문서화(배포 시 의존).
+5. 라우터·coverage 확장이 **기존 카드 스키마와 정합**(임의 키 금지 — 필요 시 `templates/change-evidence.template.yaml` 동시 개정). generate-change-evidence 카드에 coverage 언어 항목 반영.
+**산출**: 라우터·IR 문서·정책(Codex 저자) + 픽스처 + tree-sitter 도입. **비고**: Python `ast` 무개조가 최우선. Java 파싱 없음(J1).
+
+### TASK-030 ☐ Java 함수/메서드 인벤토리 추출기 (tree-sitter → 공통 IR)  (Codex)  *(MVP-3 · J1)*
+**목적**: `.java` 를 tree-sitter 로 파싱해 class/method/constructor 인벤토리를 **공통 IR #1** 로. Python 인벤토리와 동일 스키마 → `map-diff-to-functions` 헝크↔메서드 교집합·classify 재사용.
+**수용기준**:
+1. class/method/constructor **정규화 이름**(`Class.method`·중첩·이너클래스)·**시작/끝 라인범위**·**어노테이션 목록** 추출. `lang: java`.
+2. 오버로드(동명·다른 시그니처)·중첩/이너 클래스·`static`/생성자 전부 포함. **🔴 동명 오버로드 가드**(TASK-007 계보): before/after 매칭 키를 이름 단독 아닌 `(정규화이름, 시그니처 또는 라인순서)` 로 — 오버로드 added/deleted/modified 오판 방지. 고정 적대 픽스처.
+3. **🔴 어노테이션 라인 포함**(TASK-006 데코레이터 계보): 메서드 매핑 시작범위에 어노테이션 줄 포함 — `@PreAuthorize`·`@Transactional` **어노테이션만 변경**해도 해당 메서드에 매핑(미포함 시 인가·트랜잭션 변경을 놓침).
+4. 파싱 실패(문법오류)·비-UTF8 → **파일 단위 격리**(형제 보존·빈 인벤토리+오류표시·fail-safe, TASK-013 계보). exit 0(보고용).
+5. 결정적(md5 2회) + `--json`. `map-diff-to-functions` 가 Java IR 을 소비해 Java 헝크↔메서드 매핑 산출됨을 픽스처로 실증(공통 교집합 로직 재사용 확인).
+**의존**: TASK-029 통과 후.
+
+### TASK-031 ☐ Java `@Gov` + Spring 어노테이션 카탈로그 → 함수레벨 민감도  (Codex)  *(MVP-3 · J2)*
+**목적**: Java 어노테이션을 민감도 신호로. 변경 메서드의 effective level → 기존 `check-function-gov-level` 판정 재사용(frozen=blocked/protected=approval/watched=warn).
+**수용기준**:
+1. `@Gov(level=, reason=, [owner=])` 파싱(문자열 리터럴 keyword) — Python `@gov` 규약 이식(strongest-wins 승계·중복필드 strongest·invalid→protected 보수, TASK-008 계보).
+2. **🔴 Spring 어노테이션 카탈로그**(신규 정책 `policies/framework-annotations.yaml`, source/owner 메타 필수 — TASK-016 AC#8 계보): `@PreAuthorize`/`@Secured`/`@RolesAllowed`/`@PostAuthorize`→protected · `@Transactional`→watched · `@GetMapping`/`@PostMapping`/`@RequestMapping`→watched+진입점 · `@Query(nativeQuery=true)`/`@Modifying`→protected · `@Scheduled`/`@EventListener`/`@KafkaListener`→watched. **카탈로그 외부화**(코드 하드코딩 금지)·등급은 정책값.
+3. **🔴 base∪head max**(TASK-009 계보): 어노테이션 *제거* 우회 방지 — 판정은 base·head 양측 주석의 max. `@PreAuthorize` 삭제+본문수정 시 base 지배.
+4. 변경 메서드에 invalid/unresolved 주석·parse_error → 최소 approval(조용한 pass 금지·fail-closed).
+5. **🔴 고정 적대 세트**(상설 회귀): `@Gov` 부착 메서드·Spring 인가/트랜잭션 어노테이션·오버로드·어노테이션 제거 PR 각각 + 음성검증(기대변조→FAIL).
+6. 결정적 + `--json`. 정직성: 어노테이션은 잡되 **AOP 프록시/DI 간접은 coverage 노출**(§5 — 이 층은 선언 기반이라 런타임 실제 적용 여부는 못 봄).
+**의존**: TASK-030 통과 후.
+
+### TASK-032 ☐ Java 능력 카탈로그 + 신규능력 감지  (Codex)  *(MVP-3 · J3)*
+**목적**: Java 위험 능력을 카탈로그로 추출 → 기존 `check-new-capabilities`(base..head 신규 도입만 approval) 재사용. 2층 불변식(자동 차단 금지·승인상한).
+**수용기준**:
+1. Java 능력 카탈로그(`sensitive-capabilities.yaml` 확장 또는 언어별 분리·source/owner 메타): `Runtime.exec`/`ProcessBuilder`(command_exec) · `ObjectInputStream.readObject`(unsafe_deserialization) · `Class.forName`/`Method.invoke`(reflection) · 문자열 SQL `Statement.execute*`(sql_injection_surface) · `Cipher`/`MessageDigest`(crypto) · `InitialContext.lookup`(jndi_lookup) · `RestTemplate`/`WebClient`/`HttpClient`(outbound_http). 등급은 정책값(protected 상한·frozen 오면 clamp — 2층 불변식).
+2. **신호 3종 이식**(TASK-010 계보): import 신호(`import` 문)·call 신호(정규화 호출이름)·해소불가 동적(리플렉션)→`unresolved_dynamic` 노출. import backstop 원칙.
+3. **🔴 Java 대응 우회 벡터 고정 적대 세트**: 리플렉션 경유 호출(`Method.invoke`)·문자열 조립 SQL·`Class.forName("...")` 동적 로드 각각 + 음성검증. (Python `getattr` 난독의 Java 대응.)
+4. **base..head 신규 도입만**(TASK-011 계보): 양쪽 있으면 미감지·head 만 신규·삭제 안전. never-blocked 불변식(approval 상한·exit 1 없음). fail-closed(head 파싱실패→per-path approval).
+5. 결정적 + `--json`. 정직성: 값추정 금지·동적 미탐 coverage 노출.
+**의존**: TASK-031 통과 후.
+
+**MVP-3 의존·순서**: 029(seam) → 030(인벤토리) → 031(주석/Spring) → 032(능력). 각 통과·머지 후 다음. 이후 W1(프론트)·X(콜그래프→간접영향) 는 J 완결 후 AC 정밀화.
+
+## MVP-3 공통 (Codex)
+- **tree-sitter 허용**(Java/JS 파서). **Python 은 `ast` 유지**(tree-sitter 로 이관 금지 — 무개조·무회귀).
+- 새 언어라도 판정 불변식 동일: 1층 frozen 만 차단·2·3층 승인상한·LLM/추정 금지·결정적.
+- 미지원 확장자·미해소 호출·프레임워크 간접(DI/AOP) 은 **coverage 정직 노출**(조용한 통과 금지).
+- 판정 게이트는 **공통 IR 만 소비**(언어중립) — 언어 종속은 추출기(어댑터)에 격리.
+
 ## MVP-1 공통 (MVP-0 공통 규칙에 더해)
 - **Python AST 허용** (MVP-0의 "AST 금지"는 MVP-0 한정). 단 LLM·추정은 여전히 금지(결정적).
 - 입력은 **git refs**(before/after 필요). fixtures 도 before/after 두 버전으로.
