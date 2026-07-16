@@ -376,10 +376,14 @@
 **배경**: TASK-033 리뷰 중 확인한 **선행 결함**(TASK-033 브랜치 탓 아님). `generate-change-evidence.py` 의 `load_intent` 는 `change-intent.yaml` 부재 시 `FileNotFoundError` → 카드 `verdict: blocked`(exit 1). 카드 자체는 정직하나(`reasons:['의도 선언 누락…']`·`coverage.checked: []`) **판정이 하네스 불변식과 충돌**: ① **"1층 frozen 만 차단"** — 미선언은 frozen zone 터치가 아니다 ② 러너 fail-closed 관례는 필수입력 부재·분석불가를 **approval_required(2)** 로 정규화한다(`run_gate` 실패→2 · `show_analysis_failure` "fail-closed → approval_required"). **Claude 정책 판정 = approval_required(2)** — 미선언은 "위반 확정"이 아니라 "검증 불가 → 사람이 본다".
 **수용기준**:
 1. `change-intent.yaml` 부재 → 카드 `verdict: approval_required`(exit 2). **`pass` 금지**(조용한 통과)·**`blocked` 금지**(1층 frozen 아님). reasons 에 안정적 기계판독 토큰 `intent_not_declared` 포함(현행 한글 문구는 유지 가능·둘 다).
-2. **정직성 유지·강화**: `coverage_statement` 에 의도층 **미검사** 명시(`checked` 에 `check-change-intent` 를 **넣지 않는다** — 현행 `checked: []` 계보) + `not_checked` 또는 전용 필드로 "의도 미선언 — 의도이탈 미검사" 노출. `intent_check.status` 는 `pass` 가 될 수 없다(`not_declared` 신설 또는 `fail` 유지 — 스키마는 `templates/change-evidence.template.yaml` 동시 개정).
+2. **정직성 유지·강화**: `coverage_statement` 에 의도층 **미검사** 명시(`checked` 에 `check-change-intent` 를 **넣지 않는다**) + `not_checked` 또는 전용 필드로 "의도 미선언 — 의도이탈 미검사" 노출. `intent_check.status` 는 `pass` 가 될 수 없다(`not_declared` 신설 또는 `fail` 유지 — 스키마는 `templates/change-evidence.template.yaml` 동시 개정).
+   **🔴 미검사 범위는 의도층 *뿐* (D-067 R-1)**: 민감경로층·@gov 함수층은 intent 를 입력으로 쓰지 않으므로 **미선언이어도 계속 검사하고 `checked` 에 정상 등재**한다. `sensitive_zone_check.status: not_checked` 로 통째 생략 금지.
+   **🔴 카드 사실 보존 (D-067 R-2)**: 미선언 카드도 `summary.files_changed`·`changed_files`·`base_commit`·`policy_sha` 를 **실제값**으로 채운다. "변경 없음"이라 주장하는 것도 위조다(`files_changed: 0`·`changed_files: []` 금지 — 실제 변경이 있는 한). 정직성 = "검사 안 한 걸 했다고 안 함" **+ "본 사실을 안 봤다고 안 함"**.
 3. **위조 방지 불변식**: 선언이 없으면 `changed_files[].in_allowed_paths` 는 `true` 가 될 수 없다(`null`/`false`/키 부재 중 택1·템플릿 명기). 러너·게이트 **어디서도 합성 선언 생성 금지**(D-065 R-1).
 4. **하위호환**: 선언이 있는 기존 경로 전 판정 무변경(96/96 무회귀 = #1 가드). 빈 `allowed_paths` 선언(존재하나 비어있음) → 현행대로 전 변경 out_of_scope 승인요구(미선언과 구분 유지).
 5. 고정 픽스처 + **음성검증**: 미선언 repo → exit 2·`intent_not_declared`·coverage 미검사 노출 각각 단독 단언, 기대 변조 시 FAIL. 킷 **sync 반영 + 진입점 케이스 rc 1→2 갱신**(TASK-033 보정 통과 후).
+6. **🔴 미선언이 1층을 먹지 않음 — 고정 적대 픽스처 + 음성검증 (D-067 R-1 · 상설 회귀)**: 미선언과 1층 차단은 **독립**이다. ① **frozen 존 변경 + 미선언 → `blocked`(exit 1)** · 카드 `frozen_touched` 비어있지 않음 ② **`@gov(level=frozen)` 함수 변경 + 미선언 → `blocked`(exit 1)** · `changed_functions` 비어있지 않음 ③ 무해 경로 + 미선언 → `approval_required`(exit 2, = AC#1). 각 기대값 변조(1→2) 시 **단독 FAIL** 확인. 기존 `missing-change-intent` 픽스처 기대값도 **실제 변경 파일수로 정정**(현행 `files_changed: 0` 은 입력 `good/name-status.txt`=1건과 불일치하는 허위 계약).
+**설계 주의(D-067)**: `build_evidence()` 가 미선언 시 abort 하면 `run.sh` 의 1층 판정 주체(`ge_exit`)가 사라져 **`change-intent.yaml` 삭제만으로 frozen 차단 우회**가 생긴다. 의도층만 `not_declared` 로 표시하고 파이프라인은 계속 돌릴 것. **합성 선언 주입은 금지**(D-065 R-1).
 **산출**: `kit/gates/`·`.harness/gates/` 게이트 + 픽스처(Codex 저자) + `templates/change-evidence.template.yaml`(Claude 소유 — 개정 위임). **의존**: **TASK-033 보정 통과·머지 후**(진입점 케이스가 rc 계약을 고정하므로 순서 필수).
 
 # MVP-3 (다국어 확장 — Java/Spring 우선)  *(설계 확정: `docs/multi-language-adapter-design.md`, 형 방향승인 2026-07-16, D-061)*
