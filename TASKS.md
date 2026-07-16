@@ -311,6 +311,15 @@
 
 **의존·순서**: 022 → 023 → 024 → 025 (각 통과·머지 후 다음 착수, 기존 배치 규율).
 
+### TASK-026 ☐ 킷에 MVP-2 반영 — 역도달성 게이트 배선 (`kit/run.sh` 확장)  (Codex)  *(MVP-2 킷 스냅샷)*
+**배경**: MVP-2(TASK-022~025) 완결로 dev 게이트가 16종(신규 `extract-sinks`·`extract-callgraph`·`check-indirect-impact`)인데 배포 킷은 MVP-1.5 스냅샷(13종)에 머물러 있다. 형 계획("MVP 달성마다 킷 반영")대로 킷을 MVP-2 상태로 올린다. **★단순 sync 아님**: 새 `check-indirect-impact` 는 **판정 게이트**(exit 0=pass / 2=approval_required, "indirect sink impact")라 `run.sh` 에 **명시 배선**돼야 실제 작동한다. `run.sh` verdict 조립은 D-050 이후 **Codex 저자 파일**이라 이 확장도 Codex 몫(Claude 가 하면 상호견제 위반·분류기 차단 — 세션 중 2회 실증).
+**수용기준**:
+1. `sync-from-dev.sh` 실행 → 16종 게이트 + `policies/sink-registry.yaml` 정책이 킷에 반영(누락검증 dev수==kit수 통과). 필요시 sync 스크립트가 sink-registry 정책도 복사하도록 확장.
+2. `run.sh` 에 **4번째 판정층 배선**: `check-indirect-impact.py <base>..<head> --sink-registry <sink-registry> [--repo .]` 를 `run_gate` 로 실행(허용 exit `0 2`), 최종판정 `max(카드3축, 능력, 정책, **간접영향**)` 에 포함. 차단 금지(승인 상한 — MVP-2 설계). `check-new-capabilities`·`check-policy-change` 배선 패턴 재사용.
+3. `--policies` 오버라이드가 sink-registry 에도 일관 적용(대상 repo 자기 sink 등록 지원). sink-registry 부재 시 fail-safe(설계대로 — 조용한 통과 금지).
+4. `manifest.yaml` 게이트 목록 13→16 갱신(runtime_verdict 에 check-indirect-impact, extraction 에 extract-sinks·extract-callgraph 추가). `README.md` "반영된 MVP" 에 MVP-2·게이트 표 갱신·"draft(MVP-0·1·1.5)" → MVP-2 반영.
+5. `selftest.sh`/`run-entrypoint-tests.sh` 에 간접영향 층 검증 추가 — fresh 적대입력 1종 이상(sink 상류 함수 수정 → 승인요구, rig-and-revert). 기존 진입점 적대·selftest 무회귀.
+**비고**: 통상 Codex 구현 → Claude 리뷰·머지. 킷 러너 verdict 배선이라 민감도는 기존 킷과 동일(비민감·2·3층 승인 상한). 동반: 킷 README §알려진갭 4번("MVP-2 개발 중") 문구도 갱신.
 ## MVP-1 공통 (MVP-0 공통 규칙에 더해)
 - **Python AST 허용** (MVP-0의 "AST 금지"는 MVP-0 한정). 단 LLM·추정은 여전히 금지(결정적).
 - 입력은 **git refs**(before/after 필요). fixtures 도 before/after 두 버전으로.
