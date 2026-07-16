@@ -321,6 +321,45 @@
 4. `manifest.yaml` 게이트 목록 13→16 갱신(runtime_verdict 에 check-indirect-impact, extraction 에 extract-sinks·extract-callgraph 추가). `README.md` "반영된 MVP" 에 MVP-2·게이트 표 갱신·"draft(MVP-0·1·1.5)" → MVP-2 반영.
 5. `selftest.sh`/`run-entrypoint-tests.sh` 에 간접영향 층 검증 추가 — fresh 적대입력 1종 이상(sink 상류 함수 수정 → 승인요구, rig-and-revert). 기존 진입점 적대·selftest 무회귀.
 **비고**: 통상 Codex 구현 → Claude 리뷰·머지. 킷 러너 verdict 배선이라 민감도는 기존 킷과 동일(비민감·2·3층 승인 상한). 동반: 킷 README §알려진갭 4번("MVP-2 개발 중") 문구도 갱신.
+
+## MVP-2 보강 — 패치 생존성(부재 탐지)  *(형 질문 2026-07-16 → 설계 D-059)*
+
+> **왜 필요한가**: 지금까지 하네스의 **모든** 게이트는 "무언가가 diff 에 **있으면** 발화"하는 **존재 탐지기**다. 벤더-브랜치 전략(오픈소스 origin 이 갱신되면 patch/custom 브랜치를 재적용)에서 형이 물은 질문 — "패치 브랜치에 **명시된 파이썬 파일들이 실제로 수정됐는지**"(Q2) — 은 **반대 방향**이다: **선언한 파일이 diff 에 없으면**(패치 유실/미적용) 발화하는 **부재 탐지**.
+> **민감경로(존재 탐지)로는 이 구멍을 못 막는다(실증적 논리)**: 패치가 적용되면 존재 탐지가 (중복) 발화하고, **패치가 유실되면 그 파일이 diff 에 없어 침묵** — *정확히 필요한 순간에 실패*한다. 그래서 `change_intent.expected_paths`(반드시 건드려야 하는 파일 선언)라는 **첫 부재 탐지 신호**를 추가한다.
+> **불변 원칙 유지**: 판정 상한 = `approval_required`(**차단 없음** — 선언 문제는 확인 요청이지 차단 사유 아님, TASK-021 #3 계보). **기본 off**(미선언=기존 동작 완전 동일·하위호환). LLM·추정 금지(결정적).
+> **구조**: TASK-027(dev 게이트 확장) → TASK-028(킷 스냅샷 반영). MVP-2 를 최종 반영 지점으로.
+
+### TASK-027 ☐ 변경 의도 "필수 변경 파일" 선언 (`change_intent.expected_paths`) — 부재 탐지  (Codex)  *(MVP-2 보강 · 패치 생존성)*
+**목적**: `change_intent.expected_paths` 로 "이 변경이 반드시 건드려야 하는 파일"을 선언하고, 실제 diff 가 그걸 안 건드리면(패치 유실) **승인요구**로 올린다. 존재 탐지만 있던 하네스의 첫 **부재 탐지**.
+**배경**: 형 질문(2026-07-16, 벤더-브랜치 Q2). 상세 논거·적대분석 = `collab/decisions.md` D-059.
+**입력**: 기존 TASK-001/021 동일(`<diff/ref>` + `change-intent.yaml`). **출력**: `--json` 에 `expected_paths`·`missing_expected` 추가.
+**수용기준 (Claude 검수 체크리스트)**:
+1. 신규 **선택** 필드 `change_intent.expected_paths`(glob/리터럴 리스트). **미선언/빈 리스트 → 기존 동작과 완전 동일**(하위호환). **🔴 #1 회귀 가드 — 기존 전 픽스처(현행 91/91) 무회귀**가 최우선.
+2. **부재 탐지**: `expected_paths` 각 항목에 대해 **변경 파일 집합 중 하나도 매칭 안 되면**(기존 `match_glob` 재사용) `missing_expected` 에 그 항목 기록. `missing_expected` 비면 아님 → 최소 `approval_required`(exit 2). **차단(exit 1) 절대 금지.**
+3. **판정 우선순위**: `forbidden_touched`→`blocked` 최우선 유지. 그 외 `out_of_scope` ∨ `scope_too_broad` ∨ `missing_expected` 중 하나라도 있으면 → `approval_required`. **🔴 빈 diff(변경 0건) + `expected_paths` 선언 → 전부 missing → `approval_required`**. (TASK-001 #6 "빈 diff=통과"와 상충 아님: `expected_paths` **선언이 있을 때만** 빈 diff 가 missing 으로 뒤집힌다. 선언 없으면 빈 diff 는 종전대로 pass.) — 이게 패치-유실의 핵심 신호.
+4. 출력: `--json` 에 `expected_paths`(에코)·`missing_expected`(정렬). 텍스트 출력에 `missing_expected: {pattern}` 라인. 결정적(2회 동일).
+5. **🔴 매칭 시맨틱 정직성(TASK-019 정직화 계보)**: 각 expected 항목은 "**변경 파일 중 ≥1 매칭이면 충족**". **리터럴 경로(`vendor/foo/A.py`)가 주 용도** — glob(`vendor/**`)은 "그 아래 아무 파일 1건만 변경돼도 충족"이라 **거친 보증**임을 게이트 출력/템플릿 주석/카드 coverage 문구에 명시(과신 방지). **rename**(name-status R = 목적지 경로만 changed 로 잡힘)·**delete**(경로가 changed 로 잡혀 수정/삭제 구분 안 함)의 한계도 문서화. 판정 cap 이 `approval_required`(사람 확인)라 거친 오탐도 **비파괴**(사람이 한 번 본다).
+6. **🔴 상설 회귀 픽스처 + 음성검증**:
+   - `expected-present`(선언 파일 전부 변경됨) → pass(missing 없음)
+   - `expected-missing`(선언 파일이 diff 에 없음 = 패치 유실) → approval_required + `missing_expected` 에 그 파일
+   - `expected-empty-diff`(변경 0건 + expected 선언) → approval_required(전부 missing)
+   - `expected-none`(expected_paths 미선언) → 기존 판정 그대로(무영향·하위호환 실증)
+   - 음성검증: 기대값(missing 목록/verdict) 변조 → FAIL(항상-PASS 아님).
+7. **🔴 카드 미러링 필수** — `generate-change-evidence.py` 인라인 intent 로직(`load_intent`·`intent_result`·집계 verdict)에 `expected_paths`/`missing_expected` 동일 반영. **이유**: 킷 `run.sh` 는 `check-change-intent` 단독이 아니라 **`generate-change-evidence`(카드) 게이트를 intent 층으로 호출**한다 → 카드에 미러링 안 하면 킷에서 부재 탐지가 **안 돈다**(TASK-028 전제). 카드 스키마 키는 템플릿과 일치(임의 키 금지 — 필요 시 `templates/change-evidence.template.yaml` 동시 개정).
+8. 템플릿·예시 갱신: `policies/change-intent.template.yaml`·`change-intent.example.yaml` 에 `expected_paths` 예시 + 벤더-브랜치 주석(패치 생존성 용도·**리터럴 권장**·glob 거친 보증 경고).
+**산출**: `.harness/gates/check-change-intent.py`·`generate-change-evidence.py`(Codex 저자) + `tests/fixtures/` + `tests/cases.yaml`(+ 필요 시 템플릿). 통상 Codex 구현 → Claude 리뷰(비민감 intent 층 → Claude 머지 D-007).
+**비고**: 첫 부재 탐지. 상한 `approval_required`(차단 없음)·기본 off(하위호환). 게이트 코드는 Codex 저자(Claude 미작성 — 상호견제).
+
+### TASK-028 ☐ 킷에 `expected_paths` 반영 (부재 탐지 스냅샷)  (Codex)  *(MVP-2 킷 스냅샷)*
+**배경**: TASK-027 로 dev 카드 게이트가 `expected_paths` 부재 탐지를 갖추면, 킷은 `sync-from-dev.sh` 로 그 게이트 사본을 받는 것만으로 **자동으로** 부재 탐지가 작동한다 — 킷 `run.sh` 가 이미 `generate-change-evidence` 를 intent 층으로 배선했기 때문(TASK-026/D-058). **★TASK-026 과 달리 신규 판정층 아님 → `run.sh` 배선 변경 불필요**(기존 카드 게이트 내부 확장). 따라서 이 태스크는 **경량 스냅샷 동기화 + 진입점 실증**.
+**수용기준**:
+1. `sync-from-dev.sh` 실행 → `kit/gates/check-change-intent.py`·`generate-change-evidence.py` 가 dev 최신본과 **바이트 동일**(`cmp` 확인, 누락검증 dev수==kit수 통과). 게이트 개수 무변화(16종 유지 — 기존 게이트 내부 확장).
+2. `kit/tests/run-entrypoint-tests.sh` 에 **부재 탐지 진입점 케이스** 1종 이상 추가: 대상 repo `change-intent.yaml` 에 `expected_paths` 선언 + 그 파일을 **안 건드린** diff → 킷 `run.sh` 최종 exit 2(승인요구) + 카드에 `missing_expected` 노출. **rig-and-revert**(기대 2→0 변조 시 FAIL). 기존 진입점(11/11) 무회귀.
+3. `manifest.yaml`/`README.md` 에 `expected_paths`(패치 생존성·부재 탐지) 능력 명기 — intent 층 설명 갱신. 버전은 MVP-2 point 추가 표기(예: `0.2.1-mvp2`, 강제 아님·Codex 판단).
+4. `kit/selftest.sh` 전량 green + 부재 탐지 rig-and-revert 실증(§2B — "될 것 같다" 금지·fresh 적대입력 실제 실행). **`run.sh` 무변경 확인**(diff 로 `kit/run.sh` 무접촉 실증 — Claude 리뷰 체크).
+**산출**: `kit/*`(Codex 저자·`run.sh` 미변경) + handoff/summaries. Codex 구현 → Claude 리뷰·머지(비민감 킷 스냅샷 — TASK-026 선례).
+**의존**: TASK-027 통과·머지 후 착수(027 → 028).
+
 ## MVP-1 공통 (MVP-0 공통 규칙에 더해)
 - **Python AST 허용** (MVP-0의 "AST 금지"는 MVP-0 한정). 단 LLM·추정은 여전히 금지(결정적).
 - 입력은 **git refs**(before/after 필요). fixtures 도 before/after 두 버전으로.
