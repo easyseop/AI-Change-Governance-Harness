@@ -19,22 +19,37 @@ DEV_ROOT="$(cd "$KIT_DIR/.." && pwd)"
 
 echo "▶ 동기화: dev=$DEV_ROOT → kit=$KIT_DIR"
 
-# 1) 게이트 전체 (13종 + gates/README) — co-located 필수
+# 1) 게이트 전체 (16종 + gates/README) — co-located 필수
 rm -rf "$KIT_DIR/gates"; mkdir -p "$KIT_DIR/gates"
 cp "$DEV_ROOT"/.harness/gates/*.py "$KIT_DIR/gates/"
 [ -f "$DEV_ROOT/.harness/gates/README.md" ] && cp "$DEV_ROOT/.harness/gates/README.md" "$KIT_DIR/gates/"
 
 # 2) 정책 (sensitive-zones·sensitive-capabilities·approval-routing·change-intent 템플릿류)
+SINK_REGISTRY_SNAPSHOT="$(mktemp)"
+[ -f "$KIT_DIR/policies/sink-registry.yaml" ] && cp "$KIT_DIR/policies/sink-registry.yaml" "$SINK_REGISTRY_SNAPSHOT"
 rm -rf "$KIT_DIR/policies"; mkdir -p "$KIT_DIR/policies"
 cp "$DEV_ROOT"/policies/*.yaml "$KIT_DIR/policies/"
+# TASK-022 확정 정책의 dev 원본이 아직 없으면 현재 킷 기본본을 보존한다(Q-0004).
+if [ ! -f "$KIT_DIR/policies/sink-registry.yaml" ] && [ -s "$SINK_REGISTRY_SNAPSHOT" ]; then
+  cp "$SINK_REGISTRY_SNAPSHOT" "$KIT_DIR/policies/sink-registry.yaml"
+fi
+rm -f "$SINK_REGISTRY_SNAPSHOT"
 
 # 3) 감사카드 템플릿
 rm -rf "$KIT_DIR/templates"; mkdir -p "$KIT_DIR/templates"
 cp "$DEV_ROOT"/templates/*.yaml "$KIT_DIR/templates/"
 
 # 4) 테스트(자체검증 selftest.sh 용) — 러너·뮤테이션·케이스·픽스처
+ENTRYPOINT_TEST_SNAPSHOT="$(mktemp)"
+[ -f "$KIT_DIR/tests/run-entrypoint-tests.sh" ] && cp "$KIT_DIR/tests/run-entrypoint-tests.sh" "$ENTRYPOINT_TEST_SNAPSHOT"
 rm -rf "$KIT_DIR/tests"; mkdir -p "$KIT_DIR/tests"
 cp -r "$DEV_ROOT"/tests/. "$KIT_DIR/tests/"
+# 킷 진입점 전용 적대검증은 dev 테스트에 없으므로 동기화에서도 보존한다.
+if [ -s "$ENTRYPOINT_TEST_SNAPSHOT" ]; then
+  cp "$ENTRYPOINT_TEST_SNAPSHOT" "$KIT_DIR/tests/run-entrypoint-tests.sh"
+  chmod +x "$KIT_DIR/tests/run-entrypoint-tests.sh"
+fi
+rm -f "$ENTRYPOINT_TEST_SNAPSHOT"
 
 # 5) ★누락 검증 — dev 게이트 수와 kit 게이트 수 일치 확인
 DEV_N=$(ls "$DEV_ROOT"/.harness/gates/*.py 2>/dev/null | wc -l | tr -d ' ')

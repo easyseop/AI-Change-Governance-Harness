@@ -1,0 +1,337 @@
+#!/usr/bin/env python3
+import argparse
+import importlib.util
+import json
+import sys
+from pathlib import Path, PurePosixPath
+
+
+PASS = 0
+APPROVAL_REQUIRED = 2
+TOOL_OWNER = "tool_owner"
+
+GATE_DIR = Path(__file__).resolve().parent
+
+
+def load_gate_module(filename, module_name):
+    spec = importlib.util.spec_from_file_location(module_name, GATE_DIR / filename)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+map_gate = load_gate_module("map-diff-to-functions.py", "map_diff_to_functions_gate")
+classify_gate = load_gate_module(
+    "classify-python-function-changes.py", "classify_python_function_changes_gate"
+)
+callgraph_gate = load_gate_module("extract-callgraph.py", "extract_callgraph_gate")
+sinks_gate = load_gate_module("extract-sinks.py", "extract_sinks_gate")
+
+
+def normalize_path(path):
+    return str(PurePosixPath(str(path).replace("\\", "/")))
+
+
+def module_name_for_path(path):
+    pure = PurePosixPath(normalize_path(path))
+    without_suffix = pure.with_suffix("")
+    parts = list(without_suffix.parts)
+    if parts and parts[-1] == "__init__":
+        parts = parts[:-1]
+    return ".".join(parts)
+
+
+def full_function_name(path, local_name):
+    if not local_name or local_name == "<module>":
+        return None
+    module = module_name_for_path(path)
+    return f"{module}.{local_name}" if module else local_name
+
+
+def changed_candidates_from_map(mapping):
+    candidates = []
+    for file_record in mapping.get("files", []):
+        path = normalize_path(file_record.get("path", ""))
+        if not path.endswith(".py"):
+            continue
+        for function in file_record.get("touched_functions", []):
+            function_id = full_function_name(path, function.get("name"))
+            if not function_id:
+                continue
+            candidates.append(
+                {
+                    "function": function_id,
+                    "path": path,
+                    "name": function.get("name"),
+                    "source": "map",
+                }
+            )
+    return candidates
+
+
+def changed_candidates_from_classification(classification):
+    candidates = []
+    for file_record in classification.get("files", []):
+        path = normalize_path(file_record.get("path", ""))
+        if not path.endswith(".py") or file_record.get("fallback"):
+            continue
+        for change in file_record.get("function_changes", []):
+            function_id = full_function_name(path, change.get("name"))
+            if not function_id:
+                continue
+            candidates.append(
+                {
+                    "function": function_id,
+                    "path": path,
+                    "name": change.get("name"),
+                    "source": f"classify_{change.get('change_type')}",
+                }
+            )
+    return candidates
+
+
+def unique_candidates(candidates):
+    unique = {}
+    for candidate in candidates:
+        key = (candidate["function"], candidate["path"], candidate["name"])
+        if key not in unique:
+            unique[key] = dict(candidate)
+            continue
+        sources = unique[key]["source"].split(",") + [candidate["source"]]
+        unique[key]["source"] = ",".join(sorted(set(sources)))
+    return [unique[key] for key in sorted(unique)]
+
+
+def adjacency_from_edges(edges):
+    adjacency = {}
+    for edge in edges:
+        adjacency.setdefault(edge.get("caller"), set()).add(edge.get("callee"))
+    return {
+        caller: sorted(callees)
+        for caller, callees in sorted(adjacency.items())
+    }
+
+
+def reachable_paths(adjacency, sink, max_hops):
+    paths = {}
+    queue = [(sink, [sink], 0)]
+    seen = {(sink, 0)}
+    while queue:
+        current, path, depth = queue.pop(0)
+        if depth >= max_hops:
+            continue
+        for callee in adjacency.get(current, []):
+            next_path = path + [callee]
+            next_depth = depth + 1
+            if callee not in paths or len(next_path) < len(paths[callee]):
+                paths[callee] = next_path
+            state = (callee, next_depth)
+            if state not in seen:
+                seen.add(state)
+                queue.append((callee, next_path, next_depth))
+    return paths
+
+
+def finding_for_sink(sink, changed, path):
+    return {
+        "sink_id": sink.get("id"),
+        "sink_function": sink.get("function"),
+        "changed_function": changed.get("function"),
+        "path": path,
+        "hops": len(path) - 1,
+        "reviewer": sink.get("owner") or TOOL_OWNER,
+        "reason": sink.get("reason"),
+        "maturity": sink.get("maturity", "shadow"),
+    }
+
+
+def dedupe_findings(findings):
+    unique = {}
+    for finding in findings:
+        key = (
+            finding.get("sink_id"),
+            finding.get("changed_function"),
+            tuple(finding.get("path") or []),
+        )
+        unique[key] = finding
+    return [
+        unique[key]
+        for key in sorted(
+            unique,
+            key=lambda item: (
+                item[0] or "",
+                item[1] or "",
+                item[2],
+            ),
+        )
+    ]
+
+
+def fail_closed(reason, detail=None):
+    record = {
+        "reason": reason,
+        "reviewer": TOOL_OWNER,
+    }
+    if detail:
+        record["detail"] = detail
+    return record
+
+
+def check_indirect_impact(rev_range, sensitive_zones, sink_registry, repo="."):
+    mapping = map_gate.map_diff_to_functions(rev_range, repo)
+    classification = classify_gate.classify_python_function_changes(rev_range, repo)
+    callgraph = callgraph_gate.extract_callgraph(repo)
+    sinks = sinks_gate.extract_sinks(repo, sensitive_zones, sink_registry)
+
+    errors = []
+    fail_closed_records = []
+    for gate_name, result in (
+        ("map-diff-to-functions", mapping),
+        ("classify-python-function-changes", classification),
+    ):
+        if result.get("error"):
+            errors.append({"gate": gate_name, "error": result["error"]})
+            fail_closed_records.append(fail_closed(f"{gate_name} failed", result["error"]))
+
+    for error in callgraph.get("errors", []):
+        errors.append({"gate": "extract-callgraph", **error})
+    if callgraph.get("errors"):
+        fail_closed_records.append(fail_closed("extract-callgraph reported errors"))
+
+    for error in sinks.get("errors", []):
+        errors.append({"gate": "extract-sinks", **error})
+    if sinks.get("errors"):
+        fail_closed_records.append(fail_closed("extract-sinks reported errors"))
+
+    changed_functions = unique_candidates(
+        changed_candidates_from_map(mapping)
+        + changed_candidates_from_classification(classification)
+    )
+    changed_by_id = {candidate["function"]: candidate for candidate in changed_functions}
+    adjacency = adjacency_from_edges(callgraph.get("edges", []))
+
+    enforcing_findings = []
+    shadow_findings = []
+    for sink in sinks.get("sinks", []):
+        reachable = reachable_paths(adjacency, sink.get("function"), sink.get("hops", 1))
+        for function_id in sorted(changed_by_id):
+            if function_id == sink.get("function") or function_id not in reachable:
+                continue
+            finding = finding_for_sink(sink, changed_by_id[function_id], reachable[function_id])
+            if sink.get("maturity", "shadow") == "shadow":
+                shadow_findings.append(finding)
+            else:
+                enforcing_findings.append(finding)
+
+    indirect_impact = dedupe_findings(enforcing_findings)
+    shadow_hits = dedupe_findings(shadow_findings)
+    reviewer_required = sorted(
+        {
+            finding.get("reviewer")
+            for finding in indirect_impact
+            if finding.get("reviewer")
+        }
+        | {
+            record.get("reviewer")
+            for record in fail_closed_records
+            if record.get("reviewer")
+        }
+    )
+
+    if indirect_impact or fail_closed_records:
+        verdict = "approval_required"
+        exit_code = APPROVAL_REQUIRED
+    else:
+        verdict = "pass"
+        exit_code = PASS
+
+    return {
+        "gate": "check-indirect-impact",
+        "verdict": verdict,
+        "changed_functions": changed_functions,
+        "indirect_impact": indirect_impact,
+        "shadow_hits": shadow_hits,
+        "coverage": {
+            "unevaluated": callgraph.get("coverage", {}).get("unevaluated", []),
+        },
+        "fail_closed": fail_closed_records,
+        "errors": errors,
+        "reviewer_required": reviewer_required,
+        "exit_code": exit_code,
+    }
+
+
+def print_text(result):
+    if result["verdict"] == "approval_required":
+        print("APPROVAL_REQUIRED: indirect sink impact requires review.")
+    elif result["shadow_hits"]:
+        print("PASS: indirect sink impact observed in shadow mode.")
+    else:
+        print("PASS: no indirect sink impact detected.")
+    for finding in result.get("indirect_impact", []):
+        print(
+            f"indirect_impact {finding['sink_id']} "
+            f"{' -> '.join(finding['path'])} reviewer={finding['reviewer']}"
+        )
+    for finding in result.get("shadow_hits", []):
+        print(
+            f"shadow {finding['sink_id']} "
+            f"{' -> '.join(finding['path'])} reviewer={finding['reviewer']}"
+        )
+    for record in result.get("fail_closed", []):
+        print(f"fail_closed {record['reason']}")
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Check changed Python functions for indirect impact on registered sinks."
+    )
+    parser.add_argument("diff_input", help="git diff ref range, for example <base>..<head>")
+    parser.add_argument(
+        "--repo",
+        default=".",
+        help="git repository to inspect; working tree should be the head version",
+    )
+    parser.add_argument(
+        "--sensitive-zones",
+        default="policies/sensitive-zones.yaml",
+        help="sensitive-zones policy path",
+    )
+    parser.add_argument(
+        "--sink-registry",
+        default="policies/sink-registry.yaml",
+        help="optional sink-registry policy path",
+    )
+    parser.add_argument("--json", action="store_true", help="print structured JSON")
+    args = parser.parse_args()
+
+    try:
+        result = check_indirect_impact(
+            args.diff_input,
+            args.sensitive_zones,
+            args.sink_registry,
+            args.repo,
+        )
+    except Exception as error:
+        result = {
+            "gate": "check-indirect-impact",
+            "verdict": "approval_required",
+            "changed_functions": [],
+            "indirect_impact": [],
+            "shadow_hits": [],
+            "coverage": {"unevaluated": []},
+            "fail_closed": [fail_closed("check-indirect-impact failed", str(error))],
+            "errors": [{"error": str(error)}],
+            "reviewer_required": [TOOL_OWNER],
+            "exit_code": APPROVAL_REQUIRED,
+        }
+
+    if args.json:
+        print(json.dumps(result, ensure_ascii=False, sort_keys=True, indent=2))
+    else:
+        print_text(result)
+    return result["exit_code"]
+
+
+if __name__ == "__main__":
+    sys.exit(main())

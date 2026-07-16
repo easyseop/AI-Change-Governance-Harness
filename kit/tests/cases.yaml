@@ -1653,6 +1653,385 @@ cases:
       candidate_functions:
         - app/risky.py::load_customer
 
+  - name: gov-annotations-multi-sink-metadata
+    gate: extract-gov-annotations
+    input:
+      source_file: tests/fixtures/gov-annotations/multi_sink.py
+      display_path: app/reports.py
+    expect:
+      exit_code: 0
+      annotation_count: 1
+      annotation_metadata:
+        download_bulk:
+          sink: true
+          reason: PII bulk export
+          owner: security-reviewer
+
+  - name: sink-registration-defaults
+    gate: extract-sinks
+    input:
+      repo: tests/fixtures/sinks/repo
+      sensitive_zones: tests/fixtures/sinks/sensitive-zones.yaml
+      sink_registry: tests/fixtures/sinks/missing-sink-registry.yaml
+    expect:
+      exit_code: 0
+      sinks:
+        - id: gov:app.reports.download_report
+          function: app.reports.download_report
+          source: gov_annotation
+          maturity: shadow
+          hops: 1
+          owner: security-reviewer
+        - id: frozen:services.settlement.calculate.settle_async
+          function: services.settlement.calculate.settle_async
+          source: frozen_zone
+          maturity: enforcing
+          hops: 1
+          owner: null
+        - id: frozen:services.settlement.calculate.settle_batch
+          function: services.settlement.calculate.settle_batch
+          source: frozen_zone
+          maturity: enforcing
+          hops: 1
+          owner: null
+      errors_present: false
+      deterministic_stdout: true
+
+  - name: sink-registration-registry
+    gate: extract-sinks
+    input:
+      repo: tests/fixtures/sinks/repo
+      sensitive_zones: tests/fixtures/sinks/sensitive-zones.yaml
+      sink_registry: tests/fixtures/sinks/sink-registry.yaml
+    expect:
+      exit_code: 0
+      sinks:
+        - id: gov:app.reports.download_report
+          function: app.reports.download_report
+          source: gov_annotation
+          maturity: shadow
+          hops: 1
+          owner: security-reviewer
+        - id: invalid_maturity_registry
+          function: app.reports.registry_sink
+          source: sink_registry
+          maturity: enforcing
+          hops: 1
+          owner: security-reviewer
+        - id: report_registry
+          function: app.reports.registry_sink
+          source: sink_registry
+          maturity: enforcing
+          hops: 2
+          owner: security-reviewer
+        - id: frozen:services.settlement.calculate.settle_async
+          function: services.settlement.calculate.settle_async
+          source: frozen_zone
+          maturity: enforcing
+          hops: 1
+          owner: null
+        - id: frozen:services.settlement.calculate.settle_batch
+          function: services.settlement.calculate.settle_batch
+          source: frozen_zone
+          maturity: enforcing
+          hops: 1
+          owner: null
+      error_kinds:
+        - invalid_maturity
+        - unresolved_registry_function
+
+  - name: callgraph-repo-static
+    gate: extract-callgraph
+    input:
+      repo: tests/fixtures/callgraph/repo
+    expect:
+      exit_code: 0
+      nodes:
+        - app.conditional.fallback
+        - app.conditional.load_value
+        - app.conditional.load_value
+        - app.conditional.normalize
+        - app.overloads.C.caller
+        - app.overloads.C.foo
+        - app.overloads.C.sink
+        - app.overloads.bar
+        - app.overloads.foo
+        - app.overloads.qualified_bar
+        - app.overloads.sink
+        - app.reports.ReportService.export
+        - app.reports.download_report
+        - app.reports.dynamic_dispatch
+        - app.reports.format_report
+        - app.reports.render_report
+        - app.utils.check_permission
+        - app.utils.unrelated
+      edges:
+        - caller: app.conditional.load_value
+          callee: app.conditional.fallback
+          call: fallback
+        - caller: app.conditional.load_value
+          callee: app.conditional.normalize
+          call: normalize
+        - caller: app.overloads.C.caller
+          callee: app.overloads.sink
+          call: sink
+        - caller: app.overloads.bar
+          callee: app.overloads.foo
+          call: foo
+        - caller: app.overloads.qualified_bar
+          callee: app.overloads.sink
+          call: app.overloads.sink
+        - caller: app.reports.ReportService.export
+          callee: app.reports.render_report
+          call: render_report
+        - caller: app.reports.download_report
+          callee: app.conditional.load_value
+          call: app.conditional.load_value
+        - caller: app.reports.download_report
+          callee: app.reports.render_report
+          call: render_report
+        - caller: app.reports.download_report
+          callee: app.utils.check_permission
+          call: app.utils.check_permission
+        - caller: app.reports.render_report
+          callee: app.reports.format_report
+          call: format_report
+      unresolved_calls:
+        - caller: app.reports.dynamic_dispatch
+          kind: dynamic
+          name: getattr(...)
+      coverage_unevaluated:
+        - caller: app.reports.dynamic_dispatch
+          kind: dynamic
+          name: getattr(...)
+      errors_present: false
+      deterministic_stdout: true
+
+  - name: indirect-impact-direct
+    group: adversarial
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/indirect-impact/direct
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones.yaml
+      sink_registry: tests/fixtures/indirect-impact/direct/sink-registry.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      indirect_impact:
+        - sink_id: report_download
+          changed_function: app.utils.check_permission
+          path:
+            - app.reports.download_report
+            - app.utils.check_permission
+          hops: 1
+          reviewer: security-reviewer
+          maturity: enforcing
+      shadow_hits: []
+      reviewer_required:
+        - security-reviewer
+      fail_closed_present: false
+      errors_present: false
+      deterministic_stdout: true
+
+  - name: indirect-impact-shadow
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/indirect-impact/shadow
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones.yaml
+      sink_registry: tests/fixtures/indirect-impact/shadow/sink-registry.yaml
+    expect:
+      verdict: pass
+      exit_code: 0
+      indirect_impact: []
+      shadow_hits:
+        - sink_id: report_download_shadow
+          changed_function: app.utils.check_permission
+          path:
+            - app.reports.download_report
+            - app.utils.check_permission
+          hops: 1
+          reviewer: security-reviewer
+          maturity: shadow
+      reviewer_required: []
+      fail_closed_present: false
+      errors_present: false
+
+  - name: indirect-impact-two-hop-boundary
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/indirect-impact/two-hop-boundary
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones.yaml
+      sink_registry: tests/fixtures/indirect-impact/two-hop-boundary/sink-registry.yaml
+    expect:
+      verdict: pass
+      exit_code: 0
+      indirect_impact: []
+      shadow_hits: []
+      reviewer_required: []
+      fail_closed_present: false
+      errors_present: false
+
+  - name: indirect-impact-analysis-error
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/indirect-impact/analysis-error
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones.yaml
+      sink_registry: tests/fixtures/indirect-impact/analysis-error/sink-registry.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      indirect_impact:
+        - sink_id: report_download
+          changed_function: app.utils.check_permission
+          path:
+            - app.reports.download_report
+            - app.utils.check_permission
+          hops: 1
+          reviewer: security-reviewer
+          maturity: enforcing
+      shadow_hits: []
+      reviewer_required:
+        - security-reviewer
+        - tool_owner
+      fail_closed_present: true
+      errors_present: true
+
+  - name: indirect-impact-method-sink
+    group: adversarial
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/indirect-impact/method-sink
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones.yaml
+      sink_registry: tests/fixtures/indirect-impact/method-sink/sink-registry.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      indirect_impact:
+        - sink_id: method_report_export
+          changed_function: app.utils.check_permission
+          path:
+            - app.reports.ReportService.export
+            - app.utils.check_permission
+          hops: 1
+          reviewer: security-reviewer
+          maturity: enforcing
+      shadow_hits: []
+      reviewer_required:
+        - security-reviewer
+      fail_closed_present: false
+      errors_present: false
+
+  - name: indirect-impact-frozen-auto-sink
+    group: adversarial
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/indirect-impact/frozen-auto
+      sensitive_zones: tests/fixtures/indirect-impact/frozen-auto/sensitive-zones.yaml
+      sink_registry: tests/fixtures/indirect-impact/frozen-auto/sink-registry.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      indirect_impact:
+        - sink_id: frozen:app.settlement.core.transfer
+          changed_function: app.utils.compute_fee
+          path:
+            - app.settlement.core.transfer
+            - app.utils.compute_fee
+          hops: 1
+          reviewer: settlement-reviewer
+          maturity: enforcing
+      shadow_hits: []
+      reviewer_required:
+        - settlement-reviewer
+      fail_closed_present: false
+      errors_present: false
+
+  - name: indirect-impact-gov-opt-in-boundary
+    group: adversarial
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/indirect-impact/gov-opt-in
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones.yaml
+      sink_registry: tests/fixtures/indirect-impact/gov-opt-in/sink-registry.yaml
+    expect:
+      verdict: pass
+      exit_code: 0
+      indirect_impact: []
+      shadow_hits:
+        - sink_id: gov:app.reports.download_report
+          changed_function: app.utils.check_permission
+          path:
+            - app.reports.download_report
+            - app.utils.check_permission
+          hops: 1
+          reviewer: security-reviewer
+          maturity: shadow
+      reviewer_required: []
+      fail_closed_present: false
+      errors_present: false
+
+  - name: indirect-impact-consumer-overdetect-boundary
+    group: adversarial
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/indirect-impact/consumer-overdetect
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones.yaml
+      sink_registry: tests/fixtures/indirect-impact/consumer-overdetect/sink-registry.yaml
+    expect:
+      verdict: pass
+      exit_code: 0
+      indirect_impact: []
+      shadow_hits: []
+      reviewer_required: []
+      fail_closed_present: false
+      errors_present: false
+
+  - name: indirect-impact-dynamic-coverage
+    group: adversarial
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/indirect-impact/dynamic-coverage
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones.yaml
+      sink_registry: tests/fixtures/indirect-impact/dynamic-coverage/sink-registry.yaml
+    expect:
+      verdict: pass
+      exit_code: 0
+      indirect_impact: []
+      shadow_hits: []
+      reviewer_required: []
+      fail_closed_present: false
+      errors_present: false
+      coverage_unevaluated:
+        - caller: app.reports.dispatch
+          kind: dynamic
+          name: getattr(...)
+
+  - name: indirect-impact-conditional-same-name
+    group: adversarial
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/indirect-impact/conditional-same-name
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones.yaml
+      sink_registry: tests/fixtures/indirect-impact/conditional-same-name/sink-registry.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      indirect_impact:
+        - sink_id: conditional_report
+          changed_function: app.conditional.fallback
+          path:
+            - app.reports.download_report
+            - app.conditional.load_value
+            - app.conditional.fallback
+          hops: 2
+          reviewer: security-reviewer
+          maturity: enforcing
+      shadow_hits: []
+      reviewer_required:
+        - security-reviewer
+      fail_closed_present: false
+      errors_present: false
+
   - name: metamorphic-import-alias
     group: metamorphic
     gate: extract-python-capabilities

@@ -8,8 +8,9 @@
 # ★조립 대상(누락 없이):
 #   [1층] 의도이탈 + 민감경로 + @gov 함수      → generate-change-evidence 가 3축 조립 + 카드
 #   [2층] 신규 위험능력                          → check-new-capabilities (카드 밖 — 여기서 명시 추가)
+#   [3층] sink 간접영향                          → check-indirect-impact  (카드 밖 — 여기서 명시 추가)
 #   [메타] 정책 자기무력화                        → check-policy-change    (카드 밖 — 여기서 명시 추가)
-#   최종 = 세 결과의 가장 센 판정(차단 > 승인 > 통과).
+#   최종 = 네 결과의 가장 센 판정(차단 > 승인 > 통과).
 #
 # 사용:  ./run.sh <base>..<head> [--repo <대상repo>] [--policies <정책dir>] [--output <카드경로>]
 # 종료코드: 0 통과 / 1 차단 / 2 승인필요
@@ -21,6 +22,7 @@ POL="$KIT/policies"
 ZONES="$POL/sensitive-zones.yaml"
 CAPS="$POL/sensitive-capabilities.yaml"
 ROUTING="$POL/approval-routing.yaml"
+SINKS="$POL/sink-registry.yaml"
 
 RANGE="${1:?사용: ./run.sh <base>..<head> [--repo <repo>] [--policies <정책dir>] [--output <카드>]}"; shift
 REPO="."; OUT="change-evidence.yaml"
@@ -40,7 +42,8 @@ POL="$(cd "$POL" && pwd)"
 ZONES="$POL/sensitive-zones.yaml"
 CAPS="$POL/sensitive-capabilities.yaml"
 ROUTING="$POL/approval-routing.yaml"
-for required_policy in "$ZONES" "$CAPS" "$ROUTING"; do
+SINKS="$POL/sink-registry.yaml"
+for required_policy in "$ZONES" "$CAPS" "$ROUTING" "$SINKS"; do
   if [ ! -f "$required_policy" ]; then
     echo "✗ 분석 실패: 필수 정책 파일 없음: $required_policy"
     echo "  tool_owner: change-governance-kit-owner"
@@ -178,6 +181,22 @@ else
   echo "      tool_owner: change-governance-kit-owner"
 fi
 
+# ── [3층] sink 간접영향 (감사카드에 미포함 → 여기서 명시 조립) ──────
+indirect_exit=0
+echo "▸ [3층] sink 간접영향 (등록 sink 의 N홉 의존함수 변경?)"
+if [ "$HAS_RANGE" = 1 ]; then
+  run_gate "check-indirect-impact" "0 2" "$G/check-indirect-impact.py" "$RANGE" \
+    --sensitive-zones "$ZONES" --sink-registry "$SINKS" --repo .
+  INDIRECT_OUT="$RUN_OUTPUT"; indirect_exit="$RUN_EXIT"
+  if [ "$RUN_FAILED" = 1 ]; then show_analysis_failure "check-indirect-impact"; else
+    printf '%s\n' "$INDIRECT_OUT" | head -8 | sed 's/^/    /'
+  fi
+else
+  indirect_exit=2; ANALYSIS_FAILURES+=("check-indirect-impact: range_required")
+  echo "    ✗ 분석 실패: base..head 범위 아님 (간접영향 층 미실행)"
+  echo "      tool_owner: change-governance-kit-owner"
+fi
+
 # ── [메타] 정책 자기무력화 (감사카드에 미포함 → 여기서 명시 조립) ───
 pol_exit=0
 echo "▸ [메타] 정책 자기무력화 (게이트/정책 완화·집행우회?)"
@@ -195,14 +214,14 @@ fi
 
 # ── 최종 판정 = 가장 센 것 (차단 1 > 승인 2 > 통과 0) ────────────────
 final=0; label="🟢 PASS (통과)"
-if [ "$ge_exit" = 1 ] || [ "$cap_exit" = 1 ] || [ "$pol_exit" = 1 ]; then
+if [ "$ge_exit" = 1 ] || [ "$cap_exit" = 1 ] || [ "$indirect_exit" = 1 ] || [ "$pol_exit" = 1 ]; then
   final=1; label="🔴 BLOCKED (차단)"
-elif [ "$ge_exit" = 2 ] || [ "$cap_exit" = 2 ] || [ "$pol_exit" = 2 ]; then
+elif [ "$ge_exit" = 2 ] || [ "$cap_exit" = 2 ] || [ "$indirect_exit" = 2 ] || [ "$pol_exit" = 2 ]; then
   final=2; label="🟠 APPROVAL_REQUIRED (승인필요)"
 fi
 
 hr
-echo "  게이트 판정 : 카드3축=$ge_exit · 능력=$cap_exit · 정책=$pol_exit  (0통과/1차단/2승인)"
+echo "  게이트 판정 : 카드3축=$ge_exit · 능력=$cap_exit · 간접영향=$indirect_exit · 정책=$pol_exit  (0통과/1차단/2승인)"
 [ "${#ANALYSIS_FAILURES[@]}" -gt 0 ] && echo "  분석 실패   : ${ANALYSIS_FAILURES[*]}"
 echo "  최종 판정   : $label   (exit $final)"
 echo "  감사카드    : $OUT"

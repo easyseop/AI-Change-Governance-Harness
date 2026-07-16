@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# run.sh 교차리뷰 회귀: 최종판정 조립, 분석실패, 대상 정책 override.
+# run.sh 교차리뷰 회귀: 최종판정 조립, 분석실패, 대상 정책 override, 간접영향.
 set -uo pipefail
 KIT="$(cd "$(dirname "$0")/.." && pwd)"
 WORK="$(mktemp -d)"; trap 'rm -rf "$WORK"' EXIT
@@ -89,6 +89,41 @@ repo="$WORK/capability"; make_repo "$repo"
 printf 'import subprocess\n\ndef run():\n    return subprocess.run(["true"])\n' >"$repo/app/service.py"
 git -C "$repo" add . && git -C "$repo" commit -qm capability
 run_case new-capability 2 'APPROVAL_REQUIRED' "$KIT/run.sh" "$repo"
+
+# sink 의 직접 의존함수 수정은 3층에서 승인요구로 최종판정에 반영된다.
+repo="$WORK/indirect"; make_repo "$repo"
+cat >"$repo/app/service.py" <<'PY'
+def check_permission(user):
+    return bool(user)
+
+def download_report(user):
+    return check_permission(user)
+PY
+cat >"$repo/policies/sink-registry.yaml" <<'YAML'
+policy_version: test
+defaults:
+  maturity: shadow
+  hops: 1
+sinks:
+  - id: report_download
+    function: app.service.download_report
+    reason: report export boundary
+    owner: security-reviewer
+    maturity: enforcing
+YAML
+git -C "$repo" add . && git -C "$repo" commit -qm indirect-base
+python3 - "$repo/app/service.py" <<'PY'
+from pathlib import Path
+import sys
+p = Path(sys.argv[1])
+p.write_text(p.read_text().replace("return bool(user)", "return user is not None"))
+PY
+git -C "$repo" add . && git -C "$repo" commit -qm indirect-change
+run_case indirect-impact-approval 2 'indirect sink impact requires review' "$KIT/run.sh" "$repo" --policies "$repo/policies"
+
+# --policies 대상에 sink-registry 가 없으면 조용히 통과하지 않고 fail-safe 한다.
+rm "$repo/policies/sink-registry.yaml"
+run_case missing-sink-registry 2 '필수 정책 파일 없음' "$KIT/run.sh" "$repo" --policies "$repo/policies"
 
 # 빠른 게이트의 파이프 EOF가 watcher timeout 잔여시간에 묶이지 않아야 한다.
 repo="$WORK/pipe-latency"; make_repo "$repo"
