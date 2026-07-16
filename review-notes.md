@@ -1425,3 +1425,43 @@ R-2 델타 = 게이트 3줄 + 픽스처 5줄 + cases 6줄. `policies/*`·Claude 
 - **하류**: 이 세트가 콜그래프(TASK-023)·역도달(TASK-024)의 민감엣지 보존·정직성 회귀를 상설 고정 → 이후 리팩터 시 침묵 회귀 방지.
 - **비차단 O-1**(adversarial 그룹 ≠ §9 문자적 7종·두 개념 타 위치 상설)·**O-2**(dynamic-coverage hops=1 이중원인). §2B 필수질문=아니오. 상세 D-057.
 - **멱등성**: `b15696c`·`8256fe4`·`11ec86b` 재처리 금지.
+
+## TASK-026 킷에 MVP-2 반영 — 역도달성 게이트 배선 — **통과 · Claude main 머지** (킷 v0.2-mvp2) (2026-07-16, D-058)
+
+**대상**: `9e04c13`·`259d49e`, 브랜치 `codex/2026-07-16-task026-kit-mvp2`. 형 지시 "킷 리뷰는 특히 상세하게" — 5개 축(배선/의존해소/전경로 fresh/sync 실작동/rig-and-revert) 전부 직접 실행으로 검증.
+
+### 한 줄씩 뜯은 것 (run.sh 델타)
+- L25/45 `SINKS` 를 기본·`--policies` 재계산 **두 지점 모두** 정의 — 오버라이드 일관(누락 시 흔한 결함인데 없음).
+- L46 필수정책 루프에 `$SINKS` 편입 → 부재 = exit 2 fail-safe. 설계 §3.1 "파일 부재=정상"은 **게이트** 수준이고 킷 수준은 AC#3 이 fail-safe 요구 — 킷이 기본본 동봉하므로 의도된 차이로 정합 판단.
+- L184–198 3층 블록: `run_gate … "0 2"` — 게이트 소스 확인 결과 exit 은 `PASS=0`/`APPROVAL_REQUIRED=2` 뿐이고 main() catch-all 예외도 2 로 정규화 → 허용집합 정확. `--sensitive-zones/--sink-registry/--repo` 는 argparse 와 1:1. 출력 head-8 표시는 기존 능력층 패턴 재사용.
+- L217–221 최종조립: 1 검사에 `indirect_exit` 포함 — 게이트가 1 을 못 내므로 도달불가 방어코드(무해·타층과 대칭 유지 이점). 2 검사 포함 = 실배선(rig A 로 음성 실증).
+- `HAS_RANGE=0` 분기: `indirect_exit=2`+`ANALYSIS_FAILURES+=(range_required)` — 능력·정책층과 동일 패턴, fresh ③ 재현.
+
+### 의존 해소·sync 실작동
+- `check-indirect-impact.py` 는 `Path(__file__).parent` 로 map/classify/callgraph/sinks 4모듈 co-located import — 킷 `gates/` 에 16종 전부 실려야 동작. **`cmp` 로 dev 16종과 전량 바이트 동일** + selftest 91/91 = import 실해소 실증.
+- `kit/tests` = dev `tests` 완전 동일 + 킷 전용 진입점 스크립트만 추가(`diff -rq` 공백). `kit/gates/README.md` 도 dev 와 동일.
+- **sync 멱등**: worktree 에서 `sync-from-dev.sh` 재실행 → `git status` clean. sink-registry 스냅샷-복원·진입점테스트 보존 분기 실작동. dev=16 kit=16 카운트 가드.
+
+### fresh 적대입력 (픽스처 밖 · 킷 진입점 경유)
+| # | 입력 | 기대 | 결과 |
+|---|---|---|---|
+| ① | 기본정책(--policies 無)·frozen `settlement` 자동 sink 의 의존함수 수정 | 2 | ✅ 간접영향=2·`transfer -> normalize` |
+| ② | 같은 repo, sink 무관 함수 수정 | 0 | ✅ 최종 PASS(항상-2 아님) |
+| ③ | `run.sh HEAD`(범위 아님) | 2 | ✅ `range_required` fail-closed |
+| ④ | `--policies` 대상 repo 자체 registry·2홉 체인 b 수정, hops 1→2 | 0→2 | ✅ hops 정책값 실구동·reviewer=sec-team 라우팅 |
+| ⑤ | head 문법오류 .py | 2 | ✅ `fail_closed` 다중 방출 |
+
+### 음성검증 (rig-and-revert)
+- **rig A** `indirect_exit=0` 고정(배선삭제 시뮬) → 진입점 `indirect-impact-approval` **단독 FAIL 10/11** + fresh ① 오판 PASS = 신규 가드 load-bearing·이 층이 타층과 중복 아님.
+- **rig B** 게이트 파일 삭제 → `gate_missing` fail-closed 2 (조용통과 금지).
+- **rig C** 진입점 기대값 변조(2→0) → 해당 케이스 FAIL (항상-PASS 아님).
+- 전부 원복·selftest green.
+
+### 내가 짠다면 / 하류
+- 배선은 능력층 패턴 문자적 재사용이 정답이라 대안 없음. `--json` 파싱으로 카드에 간접영향을 편입하는 안은 ADR-002(acgh-result 통합) 몫 — 지금 넣으면 over-reach.
+- 하류: manifest L3 층·정책 4종 목록은 spine 온보딩 문서와 정합. Q-0004 해소로 sync 단일소스 회복(A-0021).
+
+### 잔여 (비차단 — D-058 O-1~O-3)
+- **O-1** main 기존결함(비델타): intent 없는 repo + bash 3.2 → `INTENT_ARGS[@]` unbound 크래시 exit 1. 과차단 방향이라 비차단이나 진입점 스위트 사각 — 차기 킷 정비 AC 로 명시.
+- **O-2** 킷 전용 자산 snapshot-복원 패턴 취약성(현재 실작동). **O-3** 킷 기본 frozen zone 에 `required_approval` 부재 → 간접영향 reviewer 폴백 tool_owner(정책면 후속·Claude 몫).
+- **멱등성**: `9e04c13`·`259d49e` 재처리 금지.
