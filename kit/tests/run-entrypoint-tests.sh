@@ -87,16 +87,21 @@ run_no_intent_case(){
   local output rc
   TOTAL=$((TOTAL + 1))
   output="$(ACGH_GATE_TIMEOUT_SECONDS=1 /bin/bash "$runner" HEAD~1..HEAD --repo "$repo" --output "$card" 2>&1)"; rc=$?
-  if [ "$rc" = 0 ] &&
-     printf '%s\n' "$output" | grep -q 'change-intent.yaml 없음 — 의도이탈 층은 생략' &&
+  if [ "$rc" = 1 ] &&
+     ! printf '%s\n' "$output" | grep -q 'unbound variable' &&
+     printf '%s\n' "$output" | grep -q '의도 선언 누락 — 카드 게이트가 미선언으로 판정' &&
      printf '%s\n' "$output" | grep -q '\[2층\] 신규 위험 능력' &&
      printf '%s\n' "$output" | grep -q '\[3층\] sink 간접영향' &&
      printf '%s\n' "$output" | grep -q '\[메타\] 정책 자기무력화' &&
-     [ -s "$card" ]; then
+     [ -s "$card" ] &&
+     grep -q '의도 선언 누락' "$card" &&
+     ! grep -q '^verdict: pass$' "$card" &&
+     ! grep -q 'in_allowed_paths: true' "$card"; then
     echo "PASS $name"; PASS=$((PASS + 1))
   else
-    echo "FAIL $name (exit=$rc expected=0, missing skip/layer/card evidence)"
+    echo "FAIL $name (exit=$rc expected=1, missing no-crash/layer/honest-card evidence)"
     printf '%s\n' "$output" | tail -16 | sed 's/^/  /'
+    [ -f "$card" ] && tail -20 "$card" | sed 's/^/  card: /'
   fi
 }
 
@@ -138,13 +143,13 @@ printf '\n# changed a different file\n' >>"$repo/app/service.py"
 git -C "$repo" add app/service.py && git -C "$repo" commit -qm expected-missing
 run_expected_missing_case expected-path-missing-approval "$KIT/run.sh" "$repo" "$WORK/expected-missing-card.yaml"
 
-# intent 미제공은 bash 3.2에서도 빈 배열 크래시 없이 의도층만 생략하고 나머지를 실행한다.
+# intent 미제공은 bash 3.2에서도 빈 배열 크래시 없이 정직한 차단 카드를 만들고 나머지 층을 실행한다.
 repo="$WORK/no-intent"; make_repo "$repo"
 rm "$repo/change-intent.yaml"
 git -C "$repo" add -A && git -C "$repo" commit -qm no-intent-base
 printf '\n# harmless change\n' >>"$repo/app/service.py"
 git -C "$repo" add app/service.py && git -C "$repo" commit -qm no-intent-change
-run_no_intent_case no-intent-bash32-pass "$KIT/run.sh" "$repo" "$WORK/no-intent-card.yaml"
+run_no_intent_case no-intent-bash32-blocked "$KIT/run.sh" "$repo" "$WORK/no-intent-card.yaml"
 
 # sink 의 직접 의존함수 수정은 3층에서 승인요구로 최종판정에 반영된다.
 repo="$WORK/indirect"; make_repo "$repo"

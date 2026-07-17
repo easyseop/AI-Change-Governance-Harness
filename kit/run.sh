@@ -148,24 +148,16 @@ echo "  변경 감사카드 · AI Change Governance Kit"
 echo "════════════════════════════════════════════════════════════════"
 echo "  대상 repo : $(basename "$(pwd)")"
 echo "  변경 범위 : $RANGE"
-[ -n "$INTENT" ] || echo "  (change-intent.yaml 없음 — 의도이탈 층은 생략)"
+[ -n "$INTENT" ] || echo "  (의도 선언 누락 — 카드 게이트가 미선언으로 판정)"
 warn_change_intent_shape
 warn_output_location
 hr
 
 # ── 감사카드 + 3축(의도·민감경로·@gov 함수) 판정 ────────────────────
-INTENT_ARGS=(); TEMP_INTENT=""
-if [ -n "$INTENT" ]; then
-  INTENT_ARGS=(--change-intent "$INTENT")
-else
-  TEMP_INTENT="$(mktemp)"
-  printf '%s\n' 'change_intent:' '  allowed_paths: ["**"]' '  forbidden_paths: []' >"$TEMP_INTENT"
-  INTENT_ARGS=(--change-intent "$TEMP_INTENT")
-fi
+INTENT_ARGS=(); [ -n "$INTENT" ] && INTENT_ARGS=(--change-intent "$INTENT")
 run_gate "generate-change-evidence" "0 1 2" "$G/generate-change-evidence.py" "$RANGE" \
   --sensitive-zones "$ZONES" --approval-routing "$ROUTING" \
   ${INTENT_ARGS[@]+"${INTENT_ARGS[@]}"} --repo .
-[ -n "$TEMP_INTENT" ] && rm -f "$TEMP_INTENT"
 CARD="$RUN_OUTPUT"
 ge_exit="$RUN_EXIT"; ge_failed="$RUN_FAILED"
 printf '%s\n' "$CARD" > "$OUT"
