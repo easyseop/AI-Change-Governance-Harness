@@ -350,7 +350,7 @@
 **산출**: `.harness/gates/check-change-intent.py`·`generate-change-evidence.py`(Codex 저자) + `tests/fixtures/` + `tests/cases.yaml`(+ 필요 시 템플릿). 통상 Codex 구현 → Claude 리뷰(비민감 intent 층 → Claude 머지 D-007).
 **비고**: 첫 부재 탐지. 상한 `approval_required`(차단 없음)·기본 off(하위호환). 게이트 코드는 Codex 저자(Claude 미작성 — 상호견제).
 
-### TASK-028 ☐ 킷에 `expected_paths` 반영 (부재 탐지 스냅샷)  (Codex)  *(MVP-2 킷 스냅샷)*
+### TASK-028 ☑ 킷에 `expected_paths` 반영 (부재 탐지 스냅샷)  (Codex)  *(MVP-2 킷 스냅샷)*  — **통과·머지완료(D-063 보정요청 → D-064 재리뷰통과, 2026-07-16)**
 **배경**: TASK-027 로 dev 카드 게이트가 `expected_paths` 부재 탐지를 갖추면, 킷은 `sync-from-dev.sh` 로 그 게이트 사본을 받는 것만으로 **자동으로** 부재 탐지가 작동한다 — 킷 `run.sh` 가 이미 `generate-change-evidence` 를 intent 층으로 배선했기 때문(TASK-026/D-058). **★TASK-026 과 달리 신규 판정층 아님 → `run.sh` 배선 변경 불필요**(기존 카드 게이트 내부 확장). 따라서 이 태스크는 **경량 스냅샷 동기화 + 진입점 실증**.
 **수용기준**:
 1. `sync-from-dev.sh` 실행 → `kit/gates/check-change-intent.py`·`generate-change-evidence.py` 가 dev 최신본과 **바이트 동일**(`cmp` 확인, 누락검증 dev수==kit수 통과). 게이트 개수 무변화(16종 유지 — 기존 게이트 내부 확장).
@@ -359,7 +359,7 @@
 4. `kit/selftest.sh` 전량 green + 부재 탐지 rig-and-revert 실증(§2B — "될 것 같다" 금지·fresh 적대입력 실제 실행). **`run.sh` 무변경 확인**(diff 로 `kit/run.sh` 무접촉 실증 — Claude 리뷰 체크).
 **산출**: `kit/*`(Codex 저자·`run.sh` 미변경) + handoff/summaries. Codex 구현 → Claude 리뷰·머지(비민감 킷 스냅샷 — TASK-026 선례).
 **의존**: TASK-027 통과·머지 후 착수(027 → 028).
-**진행**: 2026-07-16 1차 제출(`c858c9b`) 리뷰 → **보정요청 R-1**(진입점 케이스가 load-bearing 아님 — 선언 수정이 diff 에 실려 exit 2 이중 원인·카드 grep 이 스키마 에코에 매칭. detection-kill rig 에서 12/12 유지로 실증). AC#1·#3·#4 는 통과 — **보정 커밋만 재리뷰**. 상세 `collab/answers/A-0022.md`·D-063.
+**진행**: 2026-07-16 1차 제출(`c858c9b`) 리뷰 → **보정요청 R-1**(진입점 케이스가 load-bearing 아님 — 선언 수정이 diff 에 실려 exit 2 이중 원인·카드 grep 이 스키마 에코에 매칭. detection-kill rig 에서 12/12 유지로 실증). AC#1·#3·#4 는 통과 — **보정 커밋만 재리뷰**. 상세 `collab/answers/A-0022.md`·D-063. → 보정 커밋 `0f4d1a0` 재리뷰 **통과**(선언 선행커밋 분리 + reasons 정확 grep — detection-kill rig 에서 케이스 단독 FAIL 11/12 = load-bearing 회복·fresh 단독원인·음성검증 2종·selftest 96/96+12/12+mutation 161·sync 멱등). Claude main 머지(`d1e3c94`). **완결** — 상세 D-064. 비차단 O-D(out_of_scope 부재 단언 보강)는 TASK-033 에 병합 권고.
 
 ### TASK-033 ☐ 킷 `run.sh` 견고성 — intent 부재 크래시(bash 3.2) 수정 + 콘솔 부재탐지 표기  (Codex)  *(MVP-2 킷 후속 · D-063 O-A/O-B)*
 **배경**: TASK-028 리뷰 중 발견한 **기존 결함**(main 킷 재현·TASK-028 도입 아님). ① 대상 repo 에 `change-intent.yaml` 이 **없으면** `set -u` + 빈 배열 확장(`"${INTENT_ARGS[@]}"`)이 bash<4.4(macOS 기본 3.2)에서 `unbound variable` 크래시 → **exit 1(차단 오인)·카드 미생성·2/3/메타층 미실행**. 과차단 방향이라 놓침은 아니나 배포 최전선 견고성 결함. ② 콘솔 1층 요약 grep 에 `missing_expected` 라인 미포함(카드에는 있음).
@@ -368,6 +368,7 @@
 2. 진입점 케이스 추가: intent 없는 repo → (타층 무위반 시) exit 0 + 생략 문구 + 카드 생성. **`/bin/bash`(3.2)로 실행 실증** + 음성검증.
 3. 콘솔 1층 요약 grep 에 `missing_expected` 포함(O-B) — 판정 로직 무변경(표시만).
 4. 기존 진입점·selftest 전량 무회귀 + rig-and-revert.
+5. *(D-064 O-D 병합)* `expected-path-missing-approval` 케이스에 `out_of_scope` reasons **부재 단언** 추가 — 케이스 구성 드리프트로 exit 2 이중 원인이 재유입되면 자동 검출(현재는 단독 원인 실증 상태·가드 보강).
 **산출**: `kit/run.sh`+`kit/tests/run-entrypoint-tests.sh`(Codex 저자). **의존**: TASK-028 보정 통과 후(028 → 033 → MVP-3 병행 가능·경량).
 
 # MVP-3 (다국어 확장 — Java/Spring 우선)  *(설계 확정: `docs/multi-language-adapter-design.md`, 형 방향승인 2026-07-16, D-061)*

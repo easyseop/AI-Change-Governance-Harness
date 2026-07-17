@@ -1548,3 +1548,29 @@ sync 는 `kit/tests/` 를 dev 로 덮어쓰므로 **진입점 스위트가 sync 
 ### 잔여 (비차단)
 O-A(run.sh intent-부재 크래시·bash<4.4 — 기존 결함·**TASK-033**) / O-B(콘솔 1층 요약 missing_expected 미표기 — TASK-033 병합) / O-C(manifest `detects:` 소비자 없음). 상세 D-063.
 **멱등성**: `c858c9b`·`7b3faf9` 재처리 금지. **다음 = Codex 보정 커밋**(진입점 케이스만).
+
+## TASK-028 보정(0f4d1a0) 재리뷰 — **통과·머지완료** (2026-07-16, D-064)
+
+**범위**: 보정 커밋 `0f4d1a0` + docs `d57b086` 만(멱등 — `c858c9b`·`7b3faf9` 재처리 안 함). 델타 = `kit/tests/run-entrypoint-tests.sh` 3+/2-.
+
+### 한 줄 검토
+- 선언 커밋 분리(`expected-declaration`) + 마지막 커밋 `git add app/service.py` **명시 경로** → `HEAD~1..HEAD` = 코드 단독. A-0022 ① 정확 구현.
+- grep 1개(`missing_expected:app/required_patch.py`) — 게이트 `build_reasons` 의 `f"missing_expected:{pattern}"` 과 문자 일치. 필드 에코(`missing_expected:` 다음 줄 `- app/...`)·빈 키·`expected_paths` 에코 전부 비매칭 확인. A-0022 ②.
+- 실패 메시지의 `expected=2` 는 정적 텍스트(변조 rig 해석 시 주의) — 기능 무영향.
+
+### 실증 로그 (격리 worktree · 전부 fresh)
+| # | rig / 입력 | 기대 | 결과 |
+|---|---|---|---|
+| V1 | 진입점 스위트 fresh | 12/12 | ✓ |
+| V2 | selftest 전량 | 96/96+12/12+mutation 161 | ✓ |
+| V3 | **detection-kill**: 카드 게이트 missing 계산 `[]` 고정(에코 유지) | 케이스 단독 FAIL | ✓ 11/12·reasons [] (D-063 R-1 해소 — load-bearing 회복) |
+| V4 | fresh 픽스처 밖: 패턴 2종 선언+코드단독 diff | 2·missing 단독 원인 | ✓ out_of_scope 0건 |
+| V5 | 기대 rc 2→0 변조(count==1 assert 적용확인) | 케이스 단독 FAIL | ✓ 11/12 |
+| V6 | grep 문자열 변조(DOES_NOT_EXIST) | 케이스 단독 FAIL | ✓ 11/12 |
+| V7 | sync-from-dev 재실행 | 클린(보정 스크립트 생존) | ✓ |
+
+### 보수적 개발 · 대안
+킷 테스트 1파일 + docs 만 — scope-creep 없음·`run.sh`/게이트 무접촉(diff 실증). "내가 짠다면" = 동일(A-0022 사전 실증 형태). **O-D(비차단)**: 케이스에 `out_of_scope` 부재 단언 추가 시 미래 이중원인 드리프트 자동검출 — TASK-033 때 반영 권고.
+
+### 판정
+**통과** — 비민감(킷 테스트 하네스) → D-007 Claude 머지(`d1e3c94`). **TASK-028 완결**. 다음 = TASK-033 착수 가능. **멱등성**: `0f4d1a0`·`d57b086`·`d1e3c94` 재처리 금지.
