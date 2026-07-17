@@ -365,11 +365,22 @@
 **배경**: TASK-028 리뷰 중 발견한 **기존 결함**(main 킷 재현·TASK-028 도입 아님). ① 대상 repo 에 `change-intent.yaml` 이 **없으면** `set -u` + 빈 배열 확장(`"${INTENT_ARGS[@]}"`)이 bash<4.4(macOS 기본 3.2)에서 `unbound variable` 크래시 → **exit 1(차단 오인)·카드 미생성·2/3/메타층 미실행**. 과차단 방향이라 놓침은 아니나 배포 최전선 견고성 결함. ② 콘솔 1층 요약 grep 에 `missing_expected` 라인 미포함(카드에는 있음).
 **수용기준**:
 1. 빈 배열 확장을 bash 3.2 안전 관용구(`${INTENT_ARGS[@]+"${INTENT_ARGS[@]}"}` 류)로 수정 — intent 없는 repo 에서 크래시 없이 "의도이탈 층 생략" 정직 문구 + 나머지 층 정상 실행·판정·카드 생성. `run.sh` 내 다른 빈 배열 확장(`ANALYSIS_FAILURES` 등)도 전수 점검.
-2. 진입점 케이스 추가: intent 없는 repo → (타층 무위반 시) exit 0 + 생략 문구 + 카드 생성. **`/bin/bash`(3.2)로 실행 실증** + 음성검증.
+2. ~~진입점 케이스 추가: intent 없는 repo → (타층 무위반 시) exit 0 + 생략 문구 + 카드 생성.~~ **🔴 정정(D-065 · 2026-07-16 · Claude 오류)**: 원 AC 의 전제("exit 1 = 크래시 산물")가 **틀렸다** — bash≥4.4 에선 크래시 없이 게이트가 돌아 **설계된 `blocked`(exit 1)** 를 낸다(`load_intent`→`FileNotFoundError`→정직 카드 `reasons:[의도 선언 누락…]`·`coverage.checked: []`). 크래시 결함의 실체 = **카드 미생성·2/3/메타층 미실행·판정 없는 죽음** 셋뿐. → **정정 AC**: intent 없는 repo → **크래시 없이(`unbound variable` 부재) 게이트 자신의 판정이 그대로 흐른다**(현행 계약 rc=1·TASK-034 가 2 로 정규화하면 그때 갱신) + **카드 생성·비어있지 않음** + **2층/3층/메타층 전부 실행** + **카드 정직성 단언**(`reasons` 에 `의도 선언 누락` 존재 · `verdict: pass` 아님 · `in_allowed_paths: true` 부재 = 합성 주입 재유입 자동검출). **판정 완화 금지 — 합성 intent 주입 금지**(`allowed_paths:["**"]` 류 가짜 선언 = 카드 위조 + 의도층 우회). **`/bin/bash`(3.2)로 실행 실증** + **음성검증 필수**: 안전관용구를 `"${INTENT_ARGS[@]}"` 로 되돌리면 신규 케이스가 **단독 FAIL** 해야 한다(= 관용구가 load-bearing 임을 증명). 부수: 151행 `(change-intent.yaml 없음 — 의도이탈 층은 생략)` 문구는 실동작(층 생략 아님·게이트가 차단 판정)과 모순 → 사실 문구로 정정(표시만·판정 무변경).
 3. 콘솔 1층 요약 grep 에 `missing_expected` 포함(O-B) — 판정 로직 무변경(표시만).
 4. 기존 진입점·selftest 전량 무회귀 + rig-and-revert.
 5. *(D-064 O-D 병합)* `expected-path-missing-approval` 케이스에 `out_of_scope` reasons **부재 단언** 추가 — 케이스 구성 드리프트로 exit 2 이중 원인이 재유입되면 자동 검출(현재는 단독 원인 실증 상태·가드 보강).
 **산출**: `kit/run.sh`+`kit/tests/run-entrypoint-tests.sh`(Codex 저자). **의존**: TASK-028 보정 통과 후(028 → 033 → MVP-3 병행 가능·경량).
+**진행**: 2026-07-16 1차 제출(`8e6b54b`) 리뷰 → **보정요청 R-1**(합성 intent 주입 = 카드 위조 + 의도층 우회 + AC#1 가드 dead code) · 코드 머지 보류. 검증 주장은 전부 재현(13/13·96/96·mutation 161)이나 크래시를 **가짜 `allowed_paths:["**"]` 선언 주입**으로 없애 카드가 없는 선언을 통과로 위조하고, `change-intent.yaml` 삭제만으로 forbidden/expected 층이 우회됨(bash≥4.4 에선 BLOCKED→PASS 회귀). **AC#3·AC#5 는 통과·재작업 금지.** AC#2 는 위와 같이 **정정**(Claude 오류 자인). 보정안·실증 = `collab/answers/A-0023.md`·D-065. **보정 커밋만 재리뷰**(멱등 — `8e6b54b`·`c8d8e7b` 재처리 금지).
+
+### TASK-034 ☐ "의도 선언 누락" 판정 정규화 — blocked(1) → approval_required(2) + 카드 정직 표기  (Codex)  *(D-065 · 정책 판정 Claude 완료)*
+**배경**: TASK-033 리뷰 중 확인한 **선행 결함**(TASK-033 브랜치 탓 아님). `generate-change-evidence.py` 의 `load_intent` 는 `change-intent.yaml` 부재 시 `FileNotFoundError` → 카드 `verdict: blocked`(exit 1). 카드 자체는 정직하나(`reasons:['의도 선언 누락…']`·`coverage.checked: []`) **판정이 하네스 불변식과 충돌**: ① **"1층 frozen 만 차단"** — 미선언은 frozen zone 터치가 아니다 ② 러너 fail-closed 관례는 필수입력 부재·분석불가를 **approval_required(2)** 로 정규화한다(`run_gate` 실패→2 · `show_analysis_failure` "fail-closed → approval_required"). **Claude 정책 판정 = approval_required(2)** — 미선언은 "위반 확정"이 아니라 "검증 불가 → 사람이 본다".
+**수용기준**:
+1. `change-intent.yaml` 부재 → 카드 `verdict: approval_required`(exit 2). **`pass` 금지**(조용한 통과)·**`blocked` 금지**(1층 frozen 아님). reasons 에 안정적 기계판독 토큰 `intent_not_declared` 포함(현행 한글 문구는 유지 가능·둘 다).
+2. **정직성 유지·강화**: `coverage_statement` 에 의도층 **미검사** 명시(`checked` 에 `check-change-intent` 를 **넣지 않는다** — 현행 `checked: []` 계보) + `not_checked` 또는 전용 필드로 "의도 미선언 — 의도이탈 미검사" 노출. `intent_check.status` 는 `pass` 가 될 수 없다(`not_declared` 신설 또는 `fail` 유지 — 스키마는 `templates/change-evidence.template.yaml` 동시 개정).
+3. **위조 방지 불변식**: 선언이 없으면 `changed_files[].in_allowed_paths` 는 `true` 가 될 수 없다(`null`/`false`/키 부재 중 택1·템플릿 명기). 러너·게이트 **어디서도 합성 선언 생성 금지**(D-065 R-1).
+4. **하위호환**: 선언이 있는 기존 경로 전 판정 무변경(96/96 무회귀 = #1 가드). 빈 `allowed_paths` 선언(존재하나 비어있음) → 현행대로 전 변경 out_of_scope 승인요구(미선언과 구분 유지).
+5. 고정 픽스처 + **음성검증**: 미선언 repo → exit 2·`intent_not_declared`·coverage 미검사 노출 각각 단독 단언, 기대 변조 시 FAIL. 킷 **sync 반영 + 진입점 케이스 rc 1→2 갱신**(TASK-033 보정 통과 후).
+**산출**: `kit/gates/`·`.harness/gates/` 게이트 + 픽스처(Codex 저자) + `templates/change-evidence.template.yaml`(Claude 소유 — 개정 위임). **의존**: **TASK-033 보정 통과·머지 후**(진입점 케이스가 rc 계약을 고정하므로 순서 필수).
 
 # MVP-3 (다국어 확장 — Java/Spring 우선)  *(설계 확정: `docs/multi-language-adapter-design.md`, 형 방향승인 2026-07-16, D-061)*
 
