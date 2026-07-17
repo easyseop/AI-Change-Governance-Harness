@@ -148,7 +148,7 @@ echo "  변경 감사카드 · AI Change Governance Kit"
 echo "════════════════════════════════════════════════════════════════"
 echo "  대상 repo : $(basename "$(pwd)")"
 echo "  변경 범위 : $RANGE"
-[ -n "$INTENT" ] || echo "  (change-intent.yaml 없음 — 의도이탈 층은 생략)"
+[ -n "$INTENT" ] || echo "  (의도 선언 누락 — 카드 게이트가 미선언으로 판정)"
 warn_change_intent_shape
 warn_output_location
 hr
@@ -157,13 +157,13 @@ hr
 INTENT_ARGS=(); [ -n "$INTENT" ] && INTENT_ARGS=(--change-intent "$INTENT")
 run_gate "generate-change-evidence" "0 1 2" "$G/generate-change-evidence.py" "$RANGE" \
   --sensitive-zones "$ZONES" --approval-routing "$ROUTING" \
-  "${INTENT_ARGS[@]}" --repo .
+  ${INTENT_ARGS[@]+"${INTENT_ARGS[@]}"} --repo .
 CARD="$RUN_OUTPUT"
 ge_exit="$RUN_EXIT"; ge_failed="$RUN_FAILED"
 printf '%s\n' "$CARD" > "$OUT"
 echo "▸ [1층] 의도이탈·민감경로·@gov 함수 (감사카드 3축)"
 if [ "$ge_failed" = 1 ]; then show_analysis_failure "generate-change-evidence"; else
-  printf '%s\n' "$CARD" | grep -E 'verdict:|status:|frozen_touched|protected_touched|out_of_scope|forbidden_touched|reviewer_required' | sed 's/^/    /' | head -20
+  printf '%s\n' "$CARD" | grep -E 'verdict:|status:|frozen_touched|protected_touched|out_of_scope|missing_expected|forbidden_touched|reviewer_required' | sed 's/^/    /' | head -20
 fi
 
 # ── [2층] 신규 위험 능력 (감사카드에 미포함 → 여기서 명시 조립) ─────
@@ -222,7 +222,7 @@ fi
 
 hr
 echo "  게이트 판정 : 카드3축=$ge_exit · 능력=$cap_exit · 간접영향=$indirect_exit · 정책=$pol_exit  (0통과/1차단/2승인)"
-[ "${#ANALYSIS_FAILURES[@]}" -gt 0 ] && echo "  분석 실패   : ${ANALYSIS_FAILURES[*]}"
+[ "${#ANALYSIS_FAILURES[@]}" -gt 0 ] && echo "  분석 실패   : ${ANALYSIS_FAILURES[*]+${ANALYSIS_FAILURES[*]}}"
 echo "  최종 판정   : $label   (exit $final)"
 echo "  감사카드    : $OUT"
 echo "════════════════════════════════════════════════════════════════"
