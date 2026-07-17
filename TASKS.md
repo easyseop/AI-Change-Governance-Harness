@@ -359,6 +359,16 @@
 4. `kit/selftest.sh` 전량 green + 부재 탐지 rig-and-revert 실증(§2B — "될 것 같다" 금지·fresh 적대입력 실제 실행). **`run.sh` 무변경 확인**(diff 로 `kit/run.sh` 무접촉 실증 — Claude 리뷰 체크).
 **산출**: `kit/*`(Codex 저자·`run.sh` 미변경) + handoff/summaries. Codex 구현 → Claude 리뷰·머지(비민감 킷 스냅샷 — TASK-026 선례).
 **의존**: TASK-027 통과·머지 후 착수(027 → 028).
+**진행**: 2026-07-16 1차 제출(`c858c9b`) 리뷰 → **보정요청 R-1**(진입점 케이스가 load-bearing 아님 — 선언 수정이 diff 에 실려 exit 2 이중 원인·카드 grep 이 스키마 에코에 매칭. detection-kill rig 에서 12/12 유지로 실증). AC#1·#3·#4 는 통과 — **보정 커밋만 재리뷰**. 상세 `collab/answers/A-0022.md`·D-063.
+
+### TASK-033 ☐ 킷 `run.sh` 견고성 — intent 부재 크래시(bash 3.2) 수정 + 콘솔 부재탐지 표기  (Codex)  *(MVP-2 킷 후속 · D-063 O-A/O-B)*
+**배경**: TASK-028 리뷰 중 발견한 **기존 결함**(main 킷 재현·TASK-028 도입 아님). ① 대상 repo 에 `change-intent.yaml` 이 **없으면** `set -u` + 빈 배열 확장(`"${INTENT_ARGS[@]}"`)이 bash<4.4(macOS 기본 3.2)에서 `unbound variable` 크래시 → **exit 1(차단 오인)·카드 미생성·2/3/메타층 미실행**. 과차단 방향이라 놓침은 아니나 배포 최전선 견고성 결함. ② 콘솔 1층 요약 grep 에 `missing_expected` 라인 미포함(카드에는 있음).
+**수용기준**:
+1. 빈 배열 확장을 bash 3.2 안전 관용구(`${INTENT_ARGS[@]+"${INTENT_ARGS[@]}"}` 류)로 수정 — intent 없는 repo 에서 크래시 없이 "의도이탈 층 생략" 정직 문구 + 나머지 층 정상 실행·판정·카드 생성. `run.sh` 내 다른 빈 배열 확장(`ANALYSIS_FAILURES` 등)도 전수 점검.
+2. 진입점 케이스 추가: intent 없는 repo → (타층 무위반 시) exit 0 + 생략 문구 + 카드 생성. **`/bin/bash`(3.2)로 실행 실증** + 음성검증.
+3. 콘솔 1층 요약 grep 에 `missing_expected` 포함(O-B) — 판정 로직 무변경(표시만).
+4. 기존 진입점·selftest 전량 무회귀 + rig-and-revert.
+**산출**: `kit/run.sh`+`kit/tests/run-entrypoint-tests.sh`(Codex 저자). **의존**: TASK-028 보정 통과 후(028 → 033 → MVP-3 병행 가능·경량).
 
 # MVP-3 (다국어 확장 — Java/Spring 우선)  *(설계 확정: `docs/multi-language-adapter-design.md`, 형 방향승인 2026-07-16, D-061)*
 

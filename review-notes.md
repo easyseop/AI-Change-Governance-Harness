@@ -1502,3 +1502,49 @@ R-2 델타 = 게이트 3줄 + 픽스처 5줄 + cases 6줄. `policies/*`·Claude 
 
 ### 잔여 (비차단 — O-1 디렉토리 리터럴 영구 missing / O-2 비문자열 크래시=과차단 / O-3 중복 에코. 전부 §2B 필수질문=아니오, 상세 D-060)
 **멱등성**: `d8e6fa4`·`308fc12` 재처리 금지. **다음 = Codex TASK-028.**
+
+## TASK-028 킷 `expected_paths` 반영 — **보정요청 R-1** (진입점 케이스 판별력) (2026-07-16, D-063 · A-0022)
+
+**브랜치** `codex/2026-07-16-task028-expected-paths-kit` (`c858c9b`+`7b3faf9`). 격리 worktree 실증. 결론: **동기화는 흠 없음, AC#2 진입점 가드만 재작업.**
+
+### 한 줄씩 본 것 (델타 22파일)
+- `kit/gates/check-change-intent.py`·`generate-change-evidence.py`: **dev(main·D-060 승인본)와 md5 동일** → 게이트 내부 로직 재리뷰 불요(이미 심층리뷰·머지된 코드의 사본). 나머지 15파일도 전부 동일.
+- `kit/tests/{run-tests.sh,mutation-check.sh,cases.yaml,fixtures/**}`: dev 트리와 **바이트 동일**(kit 전용 `run-entrypoint-tests.sh` 1파일만 초과 — sync 의 스냅샷 보존 대상). 신규 케이스 5종(intent 4 + evidence 1) = dev TASK-027 픽스처 그대로.
+- `kit/policies/`·`kit/templates/`: dev 와 동일 — `sync-from-dev.sh` 재실행 시 working tree 클린(멱등 실증).
+- `kit/manifest.yaml`: `0.2.1-mvp2`(AC#3 예시안 그대로)·description 부재탐지 추가·`detects:` 키(소비자 없음 — grep 전수, 문서 성격·안전).
+- `kit/README.md`: 능력 설명 + 리터럴 권장/glob 거친 보증 문구(AC#5 계보 정직성 유지)·MVP-2 라인 갱신.
+- `kit/selftest.sh` **git init 신규 블록**: 아래 별도 판정.
+- `kit/run.sh`: **무접촉**(diff 0줄 실증 — AC#4).
+
+### selftest git init 판정 (AC 밖 신규 변경 — 정당)
+- **필요성 실증**: 제거 rig → `expected-present`·`expected-none` **정확히 2건만** FAIL(81/83). 원인 = 비-git 환경에서 `repo_top_level_dirs` 가 git ls-tree 실패 → 변경파일 기반 top-dir fallback → `app/**` 커버리지 100% ≥ 80% → too_broad 로 pass 가 approval 로 뒤집힘. 신규 픽스처가 "intent 게이트 + name-status + 기대 pass" 조합의 첫 사례라 이제서야 드러난 것.
+- **마스킹 아님**: dev 러너도 git repo(저장소 루트)에서 돌므로 환경 정합. 실사용(run.sh)은 대상 git repo 안. 비-git 단독 사용 시 fallback 은 **과탐 방향**(승인요구) = 안전.
+- **타 케이스 무영향**: git init 후 96/96 유지(broad-intent-* 는 fixture_dir 자체 repo 사용).
+
+### 실증 로그 (fresh · 픽스처 밖 · 킷 run.sh E2E)
+| # | 입력 | 기대 | 결과 |
+|---|---|---|---|
+| K1 | 격리 구성(선언은 base 커밋) + expected 미변경 | 2 · missing **단독 원인**(out_of_scope 0) | ✓ |
+| K2 | expected 파일 변경 | 0 | ✓ |
+| K3 | frozen 접촉(--policies 오버라이드) + missing | 1 (차단 우선·missing reasons 병기) | ✓ |
+| K4 | 단일 ref(범위 아님) | 2 (2/3/메타층 fail-closed) | ✓ |
+| K5 | --policies 부재 디렉토리 | 2 | ✓ |
+| K6 | intent YAML 파손 | 1 (카드층 의도된 최강 fail-closed — dev 기존 거동, 예외 카드에 신규 3키 포함 확인) | ✓ |
+| K7 | 카드 2회 실행 | `cmp` 동일 | ✓ |
+| K8 | intent 파일 없는 repo (bash 3.2) | (기대 0) → **크래시 exit 1** | ✗ **O-A — main 재현 = 기존 결함** |
+
+### 음성검증 (rig-and-revert)
+- rig D(**결정타**): 킷 카드 게이트 missing 계산 무력화(키 에코 유지) → **진입점 12/12 PASS 유지** = R-1 증명. 러너는 `evidence-expected-missing` FAIL(82/83) → selftest 전체는 잡음(오늘의 방어층).
+- rig E: selftest git init 제거 → 신규 2픽스처 단독 FAIL — load-bearing.
+- rig F: 격리 구성(K1) + rig D → exit 0 = 보정안이 load-bearing 됨을 사전 실증.
+- (Codex 제출분 기대값 2→0 rig 는 "rc 가 2"만 증명 — 원인 귀속 증명 아님.)
+
+### R-1 판단 근거 (§2B 필수질문 = 예)
+sync 는 `kit/tests/` 를 dev 로 덮어쓰므로 **진입점 스위트가 sync 를 살아남는 유일한 킷 소유 가드**. dev 회귀가 기대값과 함께 유입되는 경로에서 마지막 독립 방어선이 이 기능에 대해 0 — AC#2 의 존재 이유 미충족. 보정안·범위 = A-0022 (보정 커밋만 재리뷰·멱등).
+
+### 대안 검토 ("내가 짠다면")
+케이스 구성만 다르게 했을 것(선언을 base 에 — 3줄 차이). run_expected_missing_case 헬퍼 구조·카드 파일 검증 접근 자체는 기존 run_case 관용구와 정합. git init 위치·순서(심볼릭 후 add·commit)도 적절.
+
+### 잔여 (비차단)
+O-A(run.sh intent-부재 크래시·bash<4.4 — 기존 결함·**TASK-033**) / O-B(콘솔 1층 요약 missing_expected 미표기 — TASK-033 병합) / O-C(manifest `detects:` 소비자 없음). 상세 D-063.
+**멱등성**: `c858c9b`·`7b3faf9` 재처리 금지. **다음 = Codex 보정 커밋**(진입점 케이스만).
