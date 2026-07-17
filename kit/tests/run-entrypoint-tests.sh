@@ -70,7 +70,7 @@ run_expected_missing_case(){
   local output rc
   TOTAL=$((TOTAL + 1))
   output="$(ACGH_GATE_TIMEOUT_SECONDS=1 bash "$runner" HEAD~1..HEAD --repo "$repo" --output "$card" 2>&1)"; rc=$?
-  if [ "$rc" = 2 ] && grep -q 'missing_expected:' "$card" && grep -q 'app/required_patch.py' "$card"; then
+  if [ "$rc" = 2 ] && grep -q 'missing_expected:app/required_patch.py' "$card"; then
     echo "PASS $name"; PASS=$((PASS + 1))
   else
     echo "FAIL $name (exit=$rc expected=2, card missing expected_paths evidence)"
@@ -112,8 +112,9 @@ import sys
 p = Path(sys.argv[1])
 p.write_text(p.read_text() + "  expected_paths: [app/required_patch.py]\n")
 PY
+git -C "$repo" add change-intent.yaml && git -C "$repo" commit -qm expected-declaration
 printf '\n# changed a different file\n' >>"$repo/app/service.py"
-git -C "$repo" add . && git -C "$repo" commit -qm expected-missing
+git -C "$repo" add app/service.py && git -C "$repo" commit -qm expected-missing
 run_expected_missing_case expected-path-missing-approval "$KIT/run.sh" "$repo" "$WORK/expected-missing-card.yaml"
 
 # sink 의 직접 의존함수 수정은 3층에서 승인요구로 최종판정에 반영된다.
