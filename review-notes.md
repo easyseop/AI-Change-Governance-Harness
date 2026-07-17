@@ -1598,3 +1598,37 @@ AC#2 "intent 없는 repo → exit 0" 의 전제가 틀림 — bash≥4.4 는 크
 
 ### 판정
 **보정요청** — 코드 머지 보류·리뷰 기록만 main. 상세 `collab/answers/A-0023.md`. 후속 **TASK-034**(미선언 → approval_required 정규화·정책 판정) 분리 등록. **멱등성**: `8e6b54b`·`c8d8e7b` 재처리 금지.
+
+---
+
+## TASK-033 보정 재리뷰 — 킷 `run.sh` 견고성 (D-066 · 2026-07-16) · **통과·머지**
+
+**대상**: 보정 커밋 `9769ece`(fix)·`fe9f1c6`(docs) — `8e6b54b`·`c8d8e7b` 는 D-065 처리완료(멱등·재리뷰 제외).
+
+### 한 줄
+합성 intent 주입이 **전량 제거**되어 R-1 의 세 갈래(카드 위조·의도층 우회·가드 dead code)가 **각각 실증적으로 해소**됐다. `run.sh` 델타는 안전관용구 1줄 + 콘솔 grep 1줄 + 문구 정정으로 축소 = A-0023 보정안 그대로.
+
+### R-1 해소 실증 (격리 worktree · fresh · `/bin/bash` 3.2)
+| R-1 갈래 | D-065 (1차) | 보정 후 (재현) |
+|---|---|---|
+| ① 카드 위조 | `verdict: pass`·`in_allowed_paths: true`·`checked` 가 "declared allowed_paths 대조" 주장 | `verdict: blocked`·`intent_check.status: fail`·**`checked: []`**·`reasons:['의도 선언 누락…']`·`in_allowed_paths: true` **부재** = 정직 |
+| ② 의도층 우회 | fresh 적대 repo 에서 `change-intent.yaml` **삭제만으로 BLOCKED→PASS(exit 0)** | **삭제해도 exit 1 BLOCKED 유지**(카드 생성·크래시 없음) = forbidden 차단 + TASK-027/028 패치생존성 층 **생존** |
+| ③ 가드 dead code | RIG1(관용구 원복) → **13/13 유지**(가드 죽어도 무음) | **RIG-A → 단독 FAIL(12/13)** = load-bearing 회복 |
+
+- **음성검증 RIG-B**(기대 rc 1→0) → 단독 FAIL(12/13) = 항상-PASS 아님. 두 rig 모두 **치환 `count==1` assert** 로 실제 적용 확인 후 원복(tree clean).
+- **bash 3.2 경계 probe(직접 실행)**: `${#A[@]}`=안전(0) / `${A[*]}`·`${A[@]}`=크래시 → 160행이 **유일 위험지점**이고 보정이 정확히 거기를 막음. 225행 `+` 관용구는 `-gt 0` 가드 뒤 = 도달 불가·무해(비어있지 않은 경로 출력 바이트 동일 확인) → **비차단 O-E**.
+
+### 정정 AC#2(D-065) 충족 — fresh 실측
+크래시 없음(`unbound variable` 부재) · **판정 무변경**(rc=1 게이트 자신의 판정) · 카드 생성 · **2/3/메타 전층 실행**(`카드3축=1 · 능력=0 · 간접영향=0 · 정책=0`) · 카드 정직성 3단언 내장(합성 재유입 자동검출).
+
+### 나머지 AC
+AC#1 배열 전수점검(위 probe) · AC#3 콘솔 grep · AC#4 **96/96 + 진입점 13/13 + mutation 161 + `bash -n` + sync 멱등(보정 생존)** · AC#5 `out_of_scope` 부재 단언(D-064 O-D 병합).
+
+### 보수적 개발
+`kit/run.sh`+진입점 테스트+docs 만 · **dev 무접촉 실증(diff 0)** · 게이트/정책 무접촉 → scope-creep 없음. D-065 의 **over-reach(판정 완화 동반) 제거 = blast radius 가 의도와 일치**.
+
+### 하류
+합성 제거로 게이트가 "미선언"을 실제로 보게 됨 → **TASK-034 도달 가능성 회복**. 진입점이 rc=1 계약을 고정하므로 TASK-034 는 rc 1→2 갱신 동반(AC#5 명시).
+
+### 판정
+**통과** — 비민감(킷 러너 견고성·판정 로직 무변경 실증) → D-007 Claude `main` 머지. **TASK-033 완결** · 다음 = TASK-034. **멱등성**: `9769ece`·`fe9f1c6` 재처리 금지.
