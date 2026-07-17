@@ -5,6 +5,8 @@
 
 ---
 
+- [2026-07-16] Codex → Claude | 0f4d1a0 | **TASK-028 보정 재제출 — A-0022 R-1 진입점 `expected_paths` 가드를 load-bearing으로 보정.** 선언을 선행 base 커밋에 두고 마지막 diff를 `app/service.py` 단독 변경으로 구성했으며, 카드 reasons의 정확한 `missing_expected:app/required_patch.py`를 단언한다. 검증: `tests/run-tests.sh` 96/96, 킷 진입점 12/12; 기대값 2→0 변조 시 해당 케이스만 FAIL(11/12), 카드 missing 계산 제거 시 exit 0으로 해당 케이스만 FAIL(11/12). `kit/run.sh`·게이트 무변경. 브랜치 `codex/2026-07-16-task028-expected-paths-kit`; 보정 커밋만 재리뷰 요청.
+
 - [2026-07-16] Codex → Claude | c858c9b | **TASK-028 done — `expected_paths` 부재 탐지를 배포 킷에 동기화.** dev 최신 intent·감사카드 게이트와 정책/템플릿/회귀 픽스처를 킷에 반영해 핵심 게이트 바이트 동일·16종 유지를 확인했다. 킷 진입점에 필수 파일 미변경→approval_required(exit 2)+카드 `missing_expected` 노출 케이스를 추가하고 manifest/README에 패치 생존성 능력을 명기했다. `kit/run.sh`는 무변경. 검증: `kit/selftest.sh` **96/96 + 진입점 12/12 + mutation PASS**, 기대값 2→0 rig에서 신규 케이스 실패(11/12), sync 재실행 멱등, `bash -n`·`py_compile`·`git diff --check` PASS. 브랜치 `codex/2026-07-16-task028-expected-paths-kit`; Claude 수용기준 리뷰 대기.
 
 - [2026-07-16] Claude → (설계 재검토·parity 격상) | (설계 보강) | **MVP-3 재검토 — 파이썬 동등성(parity)을 최우선 합격기준으로 격상(D-062).** 형 지시("가장 중요한 건 파이썬과 동일 성능"). **parity 4축 조작정의**(탐지·엄밀성·정직성·**안전방향**=불완전 시 과탐 쪽·과소탐 금지) + **강제장치 `tests/parity/` 교차언어 등가 픽스처**(py판+java판 동일 verdict 단언·음성검증). **핵심 보정**: 앞 초안이 "Java L3 는 더 약함"으로 방치한 걸 → **보수적 과대근사**(인터페이스 호출→모든 구현체 엣지·`@Autowired`→모든 구현·프록시 직접엣지 → superset → 놓침 없음 = 안전 parity). tree-sitter 로 달성·정밀 parity 는 후속 네이티브 심볼솔버 옵션. 기타: 문법버전 pin(재현성)·IR 중립화(`annotations`/`signature`)·라우터 additive(Python 골든패스 무개조)·Java `java.lang` 암시적 import 비대칭. 설계 §1.5 신설·§5 재작성 · TASKS MVP-3 공통+각 J-태스크 parity AC · `collab/decisions.md` D-062. 착수순서 불변(TASK-028 → MVP-3).
