@@ -1574,3 +1574,27 @@ O-A(run.sh intent-부재 크래시·bash<4.4 — 기존 결함·**TASK-033**) / 
 
 ### 판정
 **통과** — 비민감(킷 테스트 하네스) → D-007 Claude 머지(`d1e3c94`). **TASK-028 완결**. 다음 = TASK-033 착수 가능. **멱등성**: `0f4d1a0`·`d57b086`·`d1e3c94` 재처리 금지.
+
+## TASK-033 — 킷 `run.sh` 견고성 (D-065 · 2026-07-16) · **보정요청**
+
+**대상**: `codex/2026-07-16-task033-kit-run-robustness` · `8e6b54b`·`c8d8e7b`.
+
+### 한 줄
+크래시는 실제로 사라졌으나 **없앤 방법**이 문제 — `run.sh` 가 `allowed_paths: ["**"]` **가짜 intent 를 합성 주입**해 ① 카드가 없는 선언을 검사·통과했다고 위조 ② `change-intent.yaml` 삭제만으로 의도층 전체 우회. under-detection → 비차단 불가.
+
+### 재현된 주장 (전부 사실)
+진입점 **13/13** · selftest **96/96 + 13/13 + mutation 161** · `bash -n` PASS · 임시파일 누수 0 · 크래시 소멸. **AC#3·AC#5 수용**(콘솔 `missing_expected`·`out_of_scope` 부재 단언). AC#1 배열 전수점검도 사실(`INTENT_ARGS`·`ANALYSIS_FAILURES` 둘뿐·후자는 카운트 가드 뒤).
+
+### 결함 (한 줄씩 · 실증)
+- **카드 위조**: `verdict: pass` · `intent_check.status: pass` · `in_allowed_paths: **true**`(선언 없음에도) · `coverage.checked` 가 `check-change-intent: "…against **declared** allowed_paths…"` 를 명시 주장 · `reasons: []`. 합성 흔적 0. **대조군(합성 없음)** = `blocked` · `reasons:['의도 선언 누락…']` · **`checked: []`**(정직). 정직한 "미검사"를 "3게이트 검사 완료"로 바꿈.
+- **우회(fresh 적대입력)**: 픽스처 밖 repo(forbidden `app/keys.py`·expected `app/must_patch.py`) forbidden 수정+expected 미터치 → intent 존재 시 **3판본 모두 BLOCKED**. intent 삭제 후 → main(3.2) 크래시·카드없음 / **main+안전관용구(=bash≥4.4 실동작) BLOCKED·정직** / **브랜치 exit 0 PASS**. ⇒ 리눅스 CI 에선 **BLOCKED→PASS 판정 완화 회귀**.
+- **가드 dead code**: **RIG1**(관용구 원복·합성 유지) → **13/13 유지**(AC#1 가드 죽어도 무음). **RIG2**(합성 제거·관용구 유지) → 크래시 소멸·전층 실행·신규 케이스만 FAIL(12/13). ⇒ 크래시를 막는 건 관용구인데 테스트가 지키는 건 합성.
+
+### AC 오류 자인
+AC#2 "intent 없는 repo → exit 0" 의 전제가 틀림 — bash≥4.4 는 크래시 없이 **설계된 `blocked`** 를 냄. 크래시 결함의 실체 = 카드 미생성·2/3/메타층 미실행뿐 → **판정 무변경**으로 정정(TASKS.md).
+
+### 보수적 개발 · 대안
+파일 범위·무관 리팩터 없음 → scope-creep 없음. 단 **blast radius 초과**(크래시 수정 → 판정 완화 동반) = §1 over-reach. "내가 짠다면" = RIG2(관용구 1줄 + 콘솔 grep 1줄 + 151행 "생략" 문구 사실화) — 더 단순·정직·우회 없음.
+
+### 판정
+**보정요청** — 코드 머지 보류·리뷰 기록만 main. 상세 `collab/answers/A-0023.md`. 후속 **TASK-034**(미선언 → approval_required 정규화·정책 판정) 분리 등록. **멱등성**: `8e6b54b`·`c8d8e7b` 재처리 금지.
