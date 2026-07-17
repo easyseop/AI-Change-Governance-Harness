@@ -23,6 +23,15 @@ ln -s "$KIT/policies" "$WORK/policies"
 ln -s "$KIT/templates" "$WORK/templates"
 cp -r "$KIT/tests" "$WORK/tests"
 
+# name-status 파일 입력 케이스도 광역 의도 판정에서 저장소 기준 디렉터리를
+# 조회한다. 격리 루트를 git 저장소로 만들어 변경 파일 하나만을 저장소 전체로
+# 오인하는 fallback(예: app/** = 100%)을 피하고 실제 실행 환경을 재현한다.
+git -C "$WORK" init -q
+git -C "$WORK" config user.email kit-selftest@example.invalid
+git -C "$WORK" config user.name kit-selftest
+git -C "$WORK" add .
+git -C "$WORK" commit -qm selftest-baseline
+
 echo "▶ 킷 자체검증 (게이트 16종 co-located 무결성 포함)"
 cd "$WORK"
 rc=0

@@ -17,6 +17,11 @@ change_intent:
     - infra/**
     - db/migrations/**
 
+  # 벤더-브랜치 패치 생존성 확인: 리터럴 권장(glob은 하위 아무 파일 1건으로 충족되는 거친 보증).
+  # rename은 목적지 경로만, delete는 경로 변경 사실만 판정한다.
+  expected_paths:
+    - backend/app/api/admin/search.py
+
   expected_change_types:
     - api_field_addition
     - ui_filter_addition
