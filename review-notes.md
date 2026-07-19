@@ -1708,3 +1708,35 @@ O-A 카드에 파서/문법 버전 0건(AC#6b 부분) → TASK-030 AC · O-B `te
 
 ### 잘한 점
 `signature_start_line` 이 데코레이터 최소 라인을 포함 → **D-057 데코레이터-라인범위 갭 선제 해소**. seam 분리 방향·정책 외부화(하드코딩 금지) 정확.
+
+---
+
+## TASK-029 보정(`f734355`) 재리뷰 (D-070) — R-1/R-2/R-3 해소 · **신규 R-4 보정요청** · 코드 머지 보류
+
+**대상**: 보정 커밋 `f734355`(fix)·`48ed2be`(docs). 멱등성(D-069): `d1dbdca`·`65e1164` 재처리 금지 — 델타만 재리뷰.
+
+### 델타 한 줄씩
+- `tests/run-tests.sh` `validate_inventory`: 부분추출 루프 **삭제**, `assert_equal(errors,"items",result.get("items"),expect["items"])` **전체 동등비교 원복** — A-0026 보정안 ① 그대로. 부분비교를 남기지 않았으므로 길이 단언(③)은 불필요.
+- `tests/cases.yaml` `python-inventory`: 기대 items 9건 각각에 `signature_start_line`·`signature`·`annotations` 명시 기입(②). 데코레이터 항목은 `signature_start_line` 이 **데코레이터 라인**(예: `Service.load` 13→12, `decorated` 21→20)으로 정확히 박혔다 — D-057 계보 갭 해소가 픽스처 계약으로 고정됨.
+- `generate-change-evidence.py`: `language_coverage()` 를 **미지정(무음)** / **지정-부재(`errors`+메시지)** 두 분기로 분리, `build_evidence()` 에서 `errors` 시 `verdict,exit_code = "blocked",BLOCKED`, `reasons` 에 `+ lang_coverage["errors"]` 결합. 반환 dict 전 분기에 `errors` 키를 넣어 KeyError 없음 확인.
+- 킷: 게이트 2종·IR 스키마·정책·`requirements.txt` 동봉, manifest `0.3.0-mvp3-j0`·18종·`language_j0` 그룹 신설, README 16→18종·설치 안내, `sync-from-dev.sh` 에 schema/requirements 복사 2줄.
+
+### 적대적 검증 (직접 실행)
+- **R-1 rig-and-revert**(치환 count==1 assert·원복 후 `git diff` clean): `extract-python-inventory.py` 결과에 유령 항목(`PHANTOM_GHOST`, line 999) 주입 → **FAIL `python-inventory` 101/102**. A-0026 시점엔 동일 rig 가 **101/101 무음 통과**였다 ⇒ 가드 부활 실증.
+- **R-2 RIG-2**: fail-closed 2줄 제거 → `evidence-language-policy-missing` **단독 FAIL(101/102)**, 원복 clean ⇒ 신규 가드 load-bearing.
+- **dev↔kit md5 전수**: 게이트 18종 **전부 동일**(Codex 는 "핵심 7쌍" 만 주장 — 실측이 더 좋음). 비-py 산출물(`language-ir.schema.yaml`·`README.md`)도 양쪽 존재.
+- **킷 E2E fresh repo 3원 대조**(픽스처 밖·무해 Python-only 변경·`change_intent:` 중첩 정상 선언): `main` **exit 0** / 보정 전 `65e1164` **exit 0** / **보정 후 exit 1 BLOCKED** ⇒ **R-4 판정 회귀 확정**.
+  - `--policies <kit>/policies` 명시해도 **exit 1**(language-routing 이 `--policies` 를 참조하지 않음).
+  - 대상 repo 안에 `policies/*.yaml` 복사 후엔 **exit 0** ⇒ 상대경로 해소 여부가 유일 변수임을 확정.
+- **전 스위트 무회귀 확인**: dev 102/102 · mutation PASS · `kit/selftest.sh --quick` PASS · 진입점 13/13. **그럼에도 R-4 를 못 잡는다** — fixture 가 킷 정책 전량을 대상 repo 로 복사하기 때문(미측정≠무발견).
+
+### 내가 짠다면
+run.sh 가 형제 정책 4종은 `$POL/...` 절대경로로 넘기면서 language-routing 만 argparse **상대경로 기본값**에 맡긴 게 근본 비대칭이다. 나라면 ① 정책 경로를 전부 한 배열로 모아 preflight·전달을 **동일 루프**로 처리해 "정책 하나 추가 시 배선 누락" 자체를 구조적으로 불가능하게 만들고, ② 게이트 기본값은 `None` 으로 두어 "미지정" 과 "부재" 의 의미 구분을 게이트가 아니라 **러너가** 책임지게 한다. 이번 R-4 는 정확히 이 두 안전장치가 없어서 생겼다.
+
+### 하류 영향
+- R-1 복구로 공통 IR 계약의 회귀 그물이 살아났다 → **TASK-030(J1) Java 추출기가 IR 을 채울 때 계약 위반이 잡힌다**(A-0026 이 J1 전 필수라 했던 조건 충족).
+- R-3 복구로 dev↔kit 동일성 불변식이 다시 성립 → 차기 sync 의 기준선 회복.
+- **R-4 는 J1 보다 먼저 닫아야 한다** — 남긴 채 머지하면 킷 사용자 전원이 첫 실행부터 상시 🔴 를 겪고, 그 시점엔 "BLOCKED = 진짜 위험" 이라는 카드의 의미 자체가 소모된다.
+
+### 비차단 관찰
+O-A·O-B·O-C·O-D 는 A-0026 판단 유지(TASK-030 AC·TASK-031 AC#7 이월). **O-E(신규)**: `not_checked` 에 오류 문구 혼입 — 흔적 요구 충족·무해하나 `coverage_statement.errors` 별도 키가 의미상 정확 → 차기 카드 스키마 작업 시 검토.
