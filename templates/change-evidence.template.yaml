@@ -24,19 +24,19 @@ change_evidence:
   changed_files:
     - path: backend/app/api/admin/search.py
       zone_level: free                # free / watched / protected / frozen
-      in_allowed_paths: true          # change-intent 범위 안인가
+      in_allowed_paths: true          # change-intent 범위 안인가. 미선언 시 true 금지(현재 카드는 changed_files=[]).
   changed_functions: []
 
   # ── 1층 결정적 판정 결과 ──
   intent_check:
-    status: pass                      # pass / fail
+    status: pass                      # pass / fail / not_declared (미선언은 approval_required)
     out_of_scope_paths: []            # allowed 밖을 건드린 경로
     forbidden_touched: []             # forbidden_paths 를 건드린 경로
     expected_paths: []                # 반드시 변경돼야 할 경로 선언(각 항목별 1개 이상 매칭)
     missing_expected: []              # 변경 파일에 매칭되지 않은 expected_paths
     expected_paths_semantics: each pattern is satisfied by at least one changed file; literal paths are recommended because globs are coarse; renames use the destination path and deletes count as a path change
   sensitive_zone_check:
-    status: pass                      # pass / blocked / approval_required
+    status: pass                      # pass / blocked / approval_required / not_checked
     frozen_touched: []                # 🔴 차단 사유
     protected_touched: []             # 🟠 승인요구
     watched_touched: []               # 🟡 경고
@@ -58,6 +58,7 @@ change_evidence:
       - gate: check-function-gov-level
         checked: changed Python functions against @gov annotations
     not_checked:
+      # change-intent 미선언 시 아래 항목에 intent_not_declared 토큰과 의도이탈 미검사 사실을 추가한다.
       - runtime execution paths
       - unregistered sensitive business logic
       - cross-commit cumulative risk

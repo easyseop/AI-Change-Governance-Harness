@@ -237,17 +237,114 @@ cases:
     gate: generate-change-evidence
     input:
       name_status: tests/fixtures/good/name-status.txt
+      numstat: tests/fixtures/good/numstat.txt
+      change_intent: tests/fixtures/evidence-error/missing-change-intent.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      files_changed: 1
+      lines_added: 3
+      lines_removed: 1
+      changed_files:
+        - path: app/features/search.py
+          zone_level: free
+          in_allowed_paths: null
+      changed_functions: []
+      intent_status: not_declared
+      reasons_contain:
+        - intent_not_declared
+      coverage_checked_gates:
+        - check-sensitive-zones
+      coverage_not_checked:
+        - "change intent path scope (intent_not_declared: no declaration; scope was not checked)"
+        - runtime execution paths
+        - unregistered sensitive business logic
+        - cross-commit cumulative risk
+        - non-Python semantic analysis
+        - complete dynamic obfuscation recovery
+      verdict_statement: governance review required
+      schema_keys_match_template: true
+
+  - name: evidence-error-missing-intent-frozen-zone
+    gate: generate-change-evidence
+    input:
+      name_status: tests/fixtures/frozen/name-status.txt
+      numstat: tests/fixtures/frozen/numstat.txt
       change_intent: tests/fixtures/evidence-error/missing-change-intent.yaml
     expect:
       verdict: blocked
       exit_code: 1
-      files_changed: 0
-      lines_added: 0
-      lines_removed: 0
-      changed_files: []
+      files_changed: 1
+      lines_added: 2
+      lines_removed: 1
+      changed_files:
+        - path: services/settlement/calculate.py
+          zone_level: frozen
+          in_allowed_paths: null
       changed_functions: []
-      coverage_checked_gates: []
+      intent_status: not_declared
+      frozen_touched:
+        - services/settlement/calculate.py
+      reasons_contain:
+        - intent_not_declared
+        - frozen:services/settlement/calculate.py
+      coverage_checked_gates:
+        - check-sensitive-zones
       coverage_not_checked:
+        - "change intent path scope (intent_not_declared: no declaration; scope was not checked)"
+        - runtime execution paths
+        - unregistered sensitive business logic
+        - cross-commit cumulative risk
+        - non-Python semantic analysis
+        - complete dynamic obfuscation recovery
+      verdict_statement: governance violation detected
+      schema_keys_match_template: true
+
+  - name: evidence-error-missing-intent-function-frozen
+    gate: generate-change-evidence
+    input:
+      fixture_dir: tests/fixtures/function-gov-level/frozen-removal
+      change_intent: tests/fixtures/evidence-error/missing-change-intent.yaml
+    expect:
+      verdict: blocked
+      exit_code: 1
+      files_changed: 1
+      lines_added: 1
+      lines_removed: 2
+      changed_files:
+        - path: app/service.py
+          zone_level: free
+          in_allowed_paths: null
+      changed_functions:
+        - path: app/service.py
+          name: <module>
+          before_line: null
+          after_line: null
+          source: map
+        - path: app/service.py
+          name: ledger_write
+          before_line: null
+          after_line: 7
+          source: map
+        - path: app/service.py
+          name: ledger_write
+          before_line: 7
+          after_line: 7
+          source: classify_added
+        - path: app/service.py
+          name: ledger_write
+          before_line: 8
+          after_line: 8
+          source: classify_deleted
+      intent_status: not_declared
+      reasons_contain:
+        - intent_not_declared
+        - function_frozen:app/service.py::ledger_write:base
+      coverage_checked_gates:
+        - check-sensitive-zones
+        - check-function-gov-level
+      coverage_not_checked:
+        - "change intent path scope (intent_not_declared: no declaration; scope was not checked)"
         - runtime execution paths
         - unregistered sensitive business logic
         - cross-commit cumulative risk

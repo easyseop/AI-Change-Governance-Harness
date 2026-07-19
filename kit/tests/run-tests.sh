@@ -392,6 +392,13 @@ def validate_evidence(case, result, exit_code):
                 evidence.get("intent_check", {}).get(key),
                 expect[key],
             )
+    if "intent_status" in expect:
+        assert_equal(
+            errors,
+            "intent_check.status",
+            evidence.get("intent_check", {}).get("status"),
+            expect["intent_status"],
+        )
     if "changed_functions" in expect:
         actual = [
             {
@@ -404,6 +411,14 @@ def validate_evidence(case, result, exit_code):
             for item in evidence.get("changed_functions", [])
         ]
         assert_equal(errors, "changed_functions", actual, expect["changed_functions"])
+    for key in ("frozen_touched", "protected_touched", "watched_touched"):
+        if key in expect:
+            check_path_records(
+                errors,
+                f"sensitive_zone_check.{key}",
+                evidence.get("sensitive_zone_check", {}).get(key, []),
+                expect[key],
+            )
     if "reasons_contain" in expect:
         reasons = evidence.get("reasons", [])
         for expected_reason in expect["reasons_contain"]:
