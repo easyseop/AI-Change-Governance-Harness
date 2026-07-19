@@ -407,6 +407,7 @@
 5. 라우터·coverage 확장이 **기존 카드 스키마와 정합**(임의 키 금지 — 필요 시 `templates/change-evidence.template.yaml` 동시 개정). generate-change-evidence 카드에 coverage 언어 항목 반영.
 6. **🔴 parity 기반장치**(설계 §1.5·§3.3): (a) **`tests/parity/` 그룹 신설** — 교차언어 등가 픽스처 러너 훅(J2·J3 가 케이스를 채움·같은 위험 클래스 py판+java판 동일 verdict 단언). (b) tree-sitter **문법 버전 고정(pin)** + 카드에 **언어별 파서/문법 버전 기록**(재현성 계약·Python parser 버전 계보). 라우터가 언어별 파서 버전을 coverage 에 노출.
 **산출**: 라우터·IR 문서·정책(Codex 저자) + 픽스처 + tree-sitter 도입. **비고**: Python `ast` 무개조가 최우선. Java 파싱 없음(J1).
+**진행**: 2026-07-19 1차 제출(`d1dbdca`) 리뷰 → **보정요청 R-1/R-2/R-3** · 코드 머지 보류 (D-069). 제출 주장 전부 재현(101/101 · tree-sitter 4문법 실로드 · pin=실설치본 · `ast` 무개조 · frozen `.java` fresh 실증 exit 1 + coverage 병기 · RIG-1 단독 FAIL). **R-1** `validate_inventory` 전체비교→부분비교 전환이 **가드를 죽임**(유령 아이템 rig: main FAIL 97/98 vs 브랜치 101/101 무음). **R-2** `language-routing.yaml` **부재 시 무음**으로 언어 coverage 전멸(형제 정책은 fail-closed) · 픽스처 0건. **R-3** 킷 무접촉 = AC#4 미충족 · dev↔kit md5 동일성 최초 균열((a) sync 또는 (b) "dev 전용" 명시 택1). 비차단 이월: **O-A** 카드에 파서/문법 버전 0건(AC#6b 부분) → **TASK-030 AC 로**, **O-B** `tests/parity/` 러너 훅 부재(AC#6a 부분) → **TASK-031 AC#7 전제로**, O-C `not_checked` dedup, O-D 스모크 환경의존. 상세 `collab/answers/A-0026.md`·D-069·`review-notes.md`.
 
 ### TASK-030 ☐ Java 함수/메서드 인벤토리 추출기 (tree-sitter → 공통 IR)  (Codex)  *(MVP-3 · J1)*
 **목적**: `.java` 를 tree-sitter 로 파싱해 class/method/constructor 인벤토리를 **공통 IR #1** 로. Python 인벤토리와 동일 스키마 → `map-diff-to-functions` 헝크↔메서드 교집합·classify 재사용.

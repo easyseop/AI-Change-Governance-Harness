@@ -1683,3 +1683,28 @@ scope-creep·over-reach 없음. D-067 의 over-reach(판정 완화)가 제거되
 
 ### 판정
 **통과 · 비민감 → Claude `main` 머지**(D-007). 비차단 O-F(킷 러너 게이트 경로 — 선재)·O-G(분석실패 blocked — 선재·과탐 안전). 다음 = MVP-3.
+
+---
+
+## TASK-029 — 다국어 어댑터 seam / J0 (D-069 · 2026-07-19) · **보정요청**
+
+**대상**: `codex/2026-07-19-task029-language-router` `d1dbdca`·`65e1164`
+
+### 재현한 것 (제출 주장 = 사실)
+- `tests/run-tests.sh` **101/101 PASS**(adversarial 7 · default 88 · metamorphic 3 · negative-corpus 3)
+- tree-sitter java/javascript/typescript/tsx **실제 로드·파싱**, pin(`0.26.0`/`0.23.5`/`0.25.0`/`0.23.2`)이 **실설치본과 일치**. 의존 부재 시 exit 2 → 케이스 FAIL = **vacuous PASS 아님**
+- `extract-python-inventory.py` **로직 무개조**(필드 3종 추가만) — MVP-3 최우선 제약 준수
+- 라우팅 결정적·`sorted`·확장자 `lower()`; 확장자 없는 파일/`.gitignore`/`foo.tar.gz` → unsupported(안전방향), `foo.d.ts` → typescript(정상)
+- **fresh 적대 입력**: `services/settlement/Calculator.java`(frozen) → **exit 1 BLOCKED** + `zone_level: frozen` + 사유 + 언어 coverage 문구 **동시 노출** = AC#3 충족
+- **RIG-1**(카드 `+ lang_coverage["not_checked"]` 제거) → `evidence-language-coverage` **단독 FAIL 100/101**, 원복 `git diff` clean = 신규 가드 load-bearing
+
+### 차단 3건
+- **R-1** `validate_inventory` 부분비교 전환 = **가드 약화 회귀**. 유령 아이템 rig: **main FAIL(97/98) vs 브랜치 101/101 무음**. 인벤토리는 function-gov 입력 → §2B 예.
+- **R-2** `language-routing.yaml` **부재 시 무음**으로 언어 coverage 전멸(exit 0). 형제 정책(`sensitive-zones`)은 부재 시 exit 1 fail-closed — **부재 경로만 관대**. 카드 위조는 아님(일반 문구 잔존)이나 픽스처 0건 = 미측정.
+- **R-3** 킷 무접촉 — 신규 게이트·정책·`requirements.txt` 부재, **dev↔kit md5 동일성 최초 균열**. 판정 회귀는 없음. **(a) sync 또는 (b) "dev 전용" 명시** 택1.
+
+### 이월(비차단)
+O-A 카드에 파서/문법 버전 0건(AC#6b 부분) → TASK-030 AC · O-B `tests/parity/` 러너 훅 부재(AC#6a 부분) → TASK-031 AC 전제 · O-C `not_checked` dedup 로 파일 수 비가시 · O-D tree-sitter 스모크 환경 의존.
+
+### 잘한 점
+`signature_start_line` 이 데코레이터 최소 라인을 포함 → **D-057 데코레이터-라인범위 갭 선제 해소**. seam 분리 방향·정책 외부화(하드코딩 금지) 정확.
