@@ -93,10 +93,12 @@ with open(sys.argv[1], encoding="utf-8") as stream:
 coverage = evidence.get("coverage_statement", {})
 reasons = evidence.get("reasons", [])
 changed_files = evidence.get("changed_files", [])
+checked_gates = [item.get("gate") for item in coverage.get("checked", [])]
 valid = (
     evidence.get("verdict") == "approval_required"
     and evidence.get("intent_check", {}).get("status") == "not_declared"
-    and coverage.get("checked") == []
+    and "check-change-intent" not in checked_gates
+    and "check-sensitive-zones" in checked_gates
     and any("intent_not_declared" in item for item in coverage.get("not_checked", []))
     and any(reason.startswith("intent_not_declared:") for reason in reasons)
     and not any(item.get("in_allowed_paths") is True for item in changed_files)

@@ -329,6 +329,17 @@ def intent_result(files, intent):
     }
 
 
+def not_declared_intent_result(intent_check):
+    return {
+        **intent_check,
+        "status": "not_declared",
+        "out_of_scope_paths": [],
+        "forbidden_touched": [],
+        "expected_paths": [],
+        "missing_expected": [],
+    }
+
+
 def sensitive_result(files, policy):
     frozen_touched = []
     protected_touched = []
@@ -412,6 +423,8 @@ def reviewers_for_files(files, routing_policy):
 
 def build_reasons(intent_check, sensitive_check):
     reasons = []
+    if intent_check.get("status") == "not_declared":
+        reasons.append("intent_not_declared:change-intent.yaml file was not found")
     for path in intent_check["forbidden_touched"]:
         reasons.append(f"forbidden_path:{path}")
     for item in sensitive_check["frozen_touched"]:
@@ -452,6 +465,13 @@ def executed_gate_records(diff_input):
     return records
 
 
+def evidence_checked_records(diff_input, intent_declared):
+    records = executed_gate_records(diff_input)
+    if intent_declared:
+        return records
+    return [record for record in records if record["gate"] != "check-change-intent"]
+
+
 def verdict_statement(verdict):
     if verdict == "pass":
         return "no governance violation detected"
@@ -465,56 +485,6 @@ def coverage_statement(diff_input, verdict, checked=None):
         "verdict_statement": verdict_statement(verdict),
         "checked": executed_gate_records(diff_input) if checked is None else checked,
         "not_checked": NOT_CHECKED_STATEMENTS,
-    }
-
-
-def intent_not_declared_evidence(args, error):
-    verdict = "approval_required"
-    return {
-        "change_evidence": {
-            "requirement_id": None,
-            "author": None,
-            "generated_on": args.generated_on or "1970-01-01",
-            "base_commit": "unknown",
-            "tool_version": TOOL_VERSION,
-            "python_version": sys.version.split()[0],
-            "policy_sha": {},
-            "summary": {
-                "files_changed": 0,
-                "lines_added": 0,
-                "lines_removed": 0,
-            },
-            "changed_files": [],
-            "changed_functions": [],
-            "intent_check": {
-                "status": "not_declared",
-                "out_of_scope_paths": [],
-                "forbidden_touched": [],
-                "expected_paths": [],
-                "missing_expected": [],
-                "expected_paths_semantics": (
-                    "each pattern is satisfied by at least one changed file; literal paths are recommended "
-                    "because globs are coarse; renames use the destination path and deletes count only as a path change"
-                ),
-            },
-            "sensitive_zone_check": {
-                "status": "not_checked",
-                "frozen_touched": [],
-                "protected_touched": [],
-                "watched_touched": [],
-            },
-            "blast_radius": {
-                "shared_modules_changed": [],
-                "importers_count": None,
-            },
-            "verdict": verdict,
-            "coverage_statement": {
-                **coverage_statement(args.diff_input, verdict, checked=[]),
-                "not_checked": [INTENT_NOT_DECLARED_STATEMENT] + NOT_CHECKED_STATEMENTS,
-            },
-            "reasons": [f"intent_not_declared:{error}"],
-            "reviewer_required": [],
-        }
     }
 
 
@@ -572,7 +542,8 @@ def verdict_and_exit(intent_check, sensitive_check):
     if intent_check["forbidden_touched"] or sensitive_check["frozen_touched"]:
         return "blocked", BLOCKED
     if (
-        intent_check["out_of_scope_paths"]
+        intent_check.get("status") == "not_declared"
+        or intent_check["out_of_scope_paths"]
         or intent_check["missing_expected"]
         or sensitive_check["protected_touched"]
     ):
@@ -581,7 +552,18 @@ def verdict_and_exit(intent_check, sensitive_check):
 
 
 def build_evidence(args):
-    intent = load_intent(args.change_intent)
+    intent_declared = True
+    try:
+        intent = load_intent(args.change_intent)
+    except IntentNotDeclaredError:
+        intent_declared = False
+        intent = {
+            "requirement_id": None,
+            "author": None,
+            "allowed_paths": [],
+            "forbidden_paths": [],
+            "expected_paths": [],
+        }
     sensitive_policy = load_sensitive_policy(args.sensitive_zones)
     routing_policy = load_routing_policy(args.approval_routing)
 
@@ -597,6 +579,8 @@ def build_evidence(args):
     files = parse_changed_files(name_status_lines)
     numstat = parse_numstat(numstat_lines)
     intent_check = intent_result(files, intent)
+    if not intent_declared:
+        intent_check = not_declared_intent_result(intent_check)
     sensitive_check = sensitive_result(files, sensitive_policy)
     function_gov = build_function_gov_result(args.diff_input, args.sensitive_zones, args.repo)
     verdict, exit_code = combine_verdicts(intent_check, sensitive_check, function_gov)
@@ -609,8 +593,10 @@ def build_evidence(args):
                 "zone_level": sensitive_check["zone_level_by_path"].get(
                     path, sensitive_policy["unlisted_level"]
                 ),
-                "in_allowed_paths": any(
-                    match_glob(path, pattern) for pattern in intent["allowed_paths"]
+                "in_allowed_paths": (
+                    any(match_glob(path, pattern) for pattern in intent["allowed_paths"])
+                    if intent_declared
+                    else None
                 ),
             }
         )
@@ -646,7 +632,18 @@ def build_evidence(args):
                 "importers_count": None,
             },
             "verdict": verdict,
-            "coverage_statement": coverage_statement(args.diff_input, verdict),
+            "coverage_statement": {
+                **coverage_statement(
+                    args.diff_input,
+                    verdict,
+                    checked=evidence_checked_records(args.diff_input, intent_declared),
+                ),
+                "not_checked": (
+                    [INTENT_NOT_DECLARED_STATEMENT] + NOT_CHECKED_STATEMENTS
+                    if not intent_declared
+                    else NOT_CHECKED_STATEMENTS
+                ),
+            },
             "reasons": build_reasons(intent_check, sensitive_check) + function_gov["reasons"],
             "reviewer_required": reviewers_for_files(files, routing_policy),
         }
@@ -688,9 +685,6 @@ def main():
 
     try:
         evidence, exit_code = build_evidence(args)
-    except IntentNotDeclaredError as error:
-        evidence = intent_not_declared_evidence(args, error)
-        exit_code = APPROVAL_REQUIRED
     except Exception as error:
         evidence = {
             "change_evidence": {
