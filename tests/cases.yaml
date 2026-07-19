@@ -1,4 +1,96 @@
 cases:
+  - name: language-router-coverage
+    gate: language-router
+    input:
+      name_status: tests/fixtures/language-routing/name-status.txt
+      language_routing: policies/language-routing.yaml
+    expect:
+      verdict: pass
+      exit_code: 0
+      changed_files:
+        - app/AccountService.java
+        - app/service.py
+        - cmd/server.go
+        - web/app.tsx
+      coverage_counts:
+        supported: 1
+        stubbed: 2
+        unsupported: 1
+      file_routes:
+        - path: app/AccountService.java
+          adapter: java
+          status: stub
+          deep_analysis: not_yet_available
+        - path: app/service.py
+          adapter: python
+          status: supported
+          deep_analysis: available
+        - path: cmd/server.go
+          adapter: unsupported
+          status: unsupported
+          deep_analysis: not_available
+        - path: web/app.tsx
+          adapter: typescript
+          status: stub
+          deep_analysis: not_yet_available
+      deterministic_stdout: true
+
+  - name: tree-sitter-smoke
+    gate: check-tree-sitter-languages
+    expect:
+      verdict: pass
+      exit_code: 0
+      languages:
+        - java
+        - javascript
+        - typescript
+        - tsx
+      has_error:
+        - false
+        - false
+        - false
+        - false
+      versions:
+        tree-sitter: 0.26.0
+        tree-sitter-java: 0.23.5
+        tree-sitter-javascript: 0.25.0
+        tree-sitter-typescript: 0.23.2
+      deterministic_stdout: true
+
+  - name: evidence-language-coverage
+    gate: generate-change-evidence
+    input:
+      name_status: tests/fixtures/evidence-language-coverage/name-status.txt
+      numstat: tests/fixtures/evidence-language-coverage/numstat.txt
+      change_intent: tests/fixtures/evidence-language-coverage/change-intent.yaml
+      language_routing: policies/language-routing.yaml
+    expect:
+      verdict: pass
+      exit_code: 0
+      files_changed: 2
+      lines_added: 3
+      lines_removed: 1
+      changed_files:
+        - path: app/AccountService.java
+          zone_level: free
+          in_allowed_paths: true
+        - path: cmd/server.go
+          zone_level: free
+          in_allowed_paths: true
+      coverage_checked_gates:
+        - check-change-intent
+        - check-sensitive-zones
+      coverage_not_checked:
+        - runtime execution paths
+        - unregistered sensitive business logic
+        - cross-commit cumulative risk
+        - non-Python semantic analysis
+        - complete dynamic obfuscation recovery
+        - deep semantic analysis not yet implemented for .java (java adapter stub)
+        - deep semantic analysis unsupported for .go
+      verdict_statement: no governance violation detected
+      schema_keys_match_template: true
+
   - name: expected-present
     gate: check-change-intent
     input:
@@ -534,7 +626,9 @@ cases:
       source_file: tests/fixtures/python-inventory/valid.py
     expect:
       exit_code: 0
+      lang: python
       parse_error: null
+      common_ir_fields: true
       items:
         - type: function
           name: decorator

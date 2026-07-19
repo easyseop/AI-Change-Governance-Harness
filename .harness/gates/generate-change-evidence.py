@@ -50,6 +50,7 @@ def load_gate_module(filename, module_name):
 function_gov_gate = load_gate_module(
     "check-function-gov-level.py", "check_function_gov_level_gate"
 )
+language_router_gate = load_gate_module("language-router.py", "language_router_gate")
 
 
 def normalize_path(path):
@@ -181,6 +182,30 @@ def policy_sha(paths):
     return {
         Path(path).name: file_sha256(path)
         for path in sorted(paths, key=lambda item: str(item))
+    }
+
+
+def language_coverage(diff_input, language_routing, repo):
+    if not language_routing or not os.path.exists(language_routing):
+        return {
+            "checked": [],
+            "not_checked": [],
+            "policy_path": None,
+        }
+    result = language_router_gate.build_result(diff_input, language_routing, repo)
+    not_checked = []
+    for item in result.get("coverage", {}).get("stubbed", []):
+        not_checked.append(
+            f"deep semantic analysis not yet implemented for {item['extension']} ({item['adapter']} adapter stub)"
+        )
+    for item in result.get("coverage", {}).get("unsupported", []):
+        not_checked.append(
+            f"deep semantic analysis unsupported for {item['extension'] or '<none>'}"
+        )
+    return {
+        "checked": [],
+        "not_checked": sorted(set(not_checked)),
+        "policy_path": language_routing,
     }
 
 
@@ -578,6 +603,7 @@ def build_evidence(args):
 
     files = parse_changed_files(name_status_lines)
     numstat = parse_numstat(numstat_lines)
+    lang_coverage = language_coverage(args.diff_input, args.language_routing, args.repo)
     intent_check = intent_result(files, intent)
     if not intent_declared:
         intent_check = not_declared_intent_result(intent_check)
@@ -615,7 +641,17 @@ def build_evidence(args):
             "base_commit": resolve_base_commit(args.diff_input, args.repo),
             "tool_version": TOOL_VERSION,
             "python_version": sys.version.split()[0],
-            "policy_sha": policy_sha([args.sensitive_zones, args.approval_routing]),
+            "policy_sha": policy_sha(
+                [
+                    path
+                    for path in (
+                        args.sensitive_zones,
+                        args.approval_routing,
+                        lang_coverage.get("policy_path"),
+                    )
+                    if path
+                ]
+            ),
             "summary": summary,
             "changed_files": changed_files,
             "changed_functions": function_gov["changed_functions"],
@@ -636,13 +672,17 @@ def build_evidence(args):
                 **coverage_statement(
                     args.diff_input,
                     verdict,
-                    checked=evidence_checked_records(args.diff_input, intent_declared),
+                    checked=(
+                        evidence_checked_records(args.diff_input, intent_declared)
+                        + lang_coverage["checked"]
+                    ),
                 ),
                 "not_checked": (
                     [INTENT_NOT_DECLARED_STATEMENT] + NOT_CHECKED_STATEMENTS
                     if not intent_declared
                     else NOT_CHECKED_STATEMENTS
-                ),
+                )
+                + lang_coverage["not_checked"],
             },
             "reasons": build_reasons(intent_check, sensitive_check) + function_gov["reasons"],
             "reviewer_required": reviewers_for_files(files, routing_policy),
@@ -670,6 +710,11 @@ def main():
         "--approval-routing",
         default="policies/approval-routing.yaml",
         help="policies/approval-routing.yaml path",
+    )
+    parser.add_argument(
+        "--language-routing",
+        default="policies/language-routing.yaml",
+        help="policies/language-routing.yaml path",
     )
     parser.add_argument(
         "--numstat-input",

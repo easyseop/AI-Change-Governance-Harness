@@ -40,6 +40,7 @@ PROJECT.md · TASKS.md · CLAUDE.md · AGENTS.md
 
 ## 실행 방법 (MVP-0)
 ```bash
+python3 -m pip install -r requirements.txt
 python3 .harness/gates/check-change-intent.py <base>..<head> change-intent.yaml
 python3 .harness/gates/check-sensitive-zones.py <base>..<head> policies/sensitive-zones.yaml
 python3 .harness/gates/generate-change-evidence.py <base>..<head> --change-intent change-intent.yaml
@@ -56,6 +57,8 @@ python3 .harness/gates/bootstrap-sensitive-functions.py path/to/repo policies/se
 python3 .harness/gates/extract-sinks.py path/to/repo --json
 python3 .harness/gates/extract-callgraph.py path/to/repo --json
 python3 .harness/gates/check-indirect-impact.py <base>..<head> --json
+python3 .harness/gates/language-router.py <base>..<head> --json
+python3 .harness/gates/check-tree-sitter-languages.py --json
 bash tests/run-tests.sh
 bash tests/mutation-check.sh
 ```

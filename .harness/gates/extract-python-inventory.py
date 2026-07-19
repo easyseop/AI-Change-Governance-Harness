@@ -29,12 +29,18 @@ def node_type(node):
 
 
 def inventory_item(node, name):
+    decorators = [decorator_name(decorator) for decorator in node.decorator_list]
     return {
         "type": node_type(node),
         "name": name,
         "start_line": node.lineno,
         "end_line": getattr(node, "end_lineno", node.lineno),
-        "decorators": [decorator_name(decorator) for decorator in node.decorator_list],
+        "signature_start_line": (
+            min([decorator.lineno for decorator in node.decorator_list] + [node.lineno])
+        ),
+        "signature": name,
+        "decorators": decorators,
+        "annotations": decorators,
     }
 
 
@@ -71,6 +77,7 @@ def extract_inventory(source, source_path):
     except SyntaxError as error:
         return {
             "source": source_path,
+            "lang": "python",
             "items": [],
             "parse_error": f"{error.msg} at line {error.lineno}, column {error.offset}",
         }
@@ -79,6 +86,7 @@ def extract_inventory(source, source_path):
     visitor.visit(tree)
     return {
         "source": source_path,
+        "lang": "python",
         "items": visitor.items,
         "parse_error": None,
     }
