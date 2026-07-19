@@ -128,6 +128,22 @@ run_no_intent_case(){
   fi
 }
 
+run_language_policy_case(){
+  local name="$1" runner="$2" repo="$3" card="$4"
+  local output rc
+  TOTAL=$((TOTAL + 1))
+  output="$(ACGH_GATE_TIMEOUT_SECONDS=1 bash "$runner" HEAD~1..HEAD --repo "$repo" --policies "$KIT/policies" --output "$card" 2>&1)"; rc=$?
+  if [ "$rc" = 0 ] &&
+     printf '%s\n' "$output" | grep -q 'PASS' &&
+     grep -q 'deep semantic analysis not yet implemented for .java' "$card"; then
+    echo "PASS $name"; PASS=$((PASS + 1))
+  else
+    echo "FAIL $name (exit=$rc expected=0, missing kit language routing coverage)"
+    printf '%s\n' "$output" | tail -16 | sed 's/^/  /'
+    [ -f "$card" ] && tail -30 "$card" | sed 's/^/  card: /'
+  fi
+}
+
 # 실제 차단이 승인요구보다 강하게 조립되는지 + 대상 repo 정책 override.
 repo="$WORK/frozen"; make_repo "$repo"
 cat >"$repo/policies/sensitive-zones.yaml" <<'YAML'
@@ -152,6 +168,17 @@ repo="$WORK/capability"; make_repo "$repo"
 printf 'import subprocess\n\ndef run():\n    return subprocess.run(["true"])\n' >"$repo/app/service.py"
 git -C "$repo" add . && git -C "$repo" commit -qm capability
 run_case new-capability 2 'APPROVAL_REQUIRED' "$KIT/run.sh" "$repo"
+
+# 대상 repo 에 policies/ 가 없어도 킷 동봉 정책을 절대경로로 배선해야 한다.
+repo="$WORK/language-policy-kit-default"; make_repo "$repo"
+rm -rf "$repo/.git" "$repo/policies"
+git -C "$repo" init -q
+git -C "$repo" config user.email kit-test@example.invalid
+git -C "$repo" config user.name kit-test
+git -C "$repo" add app change-intent.yaml && git -C "$repo" commit -qm base-without-target-policies
+printf 'class AccountService {}\n' >"$repo/app/AccountService.java"
+git -C "$repo" add -A && git -C "$repo" commit -qm language-policy-kit-default
+run_language_policy_case language-routing-kit-policy-default "$KIT/run.sh" "$repo" "$WORK/language-policy-card.yaml"
 
 # 선언한 필수 변경 파일이 diff 에 없으면 부재 탐지가 승인요구하고 카드에 증거를 남긴다.
 repo="$WORK/expected-missing"; make_repo "$repo"

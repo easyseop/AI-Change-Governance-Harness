@@ -162,7 +162,7 @@ def main():
     parser.add_argument("diff_input", help="git diff ref (base..head) or name-status file")
     parser.add_argument(
         "--language-routing",
-        default="policies/language-routing.yaml",
+        default=None,
         help="language routing policy",
     )
     parser.add_argument("--repo", default=".", help="git repository to inspect")

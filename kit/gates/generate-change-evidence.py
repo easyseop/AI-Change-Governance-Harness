@@ -729,7 +729,7 @@ def main():
     )
     parser.add_argument(
         "--language-routing",
-        default="policies/language-routing.yaml",
+        default=None,
         help="policies/language-routing.yaml path",
     )
     parser.add_argument(
