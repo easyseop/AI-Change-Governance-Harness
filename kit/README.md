@@ -76,6 +76,12 @@ Tree-sitter 기반 스모크를 배포지에서 재현하려면 `python3 -m pip 
 ./sync-from-dev.sh
 ```
 
+`--policies` override 디렉터리는 아래 5개 파일을 모두 포함해야 한다:
+`sensitive-zones.yaml`, `sensitive-capabilities.yaml`, `approval-routing.yaml`,
+`sink-registry.yaml`, `language-routing.yaml`.
+기존 도입처가 킷을 업그레이드할 때는 킷 동봉 `policies/language-routing.yaml` 을
+override 디렉터리에 복사한 뒤 실행한다.
+
 **대상 repo 에 `change-intent.yaml` 이 없으면** 의도층이 fail-closed(=차단)된다 —
 이는 설계상 의도(TASK-001: 의도 선언 강제). 킷은 `policies/change-intent.template.yaml`·
 `change-intent.example.yaml` 을 동봉한다.

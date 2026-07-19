@@ -144,6 +144,22 @@ run_language_policy_case(){
   fi
 }
 
+run_missing_language_policy_preflight_case(){
+  local name="$1" runner="$2" repo="$3" policies="$4" card="$5"
+  local output rc
+  TOTAL=$((TOTAL + 1))
+  output="$(ACGH_GATE_TIMEOUT_SECONDS=1 bash "$runner" HEAD~1..HEAD --repo "$repo" --policies "$policies" --output "$card" 2>&1)"; rc=$?
+  if [ "$rc" = 2 ] &&
+     printf '%s\n' "$output" | grep -q '필수 정책 파일 없음: .*language-routing.yaml' &&
+     { [ ! -f "$card" ] || ! grep -q 'verdict: blocked' "$card"; }; then
+    echo "PASS $name"; PASS=$((PASS + 1))
+  else
+    echo "FAIL $name (exit=$rc expected=2, expected missing language-routing preflight without blocked card)"
+    printf '%s\n' "$output" | tail -16 | sed 's/^/  /'
+    [ -f "$card" ] && tail -30 "$card" | sed 's/^/  card: /'
+  fi
+}
+
 # 실제 차단이 승인요구보다 강하게 조립되는지 + 대상 repo 정책 override.
 repo="$WORK/frozen"; make_repo "$repo"
 cat >"$repo/policies/sensitive-zones.yaml" <<'YAML'
@@ -179,6 +195,14 @@ git -C "$repo" add app change-intent.yaml && git -C "$repo" commit -qm base-with
 printf 'class AccountService {}\n' >"$repo/app/AccountService.java"
 git -C "$repo" add -A && git -C "$repo" commit -qm language-policy-kit-default
 run_language_policy_case language-routing-kit-policy-default "$KIT/run.sh" "$repo" "$WORK/language-policy-card.yaml"
+
+# 레거시 override 정책 디렉터리에 language-routing 이 없으면 차단 카드가 아니라 분석 실패로 닫아야 한다.
+repo="$WORK/language-policy-legacy-override"; make_repo "$repo"
+legacy_policies="$repo/policies"
+rm "$legacy_policies/language-routing.yaml"
+printf '\n# harmless legacy override change\n' >>"$repo/app/service.py"
+git -C "$repo" add app/service.py && git -C "$repo" commit -qm language-policy-legacy-override
+run_missing_language_policy_preflight_case language-routing-legacy-override-preflight "$KIT/run.sh" "$repo" "$legacy_policies" "$WORK/language-policy-legacy-card.yaml"
 
 # 선언한 필수 변경 파일이 diff 에 없으면 부재 탐지가 승인요구하고 카드에 증거를 남긴다.
 repo="$WORK/expected-missing"; make_repo "$repo"
