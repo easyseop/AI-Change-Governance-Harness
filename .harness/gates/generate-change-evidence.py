@@ -186,11 +186,20 @@ def policy_sha(paths):
 
 
 def language_coverage(diff_input, language_routing, repo):
-    if not language_routing or not os.path.exists(language_routing):
+    if not language_routing:
         return {
             "checked": [],
             "not_checked": [],
             "policy_path": None,
+            "errors": [],
+        }
+    if not os.path.exists(language_routing):
+        message = f"language routing policy missing: {language_routing}"
+        return {
+            "checked": [],
+            "not_checked": [message],
+            "policy_path": None,
+            "errors": [message],
         }
     result = language_router_gate.build_result(diff_input, language_routing, repo)
     not_checked = []
@@ -206,6 +215,7 @@ def language_coverage(diff_input, language_routing, repo):
         "checked": [],
         "not_checked": sorted(set(not_checked)),
         "policy_path": language_routing,
+        "errors": [],
     }
 
 
@@ -610,6 +620,8 @@ def build_evidence(args):
     sensitive_check = sensitive_result(files, sensitive_policy)
     function_gov = build_function_gov_result(args.diff_input, args.sensitive_zones, args.repo)
     verdict, exit_code = combine_verdicts(intent_check, sensitive_check, function_gov)
+    if lang_coverage["errors"]:
+        verdict, exit_code = "blocked", BLOCKED
 
     changed_files = []
     for path in files:
@@ -684,7 +696,11 @@ def build_evidence(args):
                 )
                 + lang_coverage["not_checked"],
             },
-            "reasons": build_reasons(intent_check, sensitive_check) + function_gov["reasons"],
+            "reasons": (
+                build_reasons(intent_check, sensitive_check)
+                + function_gov["reasons"]
+                + lang_coverage["errors"]
+            ),
             "reviewer_required": reviewers_for_files(files, routing_policy),
         }
     }

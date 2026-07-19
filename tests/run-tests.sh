@@ -496,11 +496,7 @@ def validate_inventory(case, result, exit_code):
         assert_equal(errors, "parse_error", result.get("parse_error"), expect["parse_error"])
 
     if "items" in expect:
-        actual_items = []
-        for index, expected_item in enumerate(expect["items"]):
-            actual = (result.get("items") or [])[index] if index < len(result.get("items") or []) else {}
-            actual_items.append({key: actual.get(key) for key in expected_item})
-        assert_equal(errors, "items", actual_items, expect["items"])
+        assert_equal(errors, "items", result.get("items"), expect["items"])
     if "lang" in expect:
         assert_equal(errors, "lang", result.get("lang"), expect["lang"])
     if expect.get("common_ir_fields"):

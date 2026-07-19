@@ -22,6 +22,7 @@ echo "▶ 동기화: dev=$DEV_ROOT → kit=$KIT_DIR"
 # 1) 게이트 전체 (16종 + gates/README) — co-located 필수
 rm -rf "$KIT_DIR/gates"; mkdir -p "$KIT_DIR/gates"
 cp "$DEV_ROOT"/.harness/gates/*.py "$KIT_DIR/gates/"
+[ -f "$DEV_ROOT/.harness/gates/language-ir.schema.yaml" ] && cp "$DEV_ROOT/.harness/gates/language-ir.schema.yaml" "$KIT_DIR/gates/"
 [ -f "$DEV_ROOT/.harness/gates/README.md" ] && cp "$DEV_ROOT/.harness/gates/README.md" "$KIT_DIR/gates/"
 
 # 2) 정책 (sensitive-zones·sensitive-capabilities·approval-routing·change-intent 템플릿류)
@@ -38,6 +39,9 @@ rm -f "$SINK_REGISTRY_SNAPSHOT"
 # 3) 감사카드 템플릿
 rm -rf "$KIT_DIR/templates"; mkdir -p "$KIT_DIR/templates"
 cp "$DEV_ROOT"/templates/*.yaml "$KIT_DIR/templates/"
+
+# 3b) Python dependency pins used by smoke/selftest environments.
+[ -f "$DEV_ROOT/requirements.txt" ] && cp "$DEV_ROOT/requirements.txt" "$KIT_DIR/requirements.txt"
 
 # 4) 테스트(자체검증 selftest.sh 용) — 러너·뮤테이션·케이스·픽스처
 ENTRYPOINT_TEST_SNAPSHOT="$(mktemp)"
