@@ -453,7 +453,12 @@
 4. **base..head 신규 도입만**(TASK-011 계보): 양쪽 있으면 미감지·head 만 신규·삭제 안전. never-blocked 불변식(approval 상한·exit 1 없음). fail-closed(head 파싱실패→per-path approval).
 5. 결정적 + `--json`. 정직성: 값추정 금지·동적 미탐 coverage 노출.
 6. **🔴 parity 픽스처**(설계 §1.5): Python 신규능력 대응(신규 위험능력 도입→approval · 양쪽 존재→미감지 · 삭제 안전)과 **동일 verdict** 를 내는 **Java 등가 픽스처를 `tests/parity/` 쌍**으로 + 음성검증(한쪽 기대 변조 시 parity FAIL).
-**의존**: TASK-031 통과 후.
+7. **🔴 frozen clamp 를 코드 하드 플로어로**(D-077 O-2 폐쇄 · 비차단으로 미루지 않음): 2층 never-blocked 불변식을 **정책 파일의 `allowed_levels` 만 읽어** 판단하지 마라 — 그러면 정책을 고쳐 불변식을 끌 수 있다. 게이트 **코드에 하드코딩된 상한**(능력 카탈로그발 판정은 `approval_required` 초과 불가)을 두고, 정책값은 *더 좁히는* 방향만 허용한다. 검증: 정책을 `level: frozen` + `allowed_levels: [frozen]` 로 **동시에 rig** → 여전히 검증오류 + `protected` clamp + verdict ≤ approval_required. 음성검증(하드 플로어 제거 시 단독 FAIL) 필수.
+8. **🔴 시험용 env override 게이팅**(D-078 O-1 폐쇄 · 비차단으로 미루지 않음): `ACGH_JAVA_INVENTORY_PATH` 계열 **임의 파이썬 파일 실행** 경로는 프로덕션 기본값에서 **비활성**이어야 한다 — 명시 시험 플래그(예: `ACGH_ALLOW_TEST_OVERRIDES=1`) 없이는 무시하고 그 사실을 coverage 에 남긴다. TASK-032 가 새로 env override 를 추가한다면 동일 규칙 적용. 검증: 플래그 없이 override 지정 → 무시 + 정상 판정 유지, 플래그 있으면 동작.
+9. **🔴 정책 파일은 별도 · Python 게이트 오염 금지**(Q-0007 · D-079): Java 카탈로그는 `policies/java-sensitive-capabilities.yaml`(**Claude 소유 · 신규 · 이미 커밋됨**)에서 읽는다. `policies/sensitive-capabilities.yaml` **수정 금지** — Java 항목을 공유 파일에 넣으면 Python 추출기가 `unknown_signal_kind` 오류를 내고 `check-new-capabilities` 가 **Java 무관 순수 Python PR 까지 전부 approval_required** 로 만든다(A-0036 실측). **회귀 픽스처 필수**: 무해한 Python 전용 PR → `pass`/exit 0 유지(이 픽스처가 오염을 잡는다) + 음성검증. Python 추출기 `extract-python-capabilities.py` 는 **무개조**(통과·배포된 층에 손대지 않는다).
+10. **킷 배선**(TASK-029 R-4 계보 — 3회 연속 누락 방지): `kit/policies/java-sensitive-capabilities.yaml` **sync 반입**(dev↔kit md5 동일) + `kit/run.sh` 에 Java 능력 게이트 배선(`JAVA_CAPS` 변수 · verdict max 조립 · 정책 부재 preflight · `--policies` 오버라이드 경로) + 진입점 테스트. `run.sh` 는 Java 카탈로그를 **Java 게이트에만** 넘긴다(교차 소비 시 11건 검증오류 = 시끄럽게 실패하지만 애초에 배선하지 마라).
+11. **language-routing 승격은 Claude 가 한다**(Q-0007 Q5): `java.layers.capabilities` 는 이 태스크 **리뷰 통과 전까지 `stub` 유지**. Codex 는 `policies/language-routing.yaml` 을 건드리지 않는다. 통과 후 Claude 가 `supported` 로 올리고 `status:` 하한도 재평가한다(D-076 under-claim 계약).
+**의존**: TASK-031 통과 후. **정책 선행조건 충족**: `policies/java-sensitive-capabilities.yaml` · `collab/answers/A-0036.md` · D-079.
 
 **MVP-3 의존·순서**: 029(seam) → 030(인벤토리) → 031(주석/Spring) → 032(능력). 각 통과·머지 후 다음. 이후 W1(프론트)·X(콜그래프→간접영향) 는 J 완결 후 AC 정밀화.
 
