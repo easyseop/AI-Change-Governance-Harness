@@ -202,17 +202,31 @@ def language_coverage(diff_input, language_routing, repo):
             "errors": [message],
         }
     result = language_router_gate.build_result(diff_input, language_routing, repo)
+    checked = []
     not_checked = []
     for item in result.get("coverage", {}).get("stubbed", []):
-        not_checked.append(
-            f"deep semantic analysis not yet implemented for {item['extension']} ({item['adapter']} adapter stub)"
-        )
+        layers = item.get("layers") or {}
+        available = sorted(layer for layer, state in layers.items() if state.get("available"))
+        unavailable = sorted(layer for layer, state in layers.items() if not state.get("available"))
+        if available:
+            checked.append(
+                {
+                    "gate": "language-router",
+                    "checked": f"{item['adapter']} {item['extension']} layers available: {', '.join(available)}",
+                }
+            )
+        if unavailable:
+            not_checked.append(
+                f"{item['adapter']} {item['extension']} layers not available: {', '.join(unavailable)}"
+            )
+        for error in item.get("layer_errors") or []:
+            not_checked.append(f"language routing layer error: {error}")
     for item in result.get("coverage", {}).get("unsupported", []):
         not_checked.append(
             f"deep semantic analysis unsupported for {item['extension'] or '<none>'}"
         )
     return {
-        "checked": [],
+        "checked": checked,
         "not_checked": sorted(set(not_checked)),
         "policy_path": language_routing,
         "errors": [],
@@ -494,7 +508,7 @@ def executed_gate_records(diff_input):
         records.append(
             {
                 "gate": "check-function-gov-level",
-                "checked": "changed Python functions against @gov annotations",
+                "checked": "changed Python functions against @gov annotations and changed Java methods against @Gov/framework annotations when framework policy is configured",
             }
         )
     return records
@@ -529,7 +543,7 @@ def function_reason(prefix, item):
     return f"{prefix}:{item.get('path')}::{item.get('name')}:{item.get('side')}{suffix}"
 
 
-def build_function_gov_result(diff_input, sensitive_zones, repo):
+def build_function_gov_result(diff_input, sensitive_zones, repo, framework_annotations=None):
     if not can_run_function_gov(diff_input):
         return {
             "verdict": "pass",
@@ -538,7 +552,9 @@ def build_function_gov_result(diff_input, sensitive_zones, repo):
             "errors": [],
         }
 
-    result = function_gov_gate.check_function_gov_level(diff_input, sensitive_zones, repo)
+    result = function_gov_gate.check_function_gov_level(
+        diff_input, sensitive_zones, repo, framework_annotations
+    )
     reasons = []
     for item in result.get("frozen_touched", []):
         reasons.append(function_reason("function_frozen", item))
@@ -555,6 +571,7 @@ def build_function_gov_result(diff_input, sensitive_zones, repo):
         "changed_functions": result.get("changed_functions", []),
         "reasons": reasons,
         "errors": result.get("errors", []),
+        "coverage_not_checked": result.get("coverage_not_checked", []),
     }
 
 
@@ -618,7 +635,9 @@ def build_evidence(args):
     if not intent_declared:
         intent_check = not_declared_intent_result(intent_check)
     sensitive_check = sensitive_result(files, sensitive_policy)
-    function_gov = build_function_gov_result(args.diff_input, args.sensitive_zones, args.repo)
+    function_gov = build_function_gov_result(
+        args.diff_input, args.sensitive_zones, args.repo, args.framework_annotations
+    )
     verdict, exit_code = combine_verdicts(intent_check, sensitive_check, function_gov)
     if lang_coverage["errors"]:
         verdict, exit_code = "blocked", BLOCKED
@@ -694,6 +713,7 @@ def build_evidence(args):
                     if not intent_declared
                     else NOT_CHECKED_STATEMENTS
                 )
+                + function_gov.get("coverage_not_checked", [])
                 + lang_coverage["not_checked"],
             },
             "reasons": (
@@ -731,6 +751,11 @@ def main():
         "--language-routing",
         default=None,
         help="policies/language-routing.yaml path",
+    )
+    parser.add_argument(
+        "--framework-annotations",
+        default=None,
+        help="policies/framework-annotations.yaml path for Java/Spring annotations",
     )
     parser.add_argument(
         "--numstat-input",

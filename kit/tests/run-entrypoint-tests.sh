@@ -135,7 +135,7 @@ run_language_policy_case(){
   output="$(ACGH_GATE_TIMEOUT_SECONDS=1 bash "$runner" HEAD~1..HEAD --repo "$repo" --policies "$KIT/policies" --output "$card" 2>&1)"; rc=$?
   if [ "$rc" = 0 ] &&
      printf '%s\n' "$output" | grep -q 'PASS' &&
-     grep -q 'deep semantic analysis not yet implemented for .java' "$card"; then
+     grep -q 'java .java layers not available: callgraph, capabilities' "$card"; then
     echo "PASS $name"; PASS=$((PASS + 1))
   else
     echo "FAIL $name (exit=$rc expected=0, missing kit language routing coverage)"
@@ -171,6 +171,22 @@ run_missing_required_policy_preflight_case(){
     echo "PASS $name"; PASS=$((PASS + 1))
   else
     echo "FAIL $name (exit=$rc expected=2, expected missing ${missing_policy} preflight without blocked card)"
+    printf '%s\n' "$output" | tail -16 | sed 's/^/  /'
+    [ -f "$card" ] && tail -30 "$card" | sed 's/^/  card: /'
+  fi
+}
+
+run_java_framework_case(){
+  local name="$1" runner="$2" repo="$3" card="$4"
+  local output rc
+  TOTAL=$((TOTAL + 1))
+  output="$(ACGH_GATE_TIMEOUT_SECONDS=3 bash "$runner" HEAD~1..HEAD --repo "$repo" --output "$card" 2>&1)"; rc=$?
+  if [ "$rc" = 2 ] &&
+     grep -q 'function_protected:app/AuthController.java::AuthController.resetPassword:base' "$card" &&
+     printf '%s\n' "$output" | grep -q 'APPROVAL_REQUIRED'; then
+    echo "PASS $name"; PASS=$((PASS + 1))
+  else
+    echo "FAIL $name (exit=$rc expected=2, missing Java framework protected evidence)"
     printf '%s\n' "$output" | tail -16 | sed 's/^/  /'
     [ -f "$card" ] && tail -30 "$card" | sed 's/^/  card: /'
   fi
@@ -221,7 +237,7 @@ git -C "$repo" add app/service.py && git -C "$repo" commit -qm language-policy-l
 run_missing_language_policy_preflight_case language-routing-legacy-override-preflight "$KIT/run.sh" "$repo" "$legacy_policies" "$WORK/language-policy-legacy-card.yaml"
 
 # 필수 정책 preflight 는 5개 항목 모두에서 분석실패 exit 2 + blocked 카드 미생성을 보장해야 한다.
-for required_policy in sensitive-zones.yaml sensitive-capabilities.yaml approval-routing.yaml; do
+for required_policy in sensitive-zones.yaml sensitive-capabilities.yaml approval-routing.yaml framework-annotations.yaml; do
   repo="$WORK/preflight-${required_policy%.yaml}"; make_repo "$repo"
   missing_policies="$repo/policies"
   rm "$missing_policies/$required_policy"
@@ -229,6 +245,31 @@ for required_policy in sensitive-zones.yaml sensitive-capabilities.yaml approval
   git -C "$repo" add app/service.py && git -C "$repo" commit -qm "missing-$required_policy"
   run_missing_required_policy_preflight_case "required-policy-${required_policy%.yaml}-preflight" "$KIT/run.sh" "$repo" "$missing_policies" "$required_policy" "$WORK/preflight-${required_policy%.yaml}-card.yaml"
 done
+
+# Spring security annotation changes are wired through framework-annotations.yaml into the L1 function gate.
+repo="$WORK/java-framework"; make_repo "$repo"
+cat >"$repo/app/AuthController.java" <<'JAVA'
+package app;
+
+class AuthController {
+  @PreAuthorize("hasRole('ADMIN')")
+  public void resetPassword() {
+    audit("base");
+  }
+}
+JAVA
+git -C "$repo" add app/AuthController.java && git -C "$repo" commit -qm java-framework-base
+cat >"$repo/app/AuthController.java" <<'JAVA'
+package app;
+
+class AuthController {
+  public void resetPassword() {
+    audit("head");
+  }
+}
+JAVA
+git -C "$repo" add app/AuthController.java && git -C "$repo" commit -qm java-framework-head
+run_java_framework_case java-framework-preauthorize-approval "$KIT/run.sh" "$repo" "$WORK/java-framework-card.yaml"
 
 # 선언한 필수 변경 파일이 diff 에 없으면 부재 탐지가 승인요구하고 카드에 증거를 남긴다.
 repo="$WORK/expected-missing"; make_repo "$repo"

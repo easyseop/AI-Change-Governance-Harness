@@ -15,7 +15,7 @@ MVP-0 에서 만들 게이트:
 | `map-diff-to-functions.py` | TASK-006 | git diff 헝크를 after 버전 함수/클래스에 매핑 |
 | `classify-python-function-changes.py` | TASK-007 | before/after 함수 변경을 added/modified/deleted 로 분류 |
 | `extract-gov-annotations.py` | TASK-008 | Python `@gov`/`__gov__` 주석을 추출·검증 |
-| `check-function-gov-level.py` | TASK-009 | 변경 함수와 base/head `@gov` effective level 을 판정 |
+| `check-function-gov-level.py` | TASK-009/TASK-031 | 변경 함수와 base/head Python `@gov`·Java `@Gov`/framework effective level 을 판정 |
 | `bootstrap-sensitive-zones.py` | TASK-014 | 경로 규칙과 CODEOWNERS 로 sensitive-zones 초안 후보를 생성 |
 | `extract-sinks.py` | TASK-022 | MVP-2 간접영향 추적 대상 sink 목록을 등록·검증 |
 | `extract-callgraph.py` | TASK-023 | repo 내 Python 함수 호출 엣지와 미해소 호출 coverage 를 산출 |

@@ -147,6 +147,8 @@ def case_command(case):
                 f"{ROOT_DIR}/{data.get('policy', 'policies/sensitive-zones.yaml')}",
                 "--approval-routing",
                 f"{ROOT_DIR}/policies/approval-routing.yaml",
+                "--framework-annotations",
+                f"{ROOT_DIR}/{data.get('framework_annotations', 'policies/framework-annotations.yaml')}",
                 "--generated-on",
                 "2026-06-30",
             ]
@@ -163,6 +165,8 @@ def case_command(case):
             data.get("policy", "policies/sensitive-zones.yaml"),
             "--approval-routing",
             "policies/approval-routing.yaml",
+            "--framework-annotations",
+            data.get("framework_annotations", "policies/framework-annotations.yaml"),
             "--generated-on",
             "2026-06-30",
         ]
@@ -228,6 +232,8 @@ def case_command(case):
             f"{ROOT_DIR}/{script}",
             rev_range,
             f"{ROOT_DIR}/policies/sensitive-zones.yaml",
+            "--framework-annotations",
+            f"{ROOT_DIR}/{data.get('framework_annotations', 'policies/framework-annotations.yaml')}",
             "--repo",
             work_dir,
             "--json",
@@ -548,6 +554,9 @@ def validate_language_router(case, result, exit_code):
             for item in result.get("files", [])
         ]
         assert_equal(errors, "file_routes", actual, expect["file_routes"])
+    if "layer_errors_present" in expect:
+        actual = any(item.get("layer_errors") for item in result.get("files", []))
+        assert_equal(errors, "layer_errors_present", actual, expect["layer_errors_present"])
     if expect.get("deterministic_stdout"):
         first = run_command(case_command(case)).stdout
         second = run_command(case_command(case)).stdout
@@ -729,6 +738,8 @@ def validate_function_gov_level(case, result, exit_code):
             f"{ROOT_DIR}/{GATES['check-function-gov-level']}",
             rev_range,
             f"{ROOT_DIR}/policies/sensitive-zones.yaml",
+            "--framework-annotations",
+            f"{ROOT_DIR}/{case['input'].get('framework_annotations', 'policies/framework-annotations.yaml')}",
             "--repo",
             work_dir,
             "--json",
