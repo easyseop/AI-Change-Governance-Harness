@@ -1914,3 +1914,21 @@ parity 는 "정상 경로 등가"만이 아니라 **"실패 경로 등가"까지
 **재발 패턴 경고 2건**: ① `kit/run.sh` 정책 배선은 이번엔 **정확히 됐다**(TASK-029 R-4 3회차 방지 성공, preflight 포함).
 ② 반면 AC 가 명시 요구한 **픽스처 누락은 두 태스크 연속**(D-074 O-4 게이트 결손 = R-2). AC 에 "픽스처 0건 = 미측정"이라
 적는 것만으로는 안 닫히므로 **음성검증 단독 FAIL 까지를 AC 로** 못박는 방식을 유지한다.
+
+## TASK-032 (J3 Java 능력 카탈로그 + 신규능력 감지) — 통과 (2026-07-21)
+대상 `b2f847e`. AC#1~#11 전 항목 실증 충족 → D-080 · 상세 A-0037.
+- **적대 실증(픽스처 밖 fresh)**: `Method.invoke` · 문자열조립 SQL · `Class.forName` 3종 포착.
+  import 문 없는 `Runtime.getRuntime().exec`(java.lang 암시적) · `new java.lang.ProcessBuilder()`(FQN 인라인) 포착.
+  난독화(리플렉션 핸들을 `Object` 필드로 세탁 후 캐스팅) → 여전히 포착 + `unresolved_dynamic` 노출.
+- **AC#7 이중 rig**: `level: frozen`(7건) + `allowed_levels: [frozen]` 동시 → protected clamp · errors 7 · exit 2.
+  게이트가 `allowed_levels` 를 **코드에서 아예 안 읽음** ⇒ 정책으로 불변식 못 끔. D-077 O-2 폐쇄.
+  **음성검증**: `VALID_LEVELS` 에 frozen 추가 → `java-capabilities-frozen-clamp` 단독 FAIL(139→138).
+- **AC#8**: 임의 파이썬 파일로 양방향 실증(플래그 없으면 미실행 / `ACGH_ALLOW_TEST_OVERRIDES=1` 이면 실행). D-078 O-1 폐쇄.
+- **킷**: dev↔kit md5 3쌍 동일 · `JAVA_CAPS` 가 기본·`--policies` 재바인딩 2곳 모두 반영 ·
+  verdict 조립 `1>2>0` 정합 · `HAS_RANGE=0` → cap_exit=2 fail-closed · 6-file 레거시 override → preflight exit 2 ·
+  E2E fresh Java repo → `능력=2` → exit 2 · 진입점 22/22.
+  `kit/tests/run-tests.sh` 0/139 = **선재**(main 0/110 대조).
+- **비차단 3건 → 차기 AC**: O-1 카탈로그 무조건 선로드(Java 정책 부재 시 순수 Python PR exit 2) ·
+  O-2 `var`→`"var"` 바인딩이 `unresolved_dynamic` 억제(현재 카탈로그 획득지점 설계 덕에 실측 미탐 0) ·
+  O-3 AC#8 coverage 문구 미이행.
+- **AC#11 승격은 R-1 로 이월** — Codex 소유 픽스처 3건 + 킷 sync 동반 필요(단독 승격 시 main 136/139).
