@@ -48,6 +48,7 @@ gates:
     - classify-python-function-changes
     - extract-gov-annotations
     - extract-python-capabilities
+    - extract-java-capabilities
     - extract-sinks
     - extract-callgraph
   tools_offline:
@@ -63,6 +64,7 @@ gates:
 policies:
   - policies/sensitive-zones.yaml
   - policies/sensitive-capabilities.yaml
+  - policies/java-sensitive-capabilities.yaml
   - policies/approval-routing.yaml
   - policies/sink-registry.yaml
   - policies/language-routing.yaml

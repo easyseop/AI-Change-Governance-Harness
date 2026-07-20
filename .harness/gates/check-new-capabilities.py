@@ -12,6 +12,7 @@ PASS = 0
 APPROVAL_REQUIRED = 2
 
 DEFAULT_POLICY = "policies/sensitive-capabilities.yaml"
+DEFAULT_JAVA_POLICY = "policies/java-sensitive-capabilities.yaml"
 GATE_DIR = Path(__file__).resolve().parent
 
 
@@ -25,7 +26,10 @@ def load_gate_module(filename, module_name):
 capability_gate = load_gate_module(
     "extract-python-capabilities.py", "extract_python_capabilities_gate"
 )
-LEVEL_STRENGTH = capability_gate.LEVEL_STRENGTH
+java_capability_gate = load_gate_module(
+    "extract-java-capabilities.py", "extract_java_capabilities_gate"
+)
+LEVEL_STRENGTH = {"watched": 0, "protected": 1}
 
 
 def normalize_path(path):
@@ -81,7 +85,7 @@ def source_at_ref(ref, path, repo):
     return result.stdout.decode("utf-8")
 
 
-def changed_python_paths(base, head, repo):
+def changed_capability_paths(base, head, repo):
     output = run_git(["diff", "--name-status", "--no-renames", base, head], repo)
     paths = set()
     for raw_line in output.splitlines():
@@ -94,7 +98,7 @@ def changed_python_paths(base, head, repo):
             candidates = parts[1:3]
         for path in candidates:
             normalized = normalize_path(path)
-            if normalized.endswith(".py"):
+            if normalized.endswith((".py", ".java")):
                 paths.add(normalized)
     return sorted(paths)
 
@@ -111,11 +115,24 @@ def absent_result(path):
     }
 
 
+def gate_for_path(path):
+    if path.endswith(".java"):
+        return java_capability_gate
+    return capability_gate
+
+
+def policy_for_path(path, python_policy, java_policy):
+    if path.endswith(".java"):
+        return java_policy
+    return python_policy
+
+
 def extract_at_ref(ref, path, policy, repo):
+    gate = gate_for_path(path)
     try:
         source = source_at_ref(ref, path, repo)
     except UnicodeDecodeError as error:
-        _, catalog_errors = capability_gate.load_catalog(policy)
+        _, catalog_errors = gate.load_catalog(policy)
         return {
             "path": path,
             "capabilities": [],
@@ -124,15 +141,15 @@ def extract_at_ref(ref, path, policy, repo):
             "parse_error": False,
             "unreadable": f"unreadable source: {error}",
         }
-    return capability_gate.extract_from_source(source, path, policy)
+    return gate.extract_from_source(source, path, policy)
 
 
 def capability_index(result):
     return {capability["id"]: capability for capability in result.get("capabilities", [])}
 
 
-def catalog_metadata(policy):
-    capabilities, _ = capability_gate.load_catalog(policy)
+def catalog_metadata(policy, gate):
+    capabilities, _ = gate.load_catalog(policy)
     return {capability["id"]: capability for capability in capabilities}
 
 
@@ -181,10 +198,13 @@ def sort_fail_closed(records):
     return sorted(records, key=lambda item: (item["path"], item["reason"]))
 
 
-def check_new_capabilities(rev_range, policy, repo="."):
+def check_new_capabilities(rev_range, policy, repo=".", java_policy=DEFAULT_JAVA_POLICY):
     base, head = split_rev_range(rev_range)
-    paths = changed_python_paths(base, head, repo)
-    metadata = catalog_metadata(policy)
+    paths = changed_capability_paths(base, head, repo)
+    metadata_by_language = {
+        "python": catalog_metadata(policy, capability_gate),
+        "java": catalog_metadata(java_policy, java_capability_gate),
+    }
     new_capabilities = []
     warned_capabilities = []
     shadow_capabilities = []
@@ -192,10 +212,13 @@ def check_new_capabilities(rev_range, policy, repo="."):
     errors = []
 
     for path in paths:
+        path_policy = policy_for_path(path, policy, java_policy)
+        language = "java" if path.endswith(".java") else "python"
+        metadata = metadata_by_language[language]
         base_exists = path_exists_at_ref(base, path, repo)
         head_exists = path_exists_at_ref(head, path, repo)
-        base_result = extract_at_ref(base, path, policy, repo) if base_exists else absent_result(path)
-        head_result = extract_at_ref(head, path, policy, repo) if head_exists else absent_result(path)
+        base_result = extract_at_ref(base, path, path_policy, repo) if base_exists else absent_result(path)
+        head_result = extract_at_ref(head, path, path_policy, repo) if head_exists else absent_result(path)
 
         if base_exists and (base_result.get("parse_error") or base_result.get("unreadable")):
             errors.append(
@@ -296,16 +319,21 @@ def print_text(result):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Check base/head Python changes for newly introduced sensitive capabilities."
+        description="Check base/head Python and Java changes for newly introduced sensitive capabilities."
     )
     parser.add_argument("diff_input", help="git diff ref range, for example <base>..<head>")
-    parser.add_argument("policy", nargs="?", default=DEFAULT_POLICY, help="sensitive capability catalog yaml")
+    parser.add_argument("policy", nargs="?", default=DEFAULT_POLICY, help="Python sensitive capability catalog yaml")
+    parser.add_argument(
+        "--java-policy",
+        default=DEFAULT_JAVA_POLICY,
+        help="Java sensitive capability catalog yaml",
+    )
     parser.add_argument("--repo", default=".", help="git repository to inspect")
     parser.add_argument("--json", action="store_true", help="print structured JSON")
     args = parser.parse_args()
 
     try:
-        result = check_new_capabilities(args.diff_input, args.policy, args.repo)
+        result = check_new_capabilities(args.diff_input, args.policy, args.repo, args.java_policy)
     except Exception as error:
         result = {
             "gate": "check-new-capabilities",

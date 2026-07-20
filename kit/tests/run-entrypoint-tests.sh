@@ -237,7 +237,7 @@ git -C "$repo" add app/service.py && git -C "$repo" commit -qm language-policy-l
 run_missing_language_policy_preflight_case language-routing-legacy-override-preflight "$KIT/run.sh" "$repo" "$legacy_policies" "$WORK/language-policy-legacy-card.yaml"
 
 # 필수 정책 preflight 는 5개 항목 모두에서 분석실패 exit 2 + blocked 카드 미생성을 보장해야 한다.
-for required_policy in sensitive-zones.yaml sensitive-capabilities.yaml approval-routing.yaml framework-annotations.yaml; do
+for required_policy in sensitive-zones.yaml sensitive-capabilities.yaml java-sensitive-capabilities.yaml approval-routing.yaml framework-annotations.yaml; do
   repo="$WORK/preflight-${required_policy%.yaml}"; make_repo "$repo"
   missing_policies="$repo/policies"
   rm "$missing_policies/$required_policy"
@@ -270,6 +270,30 @@ class AuthController {
 JAVA
 git -C "$repo" add app/AuthController.java && git -C "$repo" commit -qm java-framework-head
 run_java_framework_case java-framework-preauthorize-approval "$KIT/run.sh" "$repo" "$WORK/java-framework-card.yaml"
+
+# Java 신규 위험 능력은 별도 java-sensitive-capabilities.yaml 로만 평가되고 2층에서 승인요구된다.
+repo="$WORK/java-capability"; make_repo "$repo"
+cat >"$repo/app/Job.java" <<'JAVA'
+package app;
+
+class Job {
+  void run() {
+    int value = 1;
+  }
+}
+JAVA
+git -C "$repo" add app/Job.java && git -C "$repo" commit -qm java-capability-base
+cat >"$repo/app/Job.java" <<'JAVA'
+package app;
+
+class Job {
+  void run(String cmd) throws Exception {
+    Runtime.getRuntime().exec(cmd);
+  }
+}
+JAVA
+git -C "$repo" add app/Job.java && git -C "$repo" commit -qm java-capability-head
+run_case java-capability-approval 2 'command_exec' "$KIT/run.sh" "$repo"
 
 # 선언한 필수 변경 파일이 diff 에 없으면 부재 탐지가 승인요구하고 카드에 증거를 남긴다.
 repo="$WORK/expected-missing"; make_repo "$repo"

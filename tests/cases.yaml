@@ -986,6 +986,24 @@ cases:
             - [AccountService, AccountService.transfer]
             - [AccountService, AccountService.transfer]
 
+  - name: java-inventory-override-ignored-without-test-flag
+    gate: map-diff-to-functions
+    env:
+      ACGH_JAVA_INVENTORY_PATH: tests/fixtures/java-gate-missing/no-such-gate.py
+    input:
+      fixture_dir: tests/fixtures/java-function-mapping
+    expect:
+      exit_code: 0
+      files:
+        - path: app/AccountService.java
+          status: M
+          touched_function_names:
+            - AccountService
+            - AccountService.transfer
+          hunk_function_names:
+            - [AccountService, AccountService.transfer]
+            - [AccountService, AccountService.transfer]
+
   - name: java-function-classification
     gate: classify-python-function-changes
     input:
@@ -1069,6 +1087,7 @@ cases:
   - name: java-gate-missing-function-mapping
     gate: map-diff-to-functions
     env:
+      ACGH_ALLOW_TEST_OVERRIDES: "1"
       ACGH_JAVA_INVENTORY_PATH: tests/fixtures/java-gate-missing/no-such-gate.py
     input:
       fixture_dir: tests/fixtures/java-gate-missing/mixed
@@ -1093,6 +1112,7 @@ cases:
   - name: java-gate-missing-function-classification
     gate: classify-python-function-changes
     env:
+      ACGH_ALLOW_TEST_OVERRIDES: "1"
       ACGH_JAVA_INVENTORY_PATH: tests/fixtures/java-gate-missing/no-such-gate.py
     input:
       fixture_dir: tests/fixtures/java-gate-missing/mixed
@@ -2980,6 +3000,195 @@ cases:
     gate: check-new-capabilities
     input:
       fixture_dir: tests/fixtures/negative-corpus/docs-only
+    expect:
+      verdict: pass
+      exit_code: 0
+      new_capabilities: []
+      warned_capabilities: []
+      fail_closed: []
+      errors_present: false
+
+  - name: java-capabilities
+    gate: extract-java-capabilities
+    input:
+      source_file: tests/fixtures/java-capabilities/valid.java
+    expect:
+      exit_code: 0
+      capability_ids:
+        - command_exec
+        - crypto
+        - crypto_hash
+        - jndi_lookup
+        - outbound_http
+        - reflection
+        - sql_injection_surface
+        - unsafe_deserialization
+      capability_levels:
+        - protected
+        - protected
+        - watched
+        - protected
+        - protected
+        - protected
+        - protected
+        - protected
+      unresolved_dynamic:
+        - kind: method_invocation
+          name: invoke
+          line: 17
+          reason: receiver type unresolved
+      errors: []
+      deterministic_stdout: true
+
+  - name: java-capabilities-parse-error
+    gate: extract-java-capabilities
+    input:
+      source_file: tests/fixtures/java-capabilities/invalid.java
+    expect:
+      exit_code: 0
+      capability_ids: []
+      parse_error_present: true
+      errors: []
+
+  - name: java-capabilities-frozen-clamp
+    gate: check-new-capabilities
+    input:
+      fixture_dir: tests/fixtures/new-java-capabilities/new-only
+      java_policy: tests/fixtures/java-capabilities/frozen-policy.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      new_capabilities:
+        - path: app/Job.java
+          id: command_exec
+          level: protected
+          reviewer: security-reviewer
+          signal_names:
+            - Runtime.exec
+            - Runtime.getRuntime
+            - exec
+      warned_capabilities: []
+      fail_closed: []
+      errors_present: true
+
+  - name: new-java-capabilities-new-only
+    gate: check-new-capabilities
+    input:
+      fixture_dir: tests/fixtures/new-java-capabilities/new-only
+      java_policy: policies/java-sensitive-capabilities.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      new_capabilities:
+        - path: app/Job.java
+          id: command_exec
+          level: protected
+          reviewer: security-reviewer
+          signal_names:
+            - Runtime.exec
+            - Runtime.getRuntime
+            - exec
+      warned_capabilities: []
+      fail_closed: []
+      errors_present: false
+
+  - name: new-java-capabilities-existing-pass
+    gate: check-new-capabilities
+    input:
+      fixture_dir: tests/fixtures/new-java-capabilities/existing
+      java_policy: policies/java-sensitive-capabilities.yaml
+    expect:
+      verdict: pass
+      exit_code: 0
+      new_capabilities: []
+      warned_capabilities: []
+      fail_closed: []
+      errors_present: false
+
+  - name: new-java-capabilities-delete-pass
+    gate: check-new-capabilities
+    input:
+      fixture_dir: tests/fixtures/new-java-capabilities/delete-only
+      java_policy: policies/java-sensitive-capabilities.yaml
+    expect:
+      verdict: pass
+      exit_code: 0
+      new_capabilities: []
+      warned_capabilities: []
+      fail_closed: []
+      errors_present: false
+
+  - name: new-java-capabilities-parse-error
+    gate: check-new-capabilities
+    input:
+      fixture_dir: tests/fixtures/new-java-capabilities/parse-error
+      java_policy: policies/java-sensitive-capabilities.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      new_capabilities: []
+      warned_capabilities: []
+      fail_closed:
+        - path: app/Job.java
+          level: protected
+          reason: head file could not be parsed after the change
+      errors_present: true
+
+  - name: new-java-capabilities-python-benign-no-contamination
+    gate: check-new-capabilities
+    input:
+      fixture_dir: tests/fixtures/new-java-capabilities/python-benign
+      java_policy: policies/java-sensitive-capabilities.yaml
+    expect:
+      verdict: pass
+      exit_code: 0
+      new_capabilities: []
+      warned_capabilities: []
+      fail_closed: []
+      errors_present: false
+
+  - name: parity-java-capability-new
+    group: parity
+    gate: check-new-capabilities
+    input:
+      fixture_dir: tests/fixtures/parity/java-capability-new
+      java_policy: policies/java-sensitive-capabilities.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      new_capabilities:
+        - path: app/Worker.java
+          id: command_exec
+          level: protected
+          reviewer: security-reviewer
+          signal_names:
+            - Runtime.exec
+            - Runtime.getRuntime
+            - exec
+      warned_capabilities: []
+      fail_closed: []
+      errors_present: false
+
+  - name: parity-java-capability-existing
+    group: parity
+    gate: check-new-capabilities
+    input:
+      fixture_dir: tests/fixtures/parity/java-capability-existing
+      java_policy: policies/java-sensitive-capabilities.yaml
+    expect:
+      verdict: pass
+      exit_code: 0
+      new_capabilities: []
+      warned_capabilities: []
+      fail_closed: []
+      errors_present: false
+
+  - name: parity-java-capability-delete
+    group: parity
+    gate: check-new-capabilities
+    input:
+      fixture_dir: tests/fixtures/parity/java-capability-delete
+      java_policy: policies/java-sensitive-capabilities.yaml
     expect:
       verdict: pass
       exit_code: 0
