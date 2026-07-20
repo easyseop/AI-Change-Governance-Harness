@@ -38,13 +38,26 @@ GATES = {
 ROOT_DIR = os.getcwd()
 
 
-def run_command(command):
+def run_command(command, extra_env=None):
+    env = None
+    if extra_env:
+        env = os.environ.copy()
+        for key, value in extra_env.items():
+            if key == "PYTHONPATH":
+                path_value = value
+                if not os.path.isabs(path_value):
+                    path_value = os.path.join(ROOT_DIR, path_value)
+                existing = env.get("PYTHONPATH")
+                env[key] = f"{path_value}{os.pathsep}{existing}" if existing else path_value
+            else:
+                env[key] = str(value)
     return subprocess.run(
         command,
         check=False,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        env=env,
     )
 
 
@@ -122,7 +135,7 @@ def case_command(case):
     if gate == "generate-change-evidence":
         if data.get("fixture_dir"):
             work_dir, rev_range = prepare_function_mapping_fixture(data["fixture_dir"])
-            return [
+            command = [
                 "python3",
                 f"{ROOT_DIR}/{script}",
                 rev_range,
@@ -137,6 +150,9 @@ def case_command(case):
                 "--generated-on",
                 "2026-06-30",
             ]
+            if data.get("language_routing"):
+                command.extend(["--language-routing", f"{ROOT_DIR}/{data['language_routing']}"])
+            return command
         command = [
             "python3",
             script,
@@ -577,20 +593,24 @@ def validate_function_mapping(case, result, exit_code):
         return errors
 
     actual_files = []
+    include_parse_error = any(
+        "parse_error_present" in expected_file for expected_file in expect["files"]
+    )
     for file_record in result.get("files", []):
-        actual_files.append(
-            {
-                "path": file_record.get("path"),
-                "status": file_record.get("status"),
-                "touched_function_names": values_at(
-                    file_record.get("touched_functions", []), "name"
-                ),
-                "hunk_function_names": [
-                    values_at(hunk.get("touched_functions", []), "name")
-                    for hunk in file_record.get("hunks", [])
-                ],
-            }
-        )
+        actual_file = {
+            "path": file_record.get("path"),
+            "status": file_record.get("status"),
+            "touched_function_names": values_at(
+                file_record.get("touched_functions", []), "name"
+            ),
+            "hunk_function_names": [
+                values_at(hunk.get("touched_functions", []), "name")
+                for hunk in file_record.get("hunks", [])
+            ],
+        }
+        if include_parse_error:
+            actual_file["parse_error_present"] = bool(file_record.get("parse_error"))
+        actual_files.append(actual_file)
     assert_equal(errors, "files", actual_files, expect["files"])
     return errors
 
@@ -1129,7 +1149,7 @@ def main():
         group = case.get("group", "default")
         group_totals[group] = group_totals.get(group, 0) + 1
         command = case_command(case)
-        completed = run_command(command)
+        completed = run_command(command, case.get("env"))
         try:
             result = load_output(case["gate"], completed.stdout)
             if case["gate"] == "generate-change-evidence":

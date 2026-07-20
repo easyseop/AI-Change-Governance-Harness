@@ -197,8 +197,16 @@ def load_java_inventory_module():
 
 
 def extract_java_inventory(source, source_path):
-    module = load_java_inventory_module()
-    return module.extract_inventory(source, source_path)
+    try:
+        module = load_java_inventory_module()
+        return module.extract_inventory(source, source_path)
+    except (ImportError, OSError) as error:
+        return {
+            "source": source_path,
+            "lang": "java",
+            "items": [],
+            "parse_error": f"java analysis unavailable: {error}",
+        }
 
 
 def source_at_ref(ref, path, repo):
@@ -291,7 +299,7 @@ def map_diff_to_functions(rev_range, repo="."):
                 inventory = extract_java_inventory(source, path)
             else:
                 inventory = extract_inventory(source, path)
-        except (RuntimeError, UnicodeDecodeError, UnicodeEncodeError) as error:
+        except (RuntimeError, UnicodeDecodeError, UnicodeEncodeError, ImportError, OSError) as error:
             inventory = {
                 "source": path,
                 "items": [],

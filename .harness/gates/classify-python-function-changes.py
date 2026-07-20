@@ -210,8 +210,16 @@ def augment_java_inventory(source, inventory):
 
 def extract_inventory_for_language(source, source_path, language):
     if language == "java":
-        module = load_java_inventory_module()
-        return augment_java_inventory(source, module.extract_inventory(source, source_path))
+        try:
+            module = load_java_inventory_module()
+            return augment_java_inventory(source, module.extract_inventory(source, source_path))
+        except (ImportError, OSError) as error:
+            return {
+                "source": source_path,
+                "lang": "java",
+                "items": [],
+                "parse_error": f"java analysis unavailable: {error}",
+            }
     return extract_inventory(source, source_path)
 
 
@@ -330,7 +338,7 @@ def classify_file(path, status, base, head, repo):
         before_inventory = extract_inventory_for_language(
             source_at_ref(base, path, repo), path, language
         )
-    except (RuntimeError, UnicodeDecodeError, UnicodeEncodeError) as error:
+    except (RuntimeError, UnicodeDecodeError, UnicodeEncodeError, ImportError, OSError) as error:
         return fallback_file(
             path,
             status,
@@ -349,7 +357,7 @@ def classify_file(path, status, base, head, repo):
         after_inventory = extract_inventory_for_language(
             source_at_ref(head, path, repo), path, language
         )
-    except (RuntimeError, UnicodeDecodeError, UnicodeEncodeError) as error:
+    except (RuntimeError, UnicodeDecodeError, UnicodeEncodeError, ImportError, OSError) as error:
         return fallback_file(
             path,
             status,

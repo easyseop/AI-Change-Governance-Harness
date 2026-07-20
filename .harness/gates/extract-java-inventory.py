@@ -160,7 +160,15 @@ def visit(source_bytes, node, class_stack, items):
 
 def extract_inventory(source, source_path):
     source_bytes = source.encode("utf-8")
-    parser = make_java_parser()
+    try:
+        parser = make_java_parser()
+    except (ImportError, OSError) as error:
+        return {
+            "source": source_path,
+            "lang": "java",
+            "items": [],
+            "parse_error": f"java analysis unavailable: {error}",
+        }
     tree = parser.parse(source_bytes)
     root = tree.root_node
     if root.has_error:
