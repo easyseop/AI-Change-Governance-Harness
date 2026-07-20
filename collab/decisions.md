@@ -1037,3 +1037,73 @@ README 세 곳의 필수 5종 **일치**(드리프트 없음).
 항목별 RIG 단독 FAIL 실증, 정책 추가 시 시험이 자동으로 따라붙는 구조. → TASK-030 또는 킷 후속 AC.
 
 **TASK-029 종결**: R-1~R-5 전부 해소. J1(TASK-030 Java 추출기) 착수 전제 충족.
+
+---
+
+## D-073 — TASK-030 (J1 Java 인벤토리) 리뷰 → **보정요청 R-1** · 코드 머지 보류
+
+**대상**: `origin/codex/2026-07-20-java-inventory` 계열 브랜치
+`codex/2026-07-20-task030-java-inventory` (`4ccb8c9` 구현 + `039cd1a` 인계기록).
+
+**판정**: **보정요청(R-1 차단)**. 리뷰 기록만 `main` 머지, 구현 코드는 보류(D-007).
+
+**제출 주장 전량 독립 재현 — 재작업 금지**: dev `run-tests.sh` **107/107**(main 102 → Java 5건 추가) ·
+dev↔kit 게이트 **21파일 md5 전량 동일**(D-068 유지) · `kit/manifest.yaml` **19종 = 실제 파일 19개** ·
+진입점 단독 실행 **18/18**(main 15/15 → +3) · README/manifest/gates README **네 곳 문구 일치**.
+AC#1~#5 전부 충족 실측.
+
+**적대적 검증(픽스처 밖 fresh 입력)**: 신규 오버로드를 기존 것 **앞에 삽입** +
+`@PreAuthorize` **인자만** 변경 + 나머지 오버로드 무변경 → 신규 `added` · 인가 변경
+`modified/signature_changed:true` · 무변경 오버로드 **무보고**. 이름·순서 단독 키였다면 전부 오판했을 입력.
+**음성검증(rig-and-revert · 원복 clean)**: **RIG-1** 매칭키에서 시그니처 제거 → 무변경 오버로드 허위
+`modified` + 단독 FAIL **106/107**. **RIG-2** `_signature_dump` 에서 어노테이션 제거 →
+`@PreAuthorize` 인자 변경 **완전 소멸**(under-detection) + 단독 FAIL **106/107**. ⇒ 두 가드 모두
+load-bearing. **D-072 에서 이월한 차기 AC 가드 G-1(필수 정책 preflight 표 주도 회귀) 실제 구현 확인 ✅**
+(3항목 신설 + `missing-sink-registry` 동일 헬퍼 통일 · 3중 단언).
+
+**🔴 R-1(차단 · 판정 회귀 · 배포 최전선)**: **tree-sitter 의존이 부재·불량이면 `.java` 가 든 diff 가
+전량 🔴 BLOCKED** 로 뒤집힌다. 동일 repo·동일 무해 변경(`.java` 1개 추가)에서
+**main = exit 0 PASS vs 브랜치 = exit 1 BLOCKED** (판정 회귀 0→1). `tree_sitter` 는 정상이고
+`tree_sitter_java` 문법만 없어도 동일(킷 `requirements.txt` 부분설치 = 현실 경로)이며,
+`run.sh` 에 `check-tree-sitter-languages` 배선 **0건**이라 사전 진단 경로도 없다.
+**가상 시나리오가 아니라 이미 터짐** — 내 환경에서 진입점 스위트가 **3/3 재현적으로 FAIL**
+(`language-routing-kit-policy-default`), main 은 같은 조건 **3/3 PASS**, 카드 `reasons` 실측 원인은
+`dlopen(... tree_sitter/_binding ...) incompatible architecture (have 'arm64', need 'x86_64')`.
+(타임아웃 1→8초로 올려도 동일 FAIL ⇒ 타임아웃 무관. 스위트 밖 단독 재실행은 PASS ⇒ 게이트 로직이 아니라
+의존 해소 경로 문제.) **사유 정직성 붕괴**: `frozen_touched: []`·`protected_touched: []` 인데
+`verdict: blocked` + `verdict_statement: governance violation detected`, 사유는 dlopen 오류 문자열뿐 —
+TASK-029 R-4 의 "상시 🔴 = 신호 정보량 0" 과 같은 구조에 **허위 사유**가 얹힌 것.
+**반대방향 구멍(더 위험)**: `ImportError` 가 `map-diff` 캐치 튜플 밖이라 전역 `except Exception` 으로
+빠져 **`files: []`** 반환 → **`.java` 하나가 같은 diff 의 모든 Python 파일 함수 매핑을 무력화**.
+실측: 정상 `[('X.java',['X']), ('calc.py',['calc'])]` vs 깨진 환경 `files: []`
+(정산 경로 Python 함수 변경이 매핑에서 소멸). **§2B 필수질문 = 예**(과차단 + 과소탐지 동시) ⇒ 비차단 불가.
+AC#4 의 "파일 단위 격리 · 형제 보존 · exit 0" 규약이 **문법오류에만 적용되고 의존 부재에는 없다**.
+**보정안(blast radius 작음 — 게이트 2파일 + 픽스처)**: ① `ImportError`·`OSError` 를 잡아
+`{"items": [], "parse_error": "java analysis unavailable: …"}` 로 **파일 단위 격리 강등**(기존
+`fallback_file`·`file_record["parse_error"]` 배선을 그대로 탐) ② `map-diff`·`classify` except 튜플에
+`ImportError`·`OSError` 추가로 `files: []` 경로 봉쇄 ③ 결과가 차단이 아니라 **coverage 노출**로 흐를 것
+(`.java` 는 routing 상 `status: stub` — verdict 상승 금지) ④ **회귀 픽스처 신설**(이 경로 픽스처 0건 =
+무발견이 아니라 미측정): 의존 부재 강제 상태에서 `.java` diff → exit 0 + coverage 문구,
+python+java 혼합 diff → Python 매핑 생존 ⑤ 격리 원복 시 **단독 FAIL** 음성검증 ⑥ (권장) preflight/카드에
+Java 심층분석 가용 여부 1회 진단.
+
+**비차단 관찰(차기 AC 이월)**: **O-1** 익명 내부클래스 메서드가 `Outer.run`, 메서드 내 로컬 클래스가
+`Outer.Local` 로 명명돼 **실존하지 않는 이름** 생성·동명 실메서드와 충돌 가능 — J2 가 이름으로 인가 등급을
+귀속시키면 **잘못된 함수에 붙는다** ⇒ **TASK-031 AC 에 고정 적대 픽스처(익명 내부클래스·로컬 클래스) 명시**.
+**O-2** record compact constructor 미추출. **O-3** Java `start_line` 은 이름 토큰 라인(Python 은 `def` 라인) —
+`map-diff` 는 `signature_start_line` 을 써서 구멍 없음. **O-4** Java 시그니처 변경은 `modified` 가 아니라
+deleted+added(안전 방향이나 Python 과 비대칭) ⇒ TASK-031 parity 기대값 고정. **O-5**
+`java_match_signature` 가 문자열 리터럴 안 괄호도 세어 불균형 시 키가 `(name,"")` 로 퇴화(안전 방향).
+**O-6** routing 의 java 가 여전히 `status: stub` 이라 카드는 "deep semantic analysis not yet implemented"
+라고 말하나 실제로는 인벤토리·매핑·분류가 동작 = **과소 주장**(안전 방향·부정확), **O-A**(카드에 파서/문법
+버전 0건)도 미해소 ⇒ 둘 다 TASK-031 AC 로. **O-7** 없는 파일 인자 → traceback.
+
+**보수적 개발**: intent 밖 파일·무관 리팩터 없음 ⇒ scope-creep 없음. 다만 **R-1 은 "Java 인벤토리 추가"가
+의존 부재 환경에서 판정을 뒤집는 의도 밖 blast radius 로 번진 것 = TASK-029 R-4 와 동일 패턴 재발**
+(그때는 정책 경로, 이번엔 파서 의존).
+
+**하류**: Java IR 계약·오버로드 키·어노테이션 매핑은 **TASK-031(J2) 착수 전제로 충분**. 단 R-1 을 남기면
+tree-sitter 미비 환경의 킷 도입처가 `.java` 든 모든 변경에서 상시차단 + 허위 사유를 보고, 같은 diff 의
+Python 함수 추적까지 잃는다 ⇒ **J2 보다 먼저 닫을 것**.
+
+상세: `collab/answers/A-0030.md` · `review-notes.md` TASK-030 절 · `summaries/2026-07-20.md`.
