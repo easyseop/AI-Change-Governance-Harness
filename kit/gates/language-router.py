@@ -58,12 +58,37 @@ def load_policy(path):
         data = yaml.safe_load(stream) or {}
 
     extension_map = {}
+    defaults = data.get("defaults") or {}
+    layer_states = set(defaults.get("layer_states") or ["supported", "partial", "stub", "unsupported"])
+    documented_layers = data.get("layers_documented") or [
+        "inventory",
+        "gov_level",
+        "capabilities",
+        "callgraph",
+    ]
     adapters = data.get("adapters") or {}
     for adapter_name, adapter in adapters.items():
+        layers = adapter.get("layers") if isinstance(adapter.get("layers"), dict) else {}
+        normalized_layers = {}
+        layer_errors = []
+        for layer in documented_layers:
+            state = layers.get(layer)
+            if state == "supported":
+                available = True
+            else:
+                available = False
+            if state not in layer_states:
+                layer_errors.append(f"{adapter_name}.{layer}: unavailable layer state {state!r}")
+            normalized_layers[layer] = {
+                "state": state,
+                "available": available,
+            }
         for extension in adapter.get("extensions") or []:
             extension_map[str(extension).lower()] = {
                 "adapter": adapter_name,
                 "status": adapter.get("status", "unsupported"),
+                "layers": normalized_layers,
+                "layer_errors": layer_errors,
                 "parser": adapter.get("parser"),
                 "parser_package": adapter.get("parser_package"),
                 "grammar_package": adapter.get("grammar_package"),
@@ -114,15 +139,25 @@ def route_files(paths, extension_map):
                 "extension": extension,
                 "adapter": route["adapter"],
                 "status": route["status"],
-                "deep_analysis": "available" if route["status"] == "supported" else "not_yet_available",
+                "layers": route["layers"],
+                "layer_errors": route["layer_errors"],
+                "deep_analysis": (
+                    "available"
+                    if route["layers"] and all(
+                        layer.get("available") for layer in route["layers"].values()
+                    )
+                    else "not_yet_available"
+                ),
                 "coverage": (
                     f"deep analysis routed to {route['adapter']}"
-                    if route["status"] == "supported"
+                    if route["layers"] and all(
+                        layer.get("available") for layer in route["layers"].values()
+                    )
                     else f"deep analysis adapter stubbed for extension {extension}"
                 ),
                 "parser_versions": parser_versions(route),
             }
-            if route["status"] == "supported":
+            if record["deep_analysis"] == "available":
                 supported.append(record)
             else:
                 stubbed.append(record)

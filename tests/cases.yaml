@@ -35,6 +35,68 @@ cases:
           deep_analysis: not_yet_available
       deterministic_stdout: true
 
+  - name: language-router-legacy-layers-missing
+    gate: language-router
+    input:
+      name_status: tests/fixtures/language-routing/name-status.txt
+      language_routing: tests/fixtures/language-routing/legacy-status-only.yaml
+    expect:
+      verdict: pass
+      exit_code: 0
+      coverage_counts:
+        supported: 0
+        stubbed: 1
+        unsupported: 3
+      file_routes:
+        - path: app/AccountService.java
+          adapter: java
+          status: supported
+          deep_analysis: not_yet_available
+        - path: app/service.py
+          adapter: unsupported
+          status: unsupported
+          deep_analysis: not_available
+        - path: cmd/server.go
+          adapter: unsupported
+          status: unsupported
+          deep_analysis: not_available
+        - path: web/app.tsx
+          adapter: unsupported
+          status: unsupported
+          deep_analysis: not_available
+      layer_errors_present: true
+
+  - name: language-router-invalid-layer-state
+    gate: language-router
+    input:
+      name_status: tests/fixtures/language-routing/name-status.txt
+      language_routing: tests/fixtures/language-routing/invalid-layer-state.yaml
+    expect:
+      verdict: pass
+      exit_code: 0
+      coverage_counts:
+        supported: 0
+        stubbed: 1
+        unsupported: 3
+      file_routes:
+        - path: app/AccountService.java
+          adapter: java
+          status: stub
+          deep_analysis: not_yet_available
+        - path: app/service.py
+          adapter: unsupported
+          status: unsupported
+          deep_analysis: not_available
+        - path: cmd/server.go
+          adapter: unsupported
+          status: unsupported
+          deep_analysis: not_available
+        - path: web/app.tsx
+          adapter: unsupported
+          status: unsupported
+          deep_analysis: not_available
+      layer_errors_present: true
+
   - name: tree-sitter-smoke
     gate: check-tree-sitter-languages
     expect:
@@ -80,14 +142,15 @@ cases:
       coverage_checked_gates:
         - check-change-intent
         - check-sensitive-zones
+        - language-router
       coverage_not_checked:
         - runtime execution paths
         - unregistered sensitive business logic
         - cross-commit cumulative risk
         - non-Python semantic analysis
         - complete dynamic obfuscation recovery
-        - deep semantic analysis not yet implemented for .java (java adapter stub)
         - deep semantic analysis unsupported for .go
+        - "java .java layers not available: callgraph, capabilities"
       verdict_statement: no governance violation detected
       schema_keys_match_template: true
 
@@ -354,6 +417,42 @@ cases:
         - cross-commit cumulative risk
         - non-Python semantic analysis
         - complete dynamic obfuscation recovery
+      verdict_statement: governance review required
+      no_safe_text: true
+      version_metadata_present: true
+      schema_keys_match_template: true
+
+  - name: evidence-java-syntax-error-preauthorize
+    gate: generate-change-evidence
+    input:
+      fixture_dir: tests/fixtures/java-gov-level/syntax-error-preauthorize
+      change_intent: tests/fixtures/java-analysis-unavailable/change-intent.yaml
+      language_routing: policies/language-routing.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      files_changed: 1
+      lines_added: 4
+      lines_removed: 1
+      changed_files:
+        - path: app/AuthController.java
+          zone_level: free
+          in_allowed_paths: true
+      reasons_contain:
+        - function_protected:app/AuthController.java::AuthController.resetPassword:base
+        - function_protected:app/AuthController.java::<file>:head
+      coverage_checked_gates:
+        - check-change-intent
+        - check-sensitive-zones
+        - check-function-gov-level
+        - language-router
+      coverage_not_checked:
+        - runtime execution paths
+        - unregistered sensitive business logic
+        - cross-commit cumulative risk
+        - non-Python semantic analysis
+        - complete dynamic obfuscation recovery
+        - "java .java layers not available: callgraph, capabilities"
       verdict_statement: governance review required
       no_safe_text: true
       version_metadata_present: true
@@ -967,6 +1066,62 @@ cases:
               signature_changed: false
               body_changed: true
 
+  - name: java-gate-missing-function-mapping
+    gate: map-diff-to-functions
+    env:
+      ACGH_JAVA_INVENTORY_PATH: tests/fixtures/java-gate-missing/no-such-gate.py
+    input:
+      fixture_dir: tests/fixtures/java-gate-missing/mixed
+    expect:
+      exit_code: 0
+      files:
+        - path: app/AccountService.java
+          status: M
+          parse_error_present: true
+          touched_function_names:
+            - <module>
+          hunk_function_names:
+            - [<module>]
+        - path: app/calc.py
+          status: M
+          parse_error_present: false
+          touched_function_names:
+            - calc
+          hunk_function_names:
+            - [calc]
+
+  - name: java-gate-missing-function-classification
+    gate: classify-python-function-changes
+    env:
+      ACGH_JAVA_INVENTORY_PATH: tests/fixtures/java-gate-missing/no-such-gate.py
+    input:
+      fixture_dir: tests/fixtures/java-gate-missing/mixed
+    expect:
+      exit_code: 0
+      files:
+        - path: app/AccountService.java
+          status: M
+          fallback: true
+          fallback_reason: parse_error
+          parse_error_present: true
+          function_changes:
+            - name: <file>
+              type: file
+              change_type: file_fallback
+              signature_changed: false
+              body_changed: false
+        - path: app/calc.py
+          status: M
+          fallback: false
+          fallback_reason: null
+          parse_error_present: false
+          function_changes:
+            - name: calc
+              type: function
+              change_type: modified
+              signature_changed: false
+              body_changed: true
+
   - name: java-analysis-unavailable-evidence-coverage
     gate: generate-change-evidence
     env:
@@ -991,7 +1146,8 @@ cases:
         - cross-commit cumulative risk
         - non-Python semantic analysis
         - complete dynamic obfuscation recovery
-        - deep semantic analysis not yet implemented for .java (java adapter stub)
+        - "java gov_level analysis unavailable for app/AccountService.java: java analysis unavailable: simulated tree-sitter import failure"
+        - "java .java layers not available: callgraph, capabilities"
       verdict_statement: no governance violation detected
 
   - name: function-classification
@@ -1550,6 +1706,193 @@ cases:
       verdict: pass
       exit_code: 0
       errors_present: false
+
+  - name: function-gov-python-syntax-error-protected
+    gate: check-function-gov-level
+    group: parity
+    input:
+      fixture_dir: tests/fixtures/function-gov-level/syntax-error-protected
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      errors_present: true
+      protected_touched:
+        - path: app/service.py
+          name: <file>
+          level: protected
+          side: head
+          errors: [fail_closed]
+
+  - name: java-gov-declared-frozen
+    gate: check-function-gov-level
+    group: parity
+    input:
+      fixture_dir: tests/fixtures/java-gov-level/gov-frozen
+    expect:
+      verdict: blocked
+      exit_code: 1
+      frozen_touched:
+        - path: app/LedgerService.java
+          name: LedgerService.writeEntry
+          level: frozen
+          side: base
+          errors: []
+        - path: app/LedgerService.java
+          name: LedgerService.writeEntry
+          level: frozen
+          side: head
+          errors: []
+
+  - name: parity-python-gov-frozen
+    gate: check-function-gov-level
+    group: parity
+    input:
+      fixture_dir: tests/fixtures/function-gov-level/frozen-removal
+    expect:
+      verdict: blocked
+      exit_code: 1
+      frozen_touched:
+        - path: app/service.py
+          name: ledger_write
+          level: frozen
+          side: base
+          errors: []
+
+  - name: java-gov-syntax-error-preauthorize
+    gate: check-function-gov-level
+    group: parity
+    input:
+      fixture_dir: tests/fixtures/java-gov-level/syntax-error-preauthorize
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      errors_present: true
+      protected_touched:
+        - path: app/AuthController.java
+          name: <file>
+          level: protected
+          side: head
+          errors: [fail_closed]
+        - path: app/AuthController.java
+          name: AuthController.resetPassword
+          level: protected
+          side: base
+          errors: []
+
+  - name: java-spring-preauthorize-removal
+    gate: check-function-gov-level
+    input:
+      fixture_dir: tests/fixtures/java-gov-level/preauthorize-removal
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      protected_touched:
+        - path: app/AuthController.java
+          name: AuthController.resetPassword
+          level: protected
+          side: base
+          errors: []
+
+  - name: java-spring-transactional-watched
+    gate: check-function-gov-level
+    input:
+      fixture_dir: tests/fixtures/java-gov-level/transactional-watched
+    expect:
+      verdict: pass
+      exit_code: 0
+      watched_touched:
+        - path: app/PaymentService.java
+          name: PaymentService.refreshCache
+          level: watched
+          side: base
+          errors: []
+        - path: app/PaymentService.java
+          name: PaymentService.refreshCache
+          level: watched
+          side: head
+          errors: []
+
+  - name: java-spring-native-query-protected
+    gate: check-function-gov-level
+    input:
+      fixture_dir: tests/fixtures/java-gov-level/native-query
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      protected_touched:
+        - path: app/AccountRepository.java
+          name: AccountRepository.rewriteBalance
+          level: protected
+          side: base
+          errors: []
+        - path: app/AccountRepository.java
+          name: AccountRepository.rewriteBalance
+          level: protected
+          side: head
+          errors: []
+
+  - name: java-spring-fqn-preauthorize
+    gate: check-function-gov-level
+    input:
+      fixture_dir: tests/fixtures/java-gov-level/fqn-preauthorize
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      protected_touched:
+        - path: app/Guard.java
+          name: Guard.enforce
+          level: protected
+          side: base
+          errors: []
+        - path: app/Guard.java
+          name: Guard.enforce
+          level: protected
+          side: head
+          errors: []
+
+  - name: java-spring-jpql-query-pass
+    gate: check-function-gov-level
+    input:
+      fixture_dir: tests/fixtures/java-gov-level/jpql-query-pass
+    expect:
+      verdict: pass
+      exit_code: 0
+      errors_present: false
+
+  - name: java-gov-invalid-approval
+    gate: check-function-gov-level
+    input:
+      fixture_dir: tests/fixtures/java-gov-level/invalid-gov
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      protected_touched:
+        - path: app/InvalidGov.java
+          name: InvalidGov.guarded
+          level: protected
+          side: base
+          errors: [missing_reason, unresolved]
+        - path: app/InvalidGov.java
+          name: InvalidGov.guarded
+          level: protected
+          side: head
+          errors: [missing_reason, unresolved]
+
+  - name: java-framework-policy-missing
+    gate: check-function-gov-level
+    input:
+      fixture_dir: tests/fixtures/java-gov-level/missing-framework-policy
+      framework_annotations: tests/fixtures/java-gov-level/missing-framework-policy/no-such-policy.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      errors_present: true
+      protected_touched:
+        - path: <unknown>
+          name: <file>
+          level: protected
+          side: head
+          errors: [fail_closed]
 
   - name: python-capabilities
     gate: extract-python-capabilities

@@ -12,8 +12,8 @@ apiVersion: harness-spine/v1
 kind: kit
 metadata:
   name: ai-change-governance
-  version: "0.3.1-mvp3-j1"              # 완료 MVP 스냅샷 (sync-from-dev.sh 로 갱신)
-  reflects_mvp: [MVP-0, MVP-1, MVP-1.5, MVP-2, MVP-3-J0, MVP-3-J1]
+  version: "0.3.2-mvp3-j2"              # 완료 MVP 스냅샷 (sync-from-dev.sh 로 갱신)
+  reflects_mvp: [MVP-0, MVP-1, MVP-1.5, MVP-2, MVP-3-J0, MVP-3-J1, MVP-3-J2]
   description: >
     AI 가 만든 코드 변경(diff)을 결정적으로 걸러 "선언 의도 밖 / 필수 변경 파일 부재 /
     민감영역 접촉 / 신규 위험능력 / sink 간접영향 / 정책 자기무력화"만 사람 승인으로 라우팅하는 게이트. 판정에 LLM 없음.
@@ -37,7 +37,7 @@ gates:
   runtime_verdict:
     - { id: check-change-intent,        layer: L1,        verdict: [pass, approval_required, blocked], detects: [scope_violation, missing_expected_paths] }
     - { id: check-sensitive-zones,      layer: L1,        verdict: [pass, approval_required, blocked] }
-    - { id: check-function-gov-level,   layer: L1,        verdict: [pass, approval_required, blocked] }
+    - { id: check-function-gov-level,   layer: L1,        verdict: [pass, approval_required, blocked], detects: [python_gov_annotations, java_gov_annotations, java_framework_annotations] }
     - { id: check-new-capabilities,     layer: L2,        verdict: [pass, approval_required] }
     - { id: check-indirect-impact,      layer: L3,        verdict: [pass, approval_required] }
     - { id: check-policy-change,        layer: meta,      verdict: [pass, approval_required] }
@@ -66,6 +66,7 @@ policies:
   - policies/approval-routing.yaml
   - policies/sink-registry.yaml
   - policies/language-routing.yaml
+  - policies/framework-annotations.yaml
   # change-intent 는 대상 repo 가 제공(킷은 template/example 만 동봉)
 
 # ── 증거 산출(선언 경로 + 스키마) ────────────────────────────────────

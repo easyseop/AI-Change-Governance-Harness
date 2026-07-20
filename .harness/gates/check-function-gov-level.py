@@ -30,6 +30,9 @@ classify_gate = load_gate_module(
     "classify-python-function-changes.py", "classify_python_function_changes_gate"
 )
 gov_gate = load_gate_module("extract-gov-annotations.py", "extract_gov_annotations_gate")
+java_inventory_gate = load_gate_module(
+    "extract-java-inventory.py", "extract_java_inventory_gate"
+)
 
 
 def normalize_path(path):
@@ -68,6 +71,56 @@ def load_policy(path):
         "block_levels": defaults.get("block_levels") or [],
         "approve_levels": defaults.get("approve_levels") or [],
         "warn_levels": defaults.get("warn_levels") or [],
+    }
+
+
+def simple_annotation_name(name):
+    return str(name or "").strip().lstrip("@").split("(", 1)[0].split(".")[-1]
+
+
+def load_framework_policy(path):
+    if not path:
+        return {
+            "annotations": {},
+            "errors": [],
+            "unresolved_argument": "match",
+        }
+    if not Path(path).exists():
+        return {
+            "annotations": {},
+            "errors": [f"framework annotations policy missing: {path}"],
+            "unresolved_argument": "match",
+        }
+
+    with open(path, "r", encoding="utf-8") as stream:
+        data = yaml.safe_load(stream) or {}
+
+    defaults = data.get("defaults") or {}
+    allowed = set(defaults.get("allowed_levels") or ["protected", "watched"])
+    annotations = {}
+    errors = []
+    for index, item in enumerate(data.get("annotations") or []):
+        name = item.get("name")
+        if not name:
+            errors.append(f"framework annotation missing name at index {index}")
+            continue
+        simple = simple_annotation_name(name)
+        if simple in annotations:
+            errors.append(f"duplicate framework annotation: {simple}")
+        record = dict(item)
+        if record.get("level") not in allowed:
+            errors.append(f"invalid framework level for {simple}: {record.get('level')}")
+            record["level"] = "protected"
+        if not record.get("reason"):
+            errors.append(f"framework annotation missing reason: {simple}")
+        if not record.get("reviewer"):
+            errors.append(f"framework annotation missing reviewer: {simple}")
+        annotations[simple] = record
+
+    return {
+        "annotations": annotations,
+        "errors": errors,
+        "unresolved_argument": defaults.get("unresolved_argument", "match"),
     }
 
 
@@ -128,6 +181,20 @@ def extract_annotations_at_ref(ref, path, repo):
     return gov_gate.parse_source(source, path)
 
 
+def extract_java_annotations_at_ref(ref, path, repo, policy, framework_policy):
+    try:
+        source = source_at_ref(ref, path, repo)
+    except (RuntimeError, UnicodeDecodeError, UnicodeEncodeError) as error:
+        return {
+            "path": path,
+            "module": None,
+            "annotations": [],
+            "parse_error": False,
+            "unreadable": f"unreadable source: {error}",
+        }
+    return java_result_from_source(source, path, policy, framework_policy)
+
+
 def annotation_index(result):
     return {
         (annotation.get("name"), annotation.get("def_line")): annotation
@@ -145,6 +212,289 @@ def annotation_level(annotation):
     if not annotation:
         return None
     return annotation.get("effective_level") or annotation.get("level")
+
+
+def annotation_argument_text(text):
+    if "(" not in text or not text.rstrip().endswith(")"):
+        return ""
+    return text[text.find("(") + 1 : text.rfind(")")]
+
+
+def split_top_level_args(value):
+    args = []
+    current = []
+    depth = 0
+    quote = None
+    escape = False
+    for char in value:
+        if quote:
+            current.append(char)
+            if escape:
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == quote:
+                quote = None
+            continue
+        if char in ("'", '"'):
+            quote = char
+            current.append(char)
+        elif char in "({[":
+            depth += 1
+            current.append(char)
+        elif char in ")}]":
+            depth = max(0, depth - 1)
+            current.append(char)
+        elif char == "," and depth == 0:
+            args.append("".join(current).strip())
+            current = []
+        else:
+            current.append(char)
+    if current or value.strip():
+        args.append("".join(current).strip())
+    return [arg for arg in args if arg]
+
+
+def parse_java_annotation_args(text):
+    parsed = {}
+    duplicates = set()
+    positional = []
+    for arg in split_top_level_args(annotation_argument_text(text)):
+        if "=" not in arg:
+            positional.append(arg)
+            continue
+        key, raw_value = arg.split("=", 1)
+        key = key.strip()
+        if key in parsed:
+            duplicates.add(key)
+        parsed.setdefault(key, []).append(raw_value.strip())
+    return parsed, duplicates, positional
+
+
+def string_literal_value(raw_value):
+    raw_value = raw_value.strip()
+    if len(raw_value) >= 2 and raw_value[0] == raw_value[-1] and raw_value[0] in ("'", '"'):
+        return raw_value[1:-1]
+    return None
+
+
+def bool_literal_value(raw_value):
+    raw_value = raw_value.strip()
+    if raw_value in ("true", "false"):
+        return raw_value
+    value = string_literal_value(raw_value)
+    if value in ("true", "false"):
+        return value
+    return None
+
+
+def java_annotation_nodes(source):
+    source_bytes = source.encode("utf-8")
+    parser = java_inventory_gate.make_java_parser()
+    tree = parser.parse(source_bytes)
+    root = tree.root_node
+    if root.has_error:
+        raise SyntaxError("syntax error")
+    records = []
+
+    def annotations_for(node):
+        modifiers = node.child_by_field_name("modifiers")
+        if modifiers is None:
+            for child in node.named_children:
+                if child.type == "modifiers":
+                    modifiers = child
+                    break
+        annotations = []
+        if modifiers is None:
+            return annotations
+        for child in modifiers.named_children:
+            if child.type.endswith("annotation"):
+                text = java_inventory_gate.node_text(source_bytes, child).strip()
+                annotations.append(
+                    {
+                        "name": simple_annotation_name(text),
+                        "text": text,
+                        "line": java_inventory_gate.node_line(child),
+                    }
+                )
+        return annotations
+
+    def visit(node, class_stack, inherited):
+        if node.type in java_inventory_gate.DECLARATION_TYPES:
+            local_name = java_inventory_gate.declaration_name(source_bytes, node)
+            name = java_inventory_gate.normalized_name(class_stack, local_name, "class")
+            own = annotations_for(node)
+            records.append(
+                {
+                    "name": name,
+                    "type": "class",
+                    "def_line": java_inventory_gate.declaration_line(node),
+                    "annotations": own,
+                    "inherited": list(inherited),
+                }
+            )
+            next_inherited = inherited + [
+                {"owner": name, "annotation": annotation} for annotation in own
+            ]
+            for child in node.named_children:
+                visit(child, class_stack + [local_name], next_inherited)
+            return
+        if node.type in java_inventory_gate.CALLABLE_TYPES:
+            item_type = java_inventory_gate.declaration_type(node)
+            local_name = java_inventory_gate.declaration_name(source_bytes, node)
+            records.append(
+                {
+                    "name": java_inventory_gate.normalized_name(
+                        class_stack, local_name, item_type
+                    ),
+                    "type": item_type,
+                    "def_line": java_inventory_gate.declaration_line(node),
+                    "annotations": annotations_for(node),
+                    "inherited": list(inherited),
+                }
+            )
+        for child in node.named_children:
+            visit(child, class_stack, inherited)
+
+    visit(root, [], [])
+    return records
+
+
+def level_from_gov_annotation(annotation, policy):
+    args, duplicates, positional = parse_java_annotation_args(annotation["text"])
+    errors = []
+    if positional:
+        errors.append("positional")
+    errors.extend(f"duplicate_{key}" for key in sorted(duplicates))
+    errors.extend(f"unknown_field:{key}" for key in sorted(set(args) - {"level", "reason", "owner"}))
+
+    levels = []
+    for raw in args.get("level") or []:
+        value = string_literal_value(raw)
+        if value is None:
+            errors.append("unresolved")
+        elif not level_strength(value, policy):
+            errors.append("invalid_level")
+        else:
+            levels.append(value)
+
+    reason = next(
+        (value for value in (string_literal_value(raw) for raw in args.get("reason") or []) if value),
+        None,
+    )
+    if not reason:
+        errors.append("missing_reason")
+
+    return {
+        "level": strongest_level(levels, policy) or "protected",
+        "reason": reason,
+        "errors": sorted(set(errors)),
+        "source": "declared_gov",
+    }
+
+
+def framework_annotation_record(annotation, framework_policy):
+    item = framework_policy["annotations"].get(simple_annotation_name(annotation["name"]))
+    if not item:
+        return None
+    errors = []
+    when = item.get("when")
+    if when:
+        args, _, _ = parse_java_annotation_args(annotation["text"])
+        values = args.get(when.get("argument")) or []
+        if not values:
+            return None
+        expected = str(when.get("equals")).lower()
+        matched = False
+        unresolved = False
+        for raw in values:
+            value = bool_literal_value(raw)
+            if value is None:
+                unresolved = True
+            elif value == expected:
+                matched = True
+        if not matched:
+            if unresolved and framework_policy.get("unresolved_argument") == "match":
+                errors.append("unresolved_argument")
+            else:
+                return None
+    return {
+        "level": item.get("level"),
+        "reason": item.get("reason"),
+        "errors": errors,
+        "source": "framework",
+        "entrypoint": bool(item.get("entrypoint")),
+    }
+
+
+def java_records_for_node(node, policy, framework_policy):
+    records = []
+    for inherited in node.get("inherited", []):
+        annotation = inherited["annotation"]
+        if simple_annotation_name(annotation["name"]) == "Gov":
+            records.append(level_from_gov_annotation(annotation, policy))
+    for annotation in node["annotations"]:
+        if simple_annotation_name(annotation["name"]) == "Gov":
+            records.append(level_from_gov_annotation(annotation, policy))
+        framework = framework_annotation_record(annotation, framework_policy)
+        if framework:
+            records.append(framework)
+    return records
+
+
+def java_result_from_source(source, path, policy, framework_policy):
+    try:
+        nodes = java_annotation_nodes(source)
+    except SyntaxError as error:
+        return {
+            "path": path,
+            "module": None,
+            "annotations": [],
+            "parse_error": str(error),
+            "unavailable_kind": "syntax",
+            "unreadable": None,
+        }
+    except (ImportError, OSError) as error:
+        return {
+            "path": path,
+            "module": None,
+            "annotations": [],
+            "parse_error": f"java analysis unavailable: {error}",
+            "unavailable_kind": "toolchain",
+            "unreadable": None,
+        }
+
+    annotations = []
+    for node in nodes:
+        records = java_records_for_node(node, policy, framework_policy)
+        levels = [record["level"] for record in records]
+        level = strongest_level(levels, policy) if levels else None
+        if not level:
+            continue
+        reason = next((record.get("reason") for record in records if record.get("reason")), None)
+        annotations.append(
+            {
+                "name": node["name"],
+                "type": node["type"],
+                "def_line": node["def_line"],
+                "effective_level": level,
+                "level": level,
+                "reason": reason,
+                "errors": sorted(
+                    {error for record in records for error in record.get("errors", [])}
+                ),
+                "unresolved": False,
+                "sources": sorted({record["source"] for record in records}),
+            }
+        )
+    return {
+        "path": path,
+        "module": None,
+        "annotations": annotations,
+        "parse_error": None,
+        "unavailable_kind": None,
+        "unreadable": None,
+    }
 
 
 def module_annotation(result):
@@ -181,11 +531,19 @@ def parse_failed(result):
     return bool(result.get("parse_error") or result.get("unreadable"))
 
 
+def java_toolchain_unavailable(result):
+    return result.get("unavailable_kind") == "toolchain"
+
+
+def java_syntax_unavailable(result):
+    return result.get("unavailable_kind") == "syntax"
+
+
 def changed_candidates_from_map(mapping):
     candidates = []
     for file_record in mapping.get("files", []):
         path = normalize_path(file_record.get("path", ""))
-        if not path.endswith(".py"):
+        if not path.endswith((".py", ".java")):
             continue
         for function in file_record.get("touched_functions", []):
             candidates.append(
@@ -205,7 +563,7 @@ def changed_candidates_from_classification(classification):
     candidates = []
     for file_record in classification.get("files", []):
         path = normalize_path(file_record.get("path", ""))
-        if not path.endswith(".py"):
+        if not path.endswith((".py", ".java")):
             continue
         if file_record.get("fallback"):
             candidates.append(
@@ -338,6 +696,25 @@ def fail_closed_record(path, reason, level="protected", side="head"):
     }
 
 
+def sensitive_annotation_records(path, result, policy, side):
+    records = []
+    for annotation in result.get("annotations", []):
+        level = annotation_level(annotation)
+        if level in policy["block_levels"] or level in policy["approve_levels"]:
+            records.append(
+                {
+                    "path": path,
+                    "name": annotation.get("name"),
+                    "level": level,
+                    "side": side,
+                    "reason": annotation.get("reason"),
+                    "errors": annotation_errors(annotation),
+                    "def_line": annotation.get("def_line"),
+                }
+            )
+    return records
+
+
 def public_record(record):
     result = {
         "path": record["path"],
@@ -395,9 +772,10 @@ def classify_records(records, policy):
     return verdict, exit_code, frozen_touched, protected_touched, watched_touched
 
 
-def check_function_gov_level(rev_range, sensitive_zones, repo="."):
+def check_function_gov_level(rev_range, sensitive_zones, repo=".", framework_annotations=None):
     base, head = split_rev_range(rev_range)
     policy = load_policy(sensitive_zones)
+    framework_policy = load_framework_policy(framework_annotations)
     mapping = map_gate.map_diff_to_functions(rev_range, repo)
     classification = classify_gate.classify_python_function_changes(rev_range, repo)
 
@@ -408,27 +786,67 @@ def check_function_gov_level(rev_range, sensitive_zones, repo="."):
         errors.append(
             {"gate": "classify-python-function-changes", "error": classification["error"]}
         )
+    for error in framework_policy.get("errors", []):
+        errors.append({"gate": "framework-annotations", "error": error})
     upstream_errors = list(errors)
 
     candidates = unique_candidates(
         changed_candidates_from_map(mapping) + changed_candidates_from_classification(classification)
     )
-    paths = sorted({candidate["path"] for candidate in candidates if candidate["path"].endswith(".py")})
+    paths = sorted(
+        {
+            candidate["path"]
+            for candidate in candidates
+            if candidate["path"].endswith((".py", ".java"))
+        }
+    )
     records = []
+    coverage_not_checked = []
 
     for path in paths:
         base_exists = path_exists_at_ref(base, path, repo)
         head_exists = path_exists_at_ref(head, path, repo)
-        base_result = (
-            extract_annotations_at_ref(base, path, repo)
-            if base_exists
-            else absent_annotation_result(path)
-        )
-        head_result = (
-            extract_annotations_at_ref(head, path, repo)
-            if head_exists
-            else absent_annotation_result(path)
-        )
+        if path.endswith(".java"):
+            base_result = (
+                extract_java_annotations_at_ref(base, path, repo, policy, framework_policy)
+                if base_exists
+                else absent_annotation_result(path)
+            )
+            head_result = (
+                extract_java_annotations_at_ref(head, path, repo, policy, framework_policy)
+                if head_exists
+                else absent_annotation_result(path)
+            )
+        else:
+            base_result = (
+                extract_annotations_at_ref(base, path, repo)
+                if base_exists
+                else absent_annotation_result(path)
+            )
+            head_result = (
+                extract_annotations_at_ref(head, path, repo)
+                if head_exists
+                else absent_annotation_result(path)
+            )
+
+        if path.endswith(".java") and (
+            (base_exists and java_toolchain_unavailable(base_result))
+            or (head_exists and java_toolchain_unavailable(head_result))
+        ):
+            messages = sorted(
+                {
+                    str(item)
+                    for item in (
+                        base_result.get("parse_error") or base_result.get("unreadable"),
+                        head_result.get("parse_error") or head_result.get("unreadable"),
+                    )
+                    if item
+                }
+            )
+            coverage_not_checked.append(
+                f"java gov_level analysis unavailable for {path}: {'; '.join(messages)}"
+            )
+            continue
 
         if base_exists and parse_failed(base_result):
             errors.append(
@@ -455,6 +873,8 @@ def check_function_gov_level(rev_range, sensitive_zones, repo="."):
             )
             base_sensitive_levels = sensitive_levels_in_result(base_result, policy)
             base_level = strongest_level(base_sensitive_levels, policy)
+            if path.endswith(".java") and java_syntax_unavailable(head_result):
+                records.extend(sensitive_annotation_records(path, base_result, policy, "base"))
             records.append(
                 fail_closed_record(
                     path,
@@ -500,6 +920,7 @@ def check_function_gov_level(rev_range, sensitive_zones, repo="."):
         "protected_touched": protected_touched,
         "watched_touched": watched_touched,
         "errors": errors,
+        "coverage_not_checked": sorted(set(coverage_not_checked)),
         "exit_code": exit_code,
     }
 
@@ -526,12 +947,22 @@ def main():
     )
     parser.add_argument("diff_input", help="git diff ref range, for example <base>..<head>")
     parser.add_argument("sensitive_zones", help="policies/sensitive-zones.yaml path")
+    parser.add_argument(
+        "--framework-annotations",
+        default=None,
+        help="policies/framework-annotations.yaml path for Java/Spring annotations",
+    )
     parser.add_argument("--repo", default=".", help="git repository to inspect")
     parser.add_argument("--json", action="store_true", help="print structured JSON")
     args = parser.parse_args()
 
     try:
-        result = check_function_gov_level(args.diff_input, args.sensitive_zones, args.repo)
+        result = check_function_gov_level(
+            args.diff_input,
+            args.sensitive_zones,
+            args.repo,
+            args.framework_annotations,
+        )
     except Exception as error:
         result = {
             "gate": "check-function-gov-level",
