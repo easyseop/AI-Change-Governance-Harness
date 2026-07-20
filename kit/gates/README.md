@@ -11,6 +11,7 @@ MVP-0 에서 만들 게이트:
 | `check-sensitive-zones.py` | TASK-002 | diff 가 민감 경로(frozen/protected/watched)를 건드렸나 |
 | `generate-change-evidence.py` | TASK-003 | 위 결과+routing 으로 변경 감사카드 생성 |
 | `extract-python-inventory.py` | TASK-005 | Python 함수/클래스 인벤토리 추출 |
+| `extract-java-inventory.py` | TASK-030 | Java 클래스/메서드/생성자 인벤토리 추출 |
 | `map-diff-to-functions.py` | TASK-006 | git diff 헝크를 after 버전 함수/클래스에 매핑 |
 | `classify-python-function-changes.py` | TASK-007 | before/after 함수 변경을 added/modified/deleted 로 분류 |
 | `extract-gov-annotations.py` | TASK-008 | Python `@gov`/`__gov__` 주석을 추출·검증 |

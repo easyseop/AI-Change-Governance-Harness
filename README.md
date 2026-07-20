@@ -45,6 +45,7 @@ python3 .harness/gates/check-change-intent.py <base>..<head> change-intent.yaml
 python3 .harness/gates/check-sensitive-zones.py <base>..<head> policies/sensitive-zones.yaml
 python3 .harness/gates/generate-change-evidence.py <base>..<head> --change-intent change-intent.yaml
 python3 .harness/gates/extract-python-inventory.py path/to/file.py --json
+python3 .harness/gates/extract-java-inventory.py path/to/file.java --json
 python3 .harness/gates/map-diff-to-functions.py <base>..<head> --json
 python3 .harness/gates/classify-python-function-changes.py <base>..<head> --json
 python3 .harness/gates/extract-gov-annotations.py path/to/file.py --json

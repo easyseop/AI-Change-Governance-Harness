@@ -12,8 +12,8 @@ apiVersion: harness-spine/v1
 kind: kit
 metadata:
   name: ai-change-governance
-  version: "0.3.0-mvp3-j0"              # 완료 MVP 스냅샷 (sync-from-dev.sh 로 갱신)
-  reflects_mvp: [MVP-0, MVP-1, MVP-1.5, MVP-2, MVP-3-J0]
+  version: "0.3.1-mvp3-j1"              # 완료 MVP 스냅샷 (sync-from-dev.sh 로 갱신)
+  reflects_mvp: [MVP-0, MVP-1, MVP-1.5, MVP-2, MVP-3-J0, MVP-3-J1]
   description: >
     AI 가 만든 코드 변경(diff)을 결정적으로 걸러 "선언 의도 밖 / 필수 변경 파일 부재 /
     민감영역 접촉 / 신규 위험능력 / sink 간접영향 / 정책 자기무력화"만 사람 승인으로 라우팅하는 게이트. 판정에 LLM 없음.
@@ -29,7 +29,7 @@ hooks:
       produces:
         - evidence/change-evidence.yaml
 
-# ── 조립되는 게이트 전량(★누락 검증용 명시 목록 — 18종) ──────────────
+# ── 조립되는 게이트 전량(★누락 검증용 명시 목록 — 19종) ──────────────
 # runtime_verdict = run.sh 가 조립하는 판정 게이트
 # extraction_internal = 판정 게이트가 내부 import(Path(__file__).parent) — 직접 호출 안 하나 co-located 필수
 # tools_offline = spine hook 아님(온보딩/CI) — bootstrap.sh·selftest.sh 로 별도 진입
@@ -56,6 +56,8 @@ gates:
   language_j0:
     - language-router                   # 확장자별 deep-analysis 어댑터 라우팅·coverage
     - check-tree-sitter-languages       # pinned tree-sitter Java/JS/TS/TSX 로드·파싱 스모크
+  language_j1:
+    - extract-java-inventory            # Java 클래스/메서드/생성자 인벤토리 추출
 
 # ── 정책(코드 밖 YAML · inline 금지) ─────────────────────────────────
 policies:
