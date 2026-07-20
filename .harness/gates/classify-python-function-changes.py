@@ -169,12 +169,12 @@ def extract_inventory(source, source_path):
 
 
 def load_java_inventory_module():
-    path = Path(
-        os.environ.get(
-            "ACGH_JAVA_INVENTORY_PATH",
-            Path(__file__).resolve().parent / "extract-java-inventory.py",
-        )
-    )
+    default_path = Path(__file__).resolve().parent / "extract-java-inventory.py"
+    override_path = os.environ.get("ACGH_JAVA_INVENTORY_PATH")
+    if override_path and os.environ.get("ACGH_ALLOW_TEST_OVERRIDES") == "1":
+        path = Path(override_path)
+    else:
+        path = default_path
     if not path.exists():
         raise ImportError(f"java inventory gate missing: {path}")
     spec = importlib.util.spec_from_file_location("extract_java_inventory_gate", path)

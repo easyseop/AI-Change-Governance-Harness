@@ -76,9 +76,9 @@ Tree-sitter 기반 스모크를 배포지에서 재현하려면 `python3 -m pip 
 ./sync-from-dev.sh
 ```
 
-`--policies` override 디렉터리는 아래 6개 파일을 모두 포함해야 한다:
-`sensitive-zones.yaml`, `sensitive-capabilities.yaml`, `approval-routing.yaml`,
-`sink-registry.yaml`, `language-routing.yaml`, `framework-annotations.yaml`.
+`--policies` override 디렉터리는 아래 7개 파일을 모두 포함해야 한다:
+`sensitive-zones.yaml`, `sensitive-capabilities.yaml`, `java-sensitive-capabilities.yaml`,
+`approval-routing.yaml`, `sink-registry.yaml`, `language-routing.yaml`, `framework-annotations.yaml`.
 기존 도입처가 킷을 업그레이드할 때는 킷 동봉 `policies/language-routing.yaml` 을
 override 디렉터리에 복사한 뒤 실행한다.
 

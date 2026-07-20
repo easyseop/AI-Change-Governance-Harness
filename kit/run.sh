@@ -21,6 +21,7 @@ G="$KIT/gates"
 POL="$KIT/policies"
 ZONES="$POL/sensitive-zones.yaml"
 CAPS="$POL/sensitive-capabilities.yaml"
+JAVA_CAPS="$POL/java-sensitive-capabilities.yaml"
 ROUTING="$POL/approval-routing.yaml"
 SINKS="$POL/sink-registry.yaml"
 LANGUAGE_ROUTING="$POL/language-routing.yaml"
@@ -43,11 +44,12 @@ fi
 POL="$(cd "$POL" && pwd)"
 ZONES="$POL/sensitive-zones.yaml"
 CAPS="$POL/sensitive-capabilities.yaml"
+JAVA_CAPS="$POL/java-sensitive-capabilities.yaml"
 ROUTING="$POL/approval-routing.yaml"
 SINKS="$POL/sink-registry.yaml"
 LANGUAGE_ROUTING="$POL/language-routing.yaml"
 FRAMEWORK_ANNOTATIONS="$POL/framework-annotations.yaml"
-for required_policy in "$ZONES" "$CAPS" "$ROUTING" "$SINKS" "$LANGUAGE_ROUTING" "$FRAMEWORK_ANNOTATIONS"; do
+for required_policy in "$ZONES" "$CAPS" "$JAVA_CAPS" "$ROUTING" "$SINKS" "$LANGUAGE_ROUTING" "$FRAMEWORK_ANNOTATIONS"; do
   if [ ! -f "$required_policy" ]; then
     echo "✗ 분석 실패: 필수 정책 파일 없음: $required_policy"
     echo "  tool_owner: change-governance-kit-owner"
@@ -176,7 +178,7 @@ fi
 cap_exit=0
 echo "▸ [2층] 신규 위험 능력 (외부호출·암복호·실행 등 신규 도입?)"
 if [ "$HAS_RANGE" = 1 ]; then
-  run_gate "check-new-capabilities" "0 2" "$G/check-new-capabilities.py" "$RANGE" "$CAPS" --repo .
+  run_gate "check-new-capabilities" "0 2" "$G/check-new-capabilities.py" "$RANGE" "$CAPS" --java-policy "$JAVA_CAPS" --repo .
   CAP_OUT="$RUN_OUTPUT"; cap_exit="$RUN_EXIT"
   if [ "$RUN_FAILED" = 1 ]; then show_analysis_failure "check-new-capabilities"; else
     printf '%s\n' "$CAP_OUT" | head -6 | sed 's/^/    /'

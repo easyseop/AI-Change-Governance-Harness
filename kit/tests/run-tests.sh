@@ -25,6 +25,7 @@ GATES = {
     "extract-gov-annotations": ".harness/gates/extract-gov-annotations.py",
     "check-function-gov-level": ".harness/gates/check-function-gov-level.py",
     "extract-python-capabilities": ".harness/gates/extract-python-capabilities.py",
+    "extract-java-capabilities": ".harness/gates/extract-java-capabilities.py",
     "check-new-capabilities": ".harness/gates/check-new-capabilities.py",
     "check-policy-change": ".harness/gates/check-policy-change.py",
     "bootstrap-sensitive-zones": ".harness/gates/bootstrap-sensitive-zones.py",
@@ -203,6 +204,17 @@ def case_command(case):
         command.append("--json")
         return command
 
+    if gate == "extract-java-capabilities":
+        command = [
+            "python3",
+            script,
+            data["source_file"],
+        ]
+        if data.get("policy"):
+            command.append(data["policy"])
+        command.append("--json")
+        return command
+
     if gate == "map-diff-to-functions":
         work_dir, rev_range = prepare_function_mapping_fixture(data["fixture_dir"])
         return [
@@ -250,6 +262,8 @@ def case_command(case):
             work_dir,
             "--json",
         ]
+        if data.get("java_policy"):
+            command.extend(["--java-policy", f"{ROOT_DIR}/{data['java_policy']}"])
         return command
 
     if gate == "check-policy-change":
@@ -1175,7 +1189,7 @@ def main():
                 errors = validate_gov_annotations(case, result, completed.returncode)
             elif case["gate"] == "check-function-gov-level":
                 errors = validate_function_gov_level(case, result, completed.returncode)
-            elif case["gate"] == "extract-python-capabilities":
+            elif case["gate"] in ("extract-python-capabilities", "extract-java-capabilities"):
                 errors = validate_python_capabilities(case, result, completed.returncode)
             elif case["gate"] == "check-new-capabilities":
                 errors = validate_new_capabilities(case, result, completed.returncode)
