@@ -1,8 +1,9 @@
 # Common language adapter IR contract (MVP-3 J0)
 #
-# J0 introduces the schema and routing seam only. Java/JS/TS adapters are
-# stubs until TASK-030+; unsupported/stubbed files must be reflected in
-# coverage instead of being treated as deeply analyzed.
+# J0 introduced the schema and routing seam. TASK-030 adds Java inventory;
+# Java gov/capability/callgraph and JS/TS adapters still remain stubbed.
+# Unsupported/stubbed files must be reflected in coverage instead of being
+# treated as deeply analyzed.
 
 inventory:
   path: string

@@ -19,7 +19,7 @@ DEV_ROOT="$(cd "$KIT_DIR/.." && pwd)"
 
 echo "▶ 동기화: dev=$DEV_ROOT → kit=$KIT_DIR"
 
-# 1) 게이트 전체 (16종 + gates/README) — co-located 필수
+# 1) 게이트 전체 (현재 dev 전체 + gates/README) — co-located 필수
 rm -rf "$KIT_DIR/gates"; mkdir -p "$KIT_DIR/gates"
 cp "$DEV_ROOT"/.harness/gates/*.py "$KIT_DIR/gates/"
 [ -f "$DEV_ROOT/.harness/gates/language-ir.schema.yaml" ] && cp "$DEV_ROOT/.harness/gates/language-ir.schema.yaml" "$KIT_DIR/gates/"

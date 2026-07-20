@@ -19,6 +19,7 @@ GATES = {
     "check-sensitive-zones": ".harness/gates/check-sensitive-zones.py",
     "generate-change-evidence": ".harness/gates/generate-change-evidence.py",
     "extract-python-inventory": ".harness/gates/extract-python-inventory.py",
+    "extract-java-inventory": ".harness/gates/extract-java-inventory.py",
     "map-diff-to-functions": ".harness/gates/map-diff-to-functions.py",
     "classify-python-function-changes": ".harness/gates/classify-python-function-changes.py",
     "extract-gov-annotations": ".harness/gates/extract-gov-annotations.py",
@@ -155,7 +156,7 @@ def case_command(case):
             command.extend(["--numstat-input", data["numstat"]])
         return command
 
-    if gate == "extract-python-inventory":
+    if gate in ("extract-python-inventory", "extract-java-inventory"):
         return [
             "python3",
             script,
@@ -1133,7 +1134,7 @@ def main():
             result = load_output(case["gate"], completed.stdout)
             if case["gate"] == "generate-change-evidence":
                 errors = validate_evidence(case, result, completed.returncode)
-            elif case["gate"] == "extract-python-inventory":
+            elif case["gate"] in ("extract-python-inventory", "extract-java-inventory"):
                 errors = validate_inventory(case, result, completed.returncode)
             elif case["gate"] == "map-diff-to-functions":
                 errors = validate_function_mapping(case, result, completed.returncode)

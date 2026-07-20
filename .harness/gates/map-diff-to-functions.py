@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 import argparse
 import ast
+import importlib.util
 import json
+from pathlib import Path
 import re
 import subprocess
 import sys
@@ -186,12 +188,40 @@ def extract_inventory(source, source_path):
     }
 
 
+def load_java_inventory_module():
+    path = Path(__file__).resolve().parent / "extract-java-inventory.py"
+    spec = importlib.util.spec_from_file_location("extract_java_inventory_gate", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def extract_java_inventory(source, source_path):
+    try:
+        module = load_java_inventory_module()
+        return module.extract_inventory(source, source_path)
+    except (ImportError, OSError) as error:
+        return {
+            "source": source_path,
+            "lang": "java",
+            "items": [],
+            "parse_error": f"java analysis unavailable: {error}",
+        }
+
+
 def source_at_ref(ref, path, repo):
     return run_git(["show", f"{ref}:{path}"], repo)
 
 
+def item_start_line(item):
+    return item.get(
+        "decorator_start_line",
+        item.get("signature_start_line", item.get("start_line")),
+    )
+
+
 def line_touches_item(line_number, item):
-    return item["decorator_start_line"] <= line_number <= item["end_line"]
+    return item_start_line(item) <= line_number <= item["end_line"]
 
 
 def touched_functions(hunk, inventory):
@@ -204,7 +234,8 @@ def touched_functions(hunk, inventory):
                     "type": item["type"],
                     "start_line": item["start_line"],
                     "end_line": item["end_line"],
-                    "decorator_start_line": item["decorator_start_line"],
+                    "decorator_start_line": item_start_line(item),
+                    "signature_start_line": item_start_line(item),
                 }
             )
 
@@ -223,6 +254,7 @@ def unique_functions(records):
             record.get("start_line"),
             record.get("end_line"),
             record.get("decorator_start_line"),
+            record.get("signature_start_line"),
         )
         if key in seen:
             continue
@@ -242,16 +274,17 @@ def map_diff_to_functions(rev_range, repo="."):
 
     files = []
     for path in sorted(status_by_path):
+        language = "python" if path.endswith(".py") else "java" if path.endswith(".java") else "unsupported"
         file_record = {
             "path": path,
             "status": status_by_path[path],
-            "language": "python" if path.endswith(".py") else "unsupported",
+            "language": language,
             "parse_error": None,
             "hunks": [],
             "touched_functions": [],
         }
 
-        if not path.endswith(".py") or status_by_path[path].startswith("D"):
+        if language == "unsupported" or status_by_path[path].startswith("D"):
             for hunk in hunks_by_path.get(path, []):
                 mapped_hunk = dict(hunk)
                 mapped_hunk["touched_functions"] = [{"name": "<module>", "type": "module"}]
@@ -261,8 +294,12 @@ def map_diff_to_functions(rev_range, repo="."):
             continue
 
         try:
-            inventory = extract_inventory(source_at_ref(head, path, repo), path)
-        except (RuntimeError, UnicodeDecodeError, UnicodeEncodeError) as error:
+            source = source_at_ref(head, path, repo)
+            if language == "java":
+                inventory = extract_java_inventory(source, path)
+            else:
+                inventory = extract_inventory(source, path)
+        except (RuntimeError, UnicodeDecodeError, UnicodeEncodeError, ImportError, OSError) as error:
             inventory = {
                 "source": path,
                 "items": [],

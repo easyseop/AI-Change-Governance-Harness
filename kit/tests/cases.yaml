@@ -750,6 +750,80 @@ cases:
       parse_error_present: true
       items: []
 
+  - name: java-inventory
+    gate: extract-java-inventory
+    input:
+      source_file: tests/fixtures/java-inventory/valid.java
+    expect:
+      exit_code: 0
+      lang: java
+      parse_error: null
+      common_ir_fields: true
+      items:
+        - type: class
+          name: AccountService
+          start_line: 4
+          end_line: 22
+          signature_start_line: 3
+          signature: "@Service class AccountService"
+          annotations:
+            - Service
+        - type: method
+          name: AccountService.transfer
+          start_line: 6
+          end_line: 8
+          signature_start_line: 5
+          signature: "@Transactional public void transfer(String from, String to)"
+          annotations:
+            - Transactional
+        - type: method
+          name: AccountService.transfer
+          start_line: 10
+          end_line: 11
+          signature_start_line: 10
+          signature: "public void transfer(String account)"
+          annotations: []
+        - type: class
+          name: AccountService.Inner
+          start_line: 13
+          end_line: 21
+          signature_start_line: 13
+          signature: "class Inner"
+          annotations: []
+        - type: constructor
+          name: AccountService.Inner.<init>
+          start_line: 15
+          end_line: 16
+          signature_start_line: 14
+          signature: "@Secured(\"ADMIN\") Inner(int id)"
+          annotations:
+            - Secured
+        - type: method
+          name: AccountService.Inner.status
+          start_line: 18
+          end_line: 20
+          signature_start_line: 18
+          signature: "String status()"
+          annotations: []
+
+  - name: java-inventory-parse-error
+    gate: extract-java-inventory
+    input:
+      source_file: tests/fixtures/java-inventory/invalid.java
+    expect:
+      exit_code: 0
+      parse_error_present: true
+      items: []
+
+  - name: java-inventory-unreadable
+    gate: extract-java-inventory
+    input:
+      source_file: tests/fixtures/java-inventory/non_utf8.java
+    expect:
+      exit_code: 0
+      parse_error_present: true
+      items: []
+
   - name: function-mapping
     gate: map-diff-to-functions
     input:
@@ -785,6 +859,46 @@ cases:
             - transfer
           hunk_function_names:
             - [transfer]
+
+  - name: java-function-mapping
+    gate: map-diff-to-functions
+    input:
+      fixture_dir: tests/fixtures/java-function-mapping
+    expect:
+      exit_code: 0
+      files:
+        - path: app/AccountService.java
+          status: M
+          touched_function_names:
+            - AccountService
+            - AccountService.transfer
+          hunk_function_names:
+            - [AccountService, AccountService.transfer]
+            - [AccountService, AccountService.transfer]
+
+  - name: java-function-classification
+    gate: classify-python-function-changes
+    input:
+      fixture_dir: tests/fixtures/java-function-mapping
+    expect:
+      exit_code: 0
+      files:
+        - path: app/AccountService.java
+          status: M
+          fallback: false
+          fallback_reason: null
+          parse_error_present: false
+          function_changes:
+            - name: AccountService
+              type: class
+              change_type: modified
+              signature_changed: false
+              body_changed: true
+            - name: AccountService.transfer
+              type: method
+              change_type: modified
+              signature_changed: true
+              body_changed: true
 
   - name: function-classification
     gate: classify-python-function-changes

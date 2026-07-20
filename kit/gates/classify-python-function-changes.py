@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 import argparse
 import ast
+import importlib.util
 import json
 import subprocess
 import sys
+from pathlib import Path
 from pathlib import PurePosixPath
 
 
@@ -165,13 +167,69 @@ def extract_inventory(source, source_path):
     }
 
 
+def load_java_inventory_module():
+    path = Path(__file__).resolve().parent / "extract-java-inventory.py"
+    spec = importlib.util.spec_from_file_location("extract_java_inventory_gate", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def java_match_signature(signature):
+    remaining = signature
+    while remaining.startswith("@"):
+        depth = 0
+        index = 0
+        while index < len(remaining):
+            char = remaining[index]
+            if char == "(":
+                depth += 1
+            elif char == ")":
+                depth = max(0, depth - 1)
+            elif char.isspace() and depth == 0:
+                break
+            index += 1
+        remaining = remaining[index:].strip()
+    return remaining
+
+
+def augment_java_inventory(source, inventory):
+    lines = source.splitlines()
+    for item in inventory["items"]:
+        annotations = item.get("annotations", [])
+        item["decorators"] = annotations
+        item["_decorator_key"] = tuple(sorted(annotations))
+        item["_match_base"] = (item["name"], java_match_signature(item["signature"]))
+        item["_signature_dump"] = item["signature"]
+        start = max(0, item["start_line"] - 1)
+        end = max(start, item["end_line"])
+        item["_body_dump"] = "\n".join(lines[start:end])
+    assign_occurrence_keys(inventory["items"])
+    return inventory
+
+
+def extract_inventory_for_language(source, source_path, language):
+    if language == "java":
+        try:
+            module = load_java_inventory_module()
+            return augment_java_inventory(source, module.extract_inventory(source, source_path))
+        except (ImportError, OSError) as error:
+            return {
+                "source": source_path,
+                "lang": "java",
+                "items": [],
+                "parse_error": f"java analysis unavailable: {error}",
+            }
+    return extract_inventory(source, source_path)
+
+
 def assign_occurrence_keys(items):
     counts = {}
     for item in items:
-        base_key = (item["name"], item["_decorator_key"])
+        base_key = item.get("_match_base", (item["name"], item["_decorator_key"]))
         occurrence = counts.get(base_key, 0)
         counts[base_key] = occurrence + 1
-        item["_match_key"] = (item["name"], item["_decorator_key"], occurrence)
+        item["_match_key"] = (*base_key, occurrence)
 
 
 def public_item(item):
@@ -180,7 +238,7 @@ def public_item(item):
         "type": item["type"],
         "start_line": item["start_line"],
         "end_line": item["end_line"],
-        "decorators": item["decorators"],
+        "decorators": item.get("decorators", item.get("annotations", [])),
     }
 
 
@@ -204,10 +262,11 @@ def classified_record(change_type, item, before_item=None, after_item=None):
 
 
 def fallback_file(path, status, reason, parse_error=None):
+    language = "python" if path.endswith(".py") else "java" if path.endswith(".java") else "unsupported"
     return {
         "path": path,
         "status": status,
-        "language": "python" if path.endswith(".py") else "unsupported",
+        "language": language,
         "parse_error": parse_error,
         "fallback": True,
         "fallback_reason": reason,
@@ -265,7 +324,8 @@ def classify_inventory_changes(before_inventory, after_inventory):
 
 
 def classify_file(path, status, base, head, repo):
-    if not path.endswith(".py"):
+    language = "python" if path.endswith(".py") else "java" if path.endswith(".java") else "unsupported"
+    if language == "unsupported":
         return fallback_file(path, status, "unsupported_language")
 
     if status.startswith("A") or status.startswith("D"):
@@ -275,8 +335,10 @@ def classify_file(path, status, base, head, repo):
         return fallback_file(path, status, "renamed_or_copied")
 
     try:
-        before_inventory = extract_inventory(source_at_ref(base, path, repo), path)
-    except (RuntimeError, UnicodeDecodeError, UnicodeEncodeError) as error:
+        before_inventory = extract_inventory_for_language(
+            source_at_ref(base, path, repo), path, language
+        )
+    except (RuntimeError, UnicodeDecodeError, UnicodeEncodeError, ImportError, OSError) as error:
         return fallback_file(
             path,
             status,
@@ -292,8 +354,10 @@ def classify_file(path, status, base, head, repo):
         )
 
     try:
-        after_inventory = extract_inventory(source_at_ref(head, path, repo), path)
-    except (RuntimeError, UnicodeDecodeError, UnicodeEncodeError) as error:
+        after_inventory = extract_inventory_for_language(
+            source_at_ref(head, path, repo), path, language
+        )
+    except (RuntimeError, UnicodeDecodeError, UnicodeEncodeError, ImportError, OSError) as error:
         return fallback_file(
             path,
             status,
@@ -311,7 +375,7 @@ def classify_file(path, status, base, head, repo):
     return {
         "path": path,
         "status": status,
-        "language": "python",
+        "language": language,
         "parse_error": None,
         "fallback": False,
         "fallback_reason": None,

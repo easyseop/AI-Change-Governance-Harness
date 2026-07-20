@@ -160,6 +160,22 @@ run_missing_language_policy_preflight_case(){
   fi
 }
 
+run_missing_required_policy_preflight_case(){
+  local name="$1" runner="$2" repo="$3" policies="$4" missing_policy="$5" card="$6"
+  local output rc
+  TOTAL=$((TOTAL + 1))
+  output="$(ACGH_GATE_TIMEOUT_SECONDS=1 bash "$runner" HEAD~1..HEAD --repo "$repo" --policies "$policies" --output "$card" 2>&1)"; rc=$?
+  if [ "$rc" = 2 ] &&
+     printf '%s\n' "$output" | grep -q "필수 정책 파일 없음: .*${missing_policy}" &&
+     { [ ! -f "$card" ] || ! grep -q 'verdict: blocked' "$card"; }; then
+    echo "PASS $name"; PASS=$((PASS + 1))
+  else
+    echo "FAIL $name (exit=$rc expected=2, expected missing ${missing_policy} preflight without blocked card)"
+    printf '%s\n' "$output" | tail -16 | sed 's/^/  /'
+    [ -f "$card" ] && tail -30 "$card" | sed 's/^/  card: /'
+  fi
+}
+
 # 실제 차단이 승인요구보다 강하게 조립되는지 + 대상 repo 정책 override.
 repo="$WORK/frozen"; make_repo "$repo"
 cat >"$repo/policies/sensitive-zones.yaml" <<'YAML'
@@ -203,6 +219,16 @@ rm "$legacy_policies/language-routing.yaml"
 printf '\n# harmless legacy override change\n' >>"$repo/app/service.py"
 git -C "$repo" add app/service.py && git -C "$repo" commit -qm language-policy-legacy-override
 run_missing_language_policy_preflight_case language-routing-legacy-override-preflight "$KIT/run.sh" "$repo" "$legacy_policies" "$WORK/language-policy-legacy-card.yaml"
+
+# 필수 정책 preflight 는 5개 항목 모두에서 분석실패 exit 2 + blocked 카드 미생성을 보장해야 한다.
+for required_policy in sensitive-zones.yaml sensitive-capabilities.yaml approval-routing.yaml; do
+  repo="$WORK/preflight-${required_policy%.yaml}"; make_repo "$repo"
+  missing_policies="$repo/policies"
+  rm "$missing_policies/$required_policy"
+  printf '\n# harmless preflight change\n' >>"$repo/app/service.py"
+  git -C "$repo" add app/service.py && git -C "$repo" commit -qm "missing-$required_policy"
+  run_missing_required_policy_preflight_case "required-policy-${required_policy%.yaml}-preflight" "$KIT/run.sh" "$repo" "$missing_policies" "$required_policy" "$WORK/preflight-${required_policy%.yaml}-card.yaml"
+done
 
 # 선언한 필수 변경 파일이 diff 에 없으면 부재 탐지가 승인요구하고 카드에 증거를 남긴다.
 repo="$WORK/expected-missing"; make_repo "$repo"
@@ -258,7 +284,7 @@ run_case indirect-impact-approval 2 'indirect sink impact requires review' "$KIT
 
 # --policies 대상에 sink-registry 가 없으면 조용히 통과하지 않고 fail-safe 한다.
 rm "$repo/policies/sink-registry.yaml"
-run_case missing-sink-registry 2 '필수 정책 파일 없음' "$KIT/run.sh" "$repo" --policies "$repo/policies"
+run_missing_required_policy_preflight_case missing-sink-registry-preflight "$KIT/run.sh" "$repo" "$repo/policies" "sink-registry.yaml" "$WORK/missing-sink-registry-card.yaml"
 
 # 빠른 게이트의 파이프 EOF가 watcher timeout 잔여시간에 묶이지 않아야 한다.
 repo="$WORK/pipe-latency"; make_repo "$repo"
