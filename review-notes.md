@@ -1927,7 +1927,9 @@ parity 는 "정상 경로 등가"만이 아니라 **"실패 경로 등가"까지
 - **킷**: dev↔kit md5 3쌍 동일 · `JAVA_CAPS` 가 기본·`--policies` 재바인딩 2곳 모두 반영 ·
   verdict 조립 `1>2>0` 정합 · `HAS_RANGE=0` → cap_exit=2 fail-closed · 6-file 레거시 override → preflight exit 2 ·
   E2E fresh Java repo → `능력=2` → exit 2 · 진입점 22/22.
-  `kit/tests/run-tests.sh` 0/139 = **선재**(main 0/110 대조).
+  **킷 자체시험 `selftest.sh --quick` 139/139 + 진입점 22/22 PASS**.
+  ⚠️ 자기정정: `kit/tests/run-tests.sh` **직접** 호출 시 0/139 는 **결함 아님** —
+  단독 실행용이 아니고 `selftest.sh` 가 심링크로 만드는 개발 레이아웃을 전제한다(내 오진).
 - **비차단 3건 → 차기 AC**: O-1 카탈로그 무조건 선로드(Java 정책 부재 시 순수 Python PR exit 2) ·
   O-2 `var`→`"var"` 바인딩이 `unresolved_dynamic` 억제(현재 카탈로그 획득지점 설계 덕에 실측 미탐 0) ·
   O-3 AC#8 coverage 문구 미이행.
