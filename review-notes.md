@@ -1934,3 +1934,17 @@ parity 는 "정상 경로 등가"만이 아니라 **"실패 경로 등가"까지
   O-2 `var`→`"var"` 바인딩이 `unresolved_dynamic` 억제(현재 카탈로그 획득지점 설계 덕에 실측 미탐 0) ·
   O-3 AC#8 coverage 문구 미이행.
 - **AC#11 승격은 R-1 로 이월** — Codex 소유 픽스처 3건 + 킷 sync 동반 필요(단독 승격 시 main 136/139).
+
+## TASK-032 R-1 (Java capabilities 층 승격) 재리뷰 — 2026-07-21 · **보정요청 · merge 보류** (A-0038 · D-081)
+- 대상: `codex/2026-07-21-java-capabilities-routing-r1` `fa45ccb`. **dev 정확, 킷 sync 불완전.**
+- **dev 실증(합동상태 = Claude (c) 정책승격 얹음)**: dev `run-tests.sh` **139/139**(승격 전 136→복귀) · dev↔kit `language-routing.yaml` md5 동일 `fe496593…` · coverage 문자열 정합(`documented_layers` 정렬상 capabilities unavailable→available ⇒ `not available: callgraph` 로 정확히 좁아짐, `java.status` stub 유지 = D-076 under-claim 준수).
+  - **음성검증 A**: 정책만 stub 로 되돌리고 승격 문자열 유지 → 대상 3케이스 정확히 단독 FAIL(139→136) ⇒ 문자열이 정책에 load-bearing.
+  - **음성검증 B**: 기대 문자열 하나만 옛값 변조 → 1케이스만 FAIL(139→138) ⇒ 항상-PASS 아님.
+  - `mutation-check` PASS · checked-gates 목록 불변(coverage_checked_gates 무영향) · `.java`+coverage_not_checked 단언 = 정확히 3케이스뿐(모두 갱신, 놓친 dev 케이스 0).
+- **🔴 결함(킷)**: R-1 이 `kit/policies/language-routing.yaml` 만 승격하고 킷 **테스트 미러**를 안 맞춤 ⇒ 킷 정책(supported)↔킷 기대(승격 전) 모순:
+  - `kit/tests/cases.yaml` L153·L455·L1170 → `... callgraph, capabilities`(옛값) ⇒ **cases 3 FAIL**
+  - `kit/tests/run-entrypoint-tests.sh:138` grep → `... callgraph, capabilities`(옛값) ⇒ **진입점 21/22**
+  - **실증**: `kit/selftest.sh --quick` → 3 cases FAIL + `Entrypoint 21/22` + `✗ selftest FAIL`. 킷이 정확한 `callgraph` 출력을 내는데도 옛 기대가 거부.
+- **§2B**: 킷=배포 최전선, selftest=지원 무결성 게이트 ⇒ RED 채 머지=깨진 킷 배포 = 비차단 불가. ★★ 킷 (4)sync 빠짐없이·(5)selftest 전량 재현 해당.
+- **보정 지시(Codex)**: ① 3줄 → `callgraph` · ② `run-entrypoint-tests.sh:138` grep → `callgraph`(킷 전용, 직접) · ③ **`kit/selftest.sh --quick` 139/139+22/22 재현 필수**(R-1 은 dev 스위트만 돌려 놓침).
+- **설계 공백**: D-080 R-1 이 킷 sync 를 `kit/policies` 단일로만 명시 → "dev tests/cases.yaml 변경 = 킷 tests 미러 동반" 을 킷 sync 체크리스트에 추가.
