@@ -998,3 +998,42 @@ blast radius 의도 이내 ⇒ **scope-creep·over-reach 없음**. 보정 품질
 
 **대안 검토**: `$POL` 부재 시 킷 동봉 정책 자동 폴백 안은 **기각** — override 명시 사용자가 조용히 다른
 정책으로 검사받는 무음 손실(R-2 가 없앤 것)의 재도입 + 카드상 정책 출처 모호. 명시적 fail-closed + 문서화가 옳다.
+
+---
+
+## D-072 — TASK-029 R-5 보정(`117b4a3`) 재리뷰: **R-5 해소 · 리뷰 통과 · Claude main 머지** (2026-07-20, Claude)
+
+**대상**: `codex/2026-07-19-task029-language-router` 헤드 `b23506e` (재리뷰 범위 = `117b4a3` + `b23506e`)
+**판정**: **리뷰 통과 · 비민감(킷 테스트 + README 문서) ⇒ D-007 에 따라 Claude 가 `main` 머지.**
+상세 = `collab/answers/A-0029.md`
+
+**R-5 해소 ✅ (제출 주장 전량 독립 재현)**: 보정은 `kit/tests/run-entrypoint-tests.sh` 에
+`language-routing-legacy-override-preflight`(정책 4종만 보유한 레거시 override → **exit 2 ·
+`필수 정책 파일 없음: …language-routing.yaml` · `verdict: blocked` 카드 미생성** 3중 단언)를,
+`kit/README.md` 에 **필수 정책 5종 + 업그레이드 복사 안내**를 추가했다. 전량 직접 실행:
+진입점 **15/15** · dev **102/102** · `mutation-check` **PASS** · `selftest --quick` **PASS** ·
+dev↔kit 게이트 **21파일 md5 전량 동일**(D-068 불변식 유지) · `sync-from-dev.sh` 재실행 **멱등
+(git clean)** 이며 킷 전용 진입점 시험이 스냅샷/복원으로 **생존**.
+
+**RIG (가드가 load-bearing 인가)**: preflight 목록에서 `"$LANGUAGE_ROUTING"` **만** 제거 →
+진입점 **14/15 단독 FAIL**, 실패 출력에 R-4 계열 회귀(`verdict: blocked` ·
+`reasons: language routing policy missing`)가 그대로 재현. **A-0028 의 RIG-2 가 당시엔 무음이었는데
+이제 운다 = 죽은 가드 → 살아있는 가드 전환 실증.** **음성검증**: 기대 rc `2→3` 변조 시 단독 FAIL
+⇒ 항상-PASS 아님.
+
+**fresh 적대입력(픽스처 밖 · 직접 생성)**: 정책 4종만 둔 override 로 무해 변경 실행 → **exit 2 ·
+카드 미생성**(정직한 도구 실패). README 안내대로 `language-routing.yaml` 복사 후 → **exit 0 ·
+`verdict: pass`**. ⇒ 문서가 **실행 가능한 탈출구**임까지 실증. `run.sh:48` · `manifest.yaml:61–66` ·
+README 세 곳의 필수 5종 **일치**(드리프트 없음).
+
+**보수적 개발(COMMON-RULES §1)**: 변경 2파일 +30/-0 — A-0028 요청 ①②만. intent 밖 파일·무관
+리팩터 없음, 게이트 로직/정책 값/`run.sh` 배선 불변 ⇒ **scope-creep·over-reach 없음**.
+
+**차기 AC 가드 G-1 (비차단으로 흘리지 않고 명시)**: preflight 5항목 중 회귀 시험 보유는 2개뿐
+(`sink-registry`·`language-routing`). 나머지 3항목(`sensitive-zones`·`sensitive-capabilities`·
+`approval-routing`)은 **R-5 와 동일한 죽은 가드** — 실증: `"$ZONES"` 제거 + 해당 정책 삭제 시
+**exit 1 / `verdict: blocked` 카드**로 동일 계열 오판정 부활. **선재 갭이라 보정요청 대신
+차기 AC 로 명문화**: 필수 정책 preflight 를 **표 주도 회귀**로 전환해 5항목 **각각** 3중 단언 +
+항목별 RIG 단독 FAIL 실증, 정책 추가 시 시험이 자동으로 따라붙는 구조. → TASK-030 또는 킷 후속 AC.
+
+**TASK-029 종결**: R-1~R-5 전부 해소. J1(TASK-030 Java 추출기) 착수 전제 충족.
