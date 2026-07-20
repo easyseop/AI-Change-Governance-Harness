@@ -1218,3 +1218,62 @@ O-4(게이트 파일 결손 픽스처) 편입.
 
 **머지 판정(D-007)**: codex 브랜치(질문 문서) **비민감 ⇒ `main` 머지**. 정책·답변·AC 기록도 `main` 머지.
 상세 = `collab/answers/A-0032.md`
+
+---
+
+## D-076 (2026-07-20) TASK-031 J2 층별 `language-routing` 정책 — **Q-0006 답변 · 정책 확정**(리뷰 아님)
+
+**대상**: `codex/2026-07-20-task031-java-gov-level` (`54fe2e8` / 헤드 `2a47e64`). **미머지 codex 브랜치는
+이 1건뿐**이었고 델타는 `collab/questions/Q-0006.md`(24줄) + handoff/summary 기록 = **구현 코드 0줄**.
+⇒ 리뷰 통과/보정요청이 아니라 **정책 답변**이 정확한 처리. 비민감(협업 큐 문서) ⇒ D-007 로 `main` 머지.
+handoff 최신 줄은 D-075 **답변·머지 완료**라 "보정 차례" 브랜치 없음. TASK-031 구현 WIP 는 미커밋 =
+제출물 아님이라 무접촉(D-075 와 동일 판단).
+
+**Codex 판단이 정확했다(2회 연속)**: `policies/*` 는 Claude 소유이고 AC#9(a) 는 **정책 스키마 변경**을
+요구한다. 임의 기입 + java `supported` 플립이었다면 **over-reach + 등급 드리프트** 두 건이었다.
+
+**확정값 — 4언어 × 4층** (`policy_version: 0.1-mvp3-j0` → **`0.2-mvp3-j2`**):
+python = inventory/gov_level/capabilities/callgraph **전부 supported**(TASK-005·008/009·016·018 실재 확인) ·
+**java = inventory ✅(J1) · gov_level ✅(J2) · capabilities stub(J3 미착수) · callgraph stub** ·
+javascript/typescript = **네 층 전부 stub**. JS/TS 에 `unsupported` 를 쓰지 않은 이유 = `unsupported` 는
+**확장자 미매칭(다룰 계획 없음)** 의미로 예약돼 있고, JS/TS 는 **어댑터 등록됨·미구현** = `stub` 이 정확
+(카드가 "지원 안 함"이 아니라 "아직 분석 안 함"으로 나가야 후속 커버리지를 기대할 수 있다).
+
+**🔴 핵심 설계 결정 — legacy `status` 를 "보수적 floor" 로 재정의(플립하지 않는다)**:
+D-075 는 "java 를 supported 로 올리되 층별로 정직하게" 를 요구했으나, **`status` 자체를 올리면**
+아직 `layers` 를 모르는 **구 소비자**(dev 현행 `language-router.py:117`, 미동기화 킷 사본)가 그 즉시
+`deep_analysis: available` 로 번역한다 = **정책만 머지돼도 허위 카드가 생기는 창(window)** 이 열린다.
+⇒ `status` = **네 층 전부 supported 일 때만 `supported`** 인 deprecated floor 로 정의하고 **java 는
+`stub` 으로 유지**한다. 층 승격은 오직 `layers` 로만. 이로써 **정책은 구 소비자에 완전 inert**,
+승격은 소비자 이관과 **원자적으로** 일어난다. (Codex 에게 "`status` 를 올리지 마라"를 명시 지시.)
+
+**소비자 계약 6개(AC#9(b) 구체화)**: (a) **`supported` 정확일치만 available** — `partial`·`stub`·미지값·
+층 키 부재·`layers:` 블록 부재 전부 not-available(fail-safe) · **대소문자 정규화 금지**(`Supported` 오타는
+과소주장으로 떨어지는 게 옳다) · 열거(`defaults.layer_states`) 밖 값은 not-available + `errors` 흔적
+(**조용한 통과 금지**) (b) **`layers:` 부재 시 legacy `status` 로 역추론 금지** — 하면 D-074 O-5 허위 카드
+부활 (c) `status` 무시 (d) **🔴 가용성은 정책이 아니라 실측** — `parse_error` 파일은 층 상태와 무관하게
+카드 미분석 노출, **어긋나면 실측이 이긴다**(D-074 R-1 계열) (e) 카드 coverage **층별 서술** — 기존
+`deep semantic analysis not yet implemented for .java` 단일 문구는 J2 부터 **거짓**이며 특히
+**capabilities 미분석은 명시**(`Runtime.exec` 신규 도입 Java PR 이 무신호 통과함을 승인자가 알아야 함)
+(f) **층 상태는 verdict 무영향**(D-075 불변식 2 동형 — stub 이라고 과차단, supported 라고 하향 금지).
+
+**실측(가정 아님)**: `tests/run-tests.sh` 변경 전 **111/111** ↔ 후 **111/111** 동일. **픽스처 밖 fresh repo**
+(신규 생성 · `app/auth/Guard.java` `@PreAuthorize` 인가 약화 `ADMIN→USER` + 같은 diff 에 `svc/calc.py` 변경):
+구/신 정책 카드가 **`policy_sha` 한 줄 빼고 바이트 동일**, 둘 다 `verdict: approval_required` ·
+사유 `protected:...:인증/인가`(경로층 = 언어 무관). 라우터 단독도 동일 — `Guard.java → status stub ·
+deep_analysis not_yet_available` ⇒ **floor 설계가 실제로 과소주장 쪽으로 떨어짐을 실증**.
+`policy_sha` 변화는 정책 내용이 실제 바뀐 결과라 **정상·의도**.
+
+**Codex 잔여 몫**: dev↔kit md5 동일성(D-068) 재확인 + manifest/README 갱신(`sync-from-dev.sh` 가
+`policies/*.yaml` 통째 복사라 반입은 자동) · 소비자 게이트 dev↔kit 동일 · **AC#9(e) 회귀 픽스처
+(현재 0건 = 미측정)**: ①파서 부재 강제 + `inventory: supported` → 미분석 노출·**exit 0**(차단 아님)
+②카드 문구가 capabilities 미분석 명시 ③`layers:` 없는 구 스키마 → 전 층 not-available ④`partial`·오타 →
+not-available, 각각 **음성검증 단독 FAIL** 까지가 AC.
+
+**하류**: TASK-032(J3) 완료 시 승격 지점은 `java.layers.capabilities: stub → supported` **한 줄**(값 변경은
+Claude 가 수행). legacy `status` 삭제는 **전 소비자 이관 + 킷 동기화 이후**(지금 지우면 미동기화 킷이
+전 언어 `unsupported` 로 떨어져 신호 손실). 이 층별 스키마는 L3 진입점·콜그래프 등 "언어 단위 이분법이
+거짓이 되는" 모든 후속 층에 재사용된다.
+
+**머지 판정(D-007)**: codex 브랜치(질문 문서) **비민감 ⇒ `main` 머지**. 정책·답변 기록도 `main` 머지.
+상세 = `collab/answers/A-0033.md`

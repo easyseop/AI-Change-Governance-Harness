@@ -1,26 +1,70 @@
 # =====================================================================
-# language-routing.yaml · deep-analysis language adapter routing (MVP-3 J0)
+# language-routing.yaml · deep-analysis language adapter routing (MVP-3 J0/J2)
 # =====================================================================
 # Path/sensitive-zone gates are language independent. This policy only says
 # which changed files can receive deeper function/capability/callgraph analysis.
 # Unsupported extensions must be surfaced in coverage; they are not clean.
+#
+# J2 (D-076 · TASK-031 AC#9): per-language single `status` is replaced by
+# per-layer `layers:`. A language is never uniformly "supported" — Java at J2
+# has inventory + gov_level but no capability/callgraph analysis, and a card
+# that says "deep analysis available" for it is a false card.
 # =====================================================================
 
-policy_version: "0.1-mvp3-j0"
+policy_version: "0.2-mvp3-j2"
 
 defaults:
   unsupported_adapter: unsupported
 
+  # --- layer contract (D-076) --------------------------------------
+  # Allowed layer states. ONLY the exact string `supported` may be reported as
+  # available. Everything else — `partial`, `stub`, `unsupported`, a missing
+  # layer key, a missing `layers:` block, or any value not in this enum — is
+  # NOT available (fail-safe: under-claim, never over-claim) and must leave a
+  # trace in the coverage `errors`/`not_checked` output rather than pass silently.
+  layer_states: [supported, partial, stub, unsupported]
+  unknown_layer_state: not_available
+
+  # Legacy `status:` is DEPRECATED and kept only so that pre-J2 consumers
+  # (kit copies that have not been synced yet) keep working. Its normative
+  # meaning is the conservative floor: `supported` only when ALL four layers
+  # are `supported`. Consumers migrated to `layers:` must ignore it.
+  # It must never be raised ahead of the layers — that is exactly the false
+  # card D-074 O-5 / D-075 forbids.
+  legacy_status: deprecated-floor
+
+# --- layer definitions (audit/doc; not matching input) ---------------
+# inventory    : function/method inventory extraction (names, signatures, line ranges)
+# gov_level    : function-level sensitivity — @gov/@Gov declarations + framework
+#                annotation catalogue -> frozen/protected/watched
+# capabilities : sensitive capability detection (new external call, exec, crypto, ...)
+# callgraph    : caller/callee graph for indirect-impact analysis
+layers_documented:
+  - inventory
+  - gov_level
+  - capabilities
+  - callgraph
+
 adapters:
   python:
-    status: supported
+    status: supported          # deprecated floor — all four layers supported
+    layers:
+      inventory: supported     # TASK-005
+      gov_level: supported     # TASK-008 / TASK-009
+      capabilities: supported  # TASK-016
+      callgraph: supported     # TASK-018
     parser: python-ast
     parser_package: python
     grammar_package: stdlib-ast
     extensions:
       - .py
   java:
-    status: stub
+    status: stub               # deprecated floor — capabilities/callgraph not implemented
+    layers:
+      inventory: supported     # TASK-030 (J1)
+      gov_level: supported     # TASK-031 (J2) — @Gov + framework-annotations.yaml
+      capabilities: stub       # TASK-032 (J3) — not started
+      callgraph: stub          # L3 — not started
     parser: tree-sitter
     parser_package: tree-sitter
     grammar_package: tree-sitter-java
@@ -31,6 +75,11 @@ adapters:
       - .java
   javascript:
     status: stub
+    layers:
+      inventory: stub
+      gov_level: stub
+      capabilities: stub
+      callgraph: stub
     parser: tree-sitter
     parser_package: tree-sitter
     grammar_package: tree-sitter-javascript
@@ -42,6 +91,11 @@ adapters:
       - .jsx
   typescript:
     status: stub
+    layers:
+      inventory: stub
+      gov_level: stub
+      capabilities: stub
+      callgraph: stub
     parser: tree-sitter
     parser_package: tree-sitter
     grammar_package: tree-sitter-typescript
