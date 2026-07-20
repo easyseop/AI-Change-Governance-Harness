@@ -1881,3 +1881,36 @@ R-1 item 6(권장)이었던 "가용여부 진단" 을 **O-5 로 승격해 J2 AC 
 
 **보수적 개발 평가**: Claude 측 변경은 정책 1파일 신규 + 협업/기록 문서. 킷 매니페스트·게이트 코드 **무접촉**(Codex 소유), Codex 작업트리 WIP **무접촉**. scope-creep·over-reach 없음.
 정책에 AC 초과 3종(`@PermitAll`·`@DenyAll`·`@Put/Patch/DeleteMapping`)을 넣은 것은 정책 소유자 판단이며 **전부 과탐 방향**(놓침 방향 확장 아님)이라 불변식 위반 없음.
+
+---
+
+## TASK-031 (J2 · Java `@Gov` + 프레임워크 어노테이션) — `2e5d644` 리뷰 → 보정요청 R-1/R-2 (2026-07-20)
+
+**적대적 검증 방법**: 이 환경은 `tree_sitter`·`tree_sitter_java` 가 **실제 설치**되어(D-074 당시와 다름)
+양성 Java 경로를 **shim 없이 네이티브**로 돌릴 수 있었다. 픽스처 밖 fresh repo 7개를 새로 만들어
+민감 시나리오 고정 세트(어노테이션 부착·동명 오버로드·중첩/익명/로컬 정의)를 전량 재현했다.
+
+**깨보려 했으나 안 깨진 것**: base∪head max(제거 우회), FQN 인라인 매칭, `when` 인자조건(JPQL 무신호),
+미해소 인자 과탐 반올림, 카탈로그 frozen clamp(정책 rig), 정책 부재 fail-closed, `--policies` 오버라이드 preflight,
+익명 내부클래스·로컬 클래스 귀속, layers 층별 카드 서술. 122/122 · 20/20 · selftest PASS · dev↔kit md5 전량 동일.
+음성검증(기대값 변조 단독 FAIL)과 rig-and-revert(가드 제거 시 단독 FAIL)로 **항상-PASS 아님 + 가드 load-bearing** 실증.
+
+**깨진 것 = R-1**: `.java` **구문오류 파일이 gov_level 축을 조용히 통과**시킨다.
+`(SyntaxError, ImportError, OSError)` 를 한 메시지로 뭉갠 뒤 **문자열 부분일치**로 skip 하여
+Python 형제가 갖는 fail-closed 블록을 **건너뛴다**. 킷 end-to-end A/B 로,
+같은 `@PreAuthorize` 인가 약화가 **파싱 불가 메서드 1개 추가만으로 exit 2 → exit 0** 이 되는 것을 실증했다.
+
+**이번 리뷰에서 배운 것 — "비차단 판정 전 필수 질문"이 실제로 작동했다**:
+R-1 은 처음에 "카드에 coverage 한 줄은 남으니 정직성은 유지된다"로 넘어갈 뻔했다.
+CLAUDE.md §2B 의 질문("이게 거버넌스 목적에 직접 구멍을 내나?")을 적용하니
+**사람은 coverage 각주가 아니라 verdict 를 보고 움직인다**는 점에서 답은 명백히 '그렇다'였다.
+`coverage_not_checked` 가 카드에 **실제로 도달하는지**도 처음엔 잘못된 YAML 키(`coverage` vs `coverage_statement`)로
+"미도달"이라 오판했다가 원문 카드를 직접 열어 **도달함**을 확인하고 관찰 1건을 철회했다 — 원문 확인 없는 추론의 위험 사례.
+
+**parity 의 한계 발견**: AC#7 parity 픽스처가 `@Gov` 대칭 케이스만 단언해서
+**언어 간 실패모드 비대칭**(같은 구문오류에 Python=exit 2 / Java=exit 0)을 못 잡았다.
+parity 는 "정상 경로 등가"만이 아니라 **"실패 경로 등가"까지** 단언해야 한다 — 보정 지시에 반영했다.
+
+**재발 패턴 경고 2건**: ① `kit/run.sh` 정책 배선은 이번엔 **정확히 됐다**(TASK-029 R-4 3회차 방지 성공, preflight 포함).
+② 반면 AC 가 명시 요구한 **픽스처 누락은 두 태스크 연속**(D-074 O-4 게이트 결손 = R-2). AC 에 "픽스처 0건 = 미측정"이라
+적는 것만으로는 안 닫히므로 **음성검증 단독 FAIL 까지를 AC 로** 못박는 방식을 유지한다.
