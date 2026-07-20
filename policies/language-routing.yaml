@@ -1,0 +1,53 @@
+# =====================================================================
+# language-routing.yaml · deep-analysis language adapter routing (MVP-3 J0)
+# =====================================================================
+# Path/sensitive-zone gates are language independent. This policy only says
+# which changed files can receive deeper function/capability/callgraph analysis.
+# Unsupported extensions must be surfaced in coverage; they are not clean.
+# =====================================================================
+
+policy_version: "0.1-mvp3-j0"
+
+defaults:
+  unsupported_adapter: unsupported
+
+adapters:
+  python:
+    status: supported
+    parser: python-ast
+    parser_package: python
+    grammar_package: stdlib-ast
+    extensions:
+      - .py
+  java:
+    status: stub
+    parser: tree-sitter
+    parser_package: tree-sitter
+    grammar_package: tree-sitter-java
+    pinned_versions:
+      tree-sitter: 0.26.0
+      tree-sitter-java: 0.23.5
+    extensions:
+      - .java
+  javascript:
+    status: stub
+    parser: tree-sitter
+    parser_package: tree-sitter
+    grammar_package: tree-sitter-javascript
+    pinned_versions:
+      tree-sitter: 0.26.0
+      tree-sitter-javascript: 0.25.0
+    extensions:
+      - .js
+      - .jsx
+  typescript:
+    status: stub
+    parser: tree-sitter
+    parser_package: tree-sitter
+    grammar_package: tree-sitter-typescript
+    pinned_versions:
+      tree-sitter: 0.26.0
+      tree-sitter-typescript: 0.23.2
+    extensions:
+      - .ts
+      - .tsx

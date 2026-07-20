@@ -23,6 +23,7 @@ ZONES="$POL/sensitive-zones.yaml"
 CAPS="$POL/sensitive-capabilities.yaml"
 ROUTING="$POL/approval-routing.yaml"
 SINKS="$POL/sink-registry.yaml"
+LANGUAGE_ROUTING="$POL/language-routing.yaml"
 
 RANGE="${1:?사용: ./run.sh <base>..<head> [--repo <repo>] [--policies <정책dir>] [--output <카드>]}"; shift
 REPO="."; OUT="change-evidence.yaml"
@@ -43,7 +44,8 @@ ZONES="$POL/sensitive-zones.yaml"
 CAPS="$POL/sensitive-capabilities.yaml"
 ROUTING="$POL/approval-routing.yaml"
 SINKS="$POL/sink-registry.yaml"
-for required_policy in "$ZONES" "$CAPS" "$ROUTING" "$SINKS"; do
+LANGUAGE_ROUTING="$POL/language-routing.yaml"
+for required_policy in "$ZONES" "$CAPS" "$ROUTING" "$SINKS" "$LANGUAGE_ROUTING"; do
   if [ ! -f "$required_policy" ]; then
     echo "✗ 분석 실패: 필수 정책 파일 없음: $required_policy"
     echo "  tool_owner: change-governance-kit-owner"
@@ -157,6 +159,7 @@ hr
 INTENT_ARGS=(); [ -n "$INTENT" ] && INTENT_ARGS=(--change-intent "$INTENT")
 run_gate "generate-change-evidence" "0 1 2" "$G/generate-change-evidence.py" "$RANGE" \
   --sensitive-zones "$ZONES" --approval-routing "$ROUTING" \
+  --language-routing "$LANGUAGE_ROUTING" \
   ${INTENT_ARGS[@]+"${INTENT_ARGS[@]}"} --repo .
 CARD="$RUN_OUTPUT"
 ge_exit="$RUN_EXIT"; ge_failed="$RUN_FAILED"

@@ -31,6 +31,8 @@ GATES = {
     "extract-sinks": ".harness/gates/extract-sinks.py",
     "extract-callgraph": ".harness/gates/extract-callgraph.py",
     "check-indirect-impact": ".harness/gates/check-indirect-impact.py",
+    "language-router": ".harness/gates/language-router.py",
+    "check-tree-sitter-languages": ".harness/gates/check-tree-sitter-languages.py",
 }
 ROOT_DIR = os.getcwd()
 
@@ -71,7 +73,12 @@ def prepare_function_mapping_fixture(fixture_dir):
 
 
 def load_output(gate, stdout):
-    if gate in ("check-change-intent", "check-sensitive-zones"):
+    if gate in (
+        "check-change-intent",
+        "check-sensitive-zones",
+        "language-router",
+        "check-tree-sitter-languages",
+    ):
         return json.loads(stdout)
     return yaml.safe_load(stdout)
 
@@ -142,6 +149,8 @@ def case_command(case):
             "--generated-on",
             "2026-06-30",
         ]
+        if data.get("language_routing"):
+            command.extend(["--language-routing", data["language_routing"]])
         if data.get("numstat"):
             command.extend(["--numstat-input", data["numstat"]])
         return command
@@ -295,6 +304,19 @@ def case_command(case):
             f"{ROOT_DIR}/{data['sink_registry']}",
             "--json",
         ]
+
+    if gate == "language-router":
+        return [
+            "python3",
+            script,
+            data["name_status"],
+            "--language-routing",
+            data.get("language_routing", "policies/language-routing.yaml"),
+            "--json",
+        ]
+
+    if gate == "check-tree-sitter-languages":
+        return ["python3", script, "--json"]
 
     raise ValueError(f"unsupported gate: {gate}")
 
@@ -475,6 +497,73 @@ def validate_inventory(case, result, exit_code):
 
     if "items" in expect:
         assert_equal(errors, "items", result.get("items"), expect["items"])
+    if "lang" in expect:
+        assert_equal(errors, "lang", result.get("lang"), expect["lang"])
+    if expect.get("common_ir_fields"):
+        for item in result.get("items", []):
+            for key in ("signature_start_line", "signature", "annotations"):
+                if key not in item:
+                    errors.append(f"items.{item.get('name')}: missing common IR field {key}")
+    return errors
+
+
+def validate_language_router(case, result, exit_code):
+    expect = case["expect"]
+    errors = []
+    assert_equal(errors, "exit_code", exit_code, expect["exit_code"])
+    assert_equal(errors, "verdict", result.get("verdict"), expect["verdict"])
+    if "changed_files" in expect:
+        assert_equal(errors, "changed_files", result.get("changed_files"), expect["changed_files"])
+    if "coverage_counts" in expect:
+        actual = {
+            key: len(result.get("coverage", {}).get(key, []))
+            for key in ("supported", "stubbed", "unsupported")
+        }
+        assert_equal(errors, "coverage_counts", actual, expect["coverage_counts"])
+    if "file_routes" in expect:
+        actual = [
+            {
+                "path": item.get("path"),
+                "adapter": item.get("adapter"),
+                "status": item.get("status"),
+                "deep_analysis": item.get("deep_analysis"),
+            }
+            for item in result.get("files", [])
+        ]
+        assert_equal(errors, "file_routes", actual, expect["file_routes"])
+    if expect.get("deterministic_stdout"):
+        first = run_command(case_command(case)).stdout
+        second = run_command(case_command(case)).stdout
+        assert_equal(errors, "deterministic_stdout", first, second)
+    return errors
+
+
+def validate_tree_sitter(case, result, exit_code):
+    expect = case["expect"]
+    errors = []
+    assert_equal(errors, "exit_code", exit_code, expect["exit_code"])
+    assert_equal(errors, "verdict", result.get("verdict"), expect["verdict"])
+    if "languages" in expect:
+        assert_equal(
+            errors,
+            "languages",
+            [item.get("language") for item in result.get("languages", [])],
+            expect["languages"],
+        )
+    if "has_error" in expect:
+        assert_equal(
+            errors,
+            "has_error",
+            [item.get("has_error") for item in result.get("languages", [])],
+            expect["has_error"],
+        )
+    if "versions" in expect:
+        for key, value in expect["versions"].items():
+            assert_equal(errors, f"versions.{key}", result.get("versions", {}).get(key), value)
+    if expect.get("deterministic_stdout"):
+        first = run_command(case_command(case)).stdout
+        second = run_command(case_command(case)).stdout
+        assert_equal(errors, "deterministic_stdout", first, second)
     return errors
 
 
@@ -1070,6 +1159,10 @@ def main():
                 errors = validate_extract_callgraph(case, result, completed.returncode)
             elif case["gate"] == "check-indirect-impact":
                 errors = validate_indirect_impact(case, result, completed.returncode)
+            elif case["gate"] == "language-router":
+                errors = validate_language_router(case, result, completed.returncode)
+            elif case["gate"] == "check-tree-sitter-languages":
+                errors = validate_tree_sitter(case, result, completed.returncode)
             else:
                 errors = validate_json_gate(case, result, completed.returncode)
         except Exception as error:
