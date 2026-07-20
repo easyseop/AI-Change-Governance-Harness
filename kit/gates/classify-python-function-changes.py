@@ -3,6 +3,7 @@ import argparse
 import ast
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -168,8 +169,17 @@ def extract_inventory(source, source_path):
 
 
 def load_java_inventory_module():
-    path = Path(__file__).resolve().parent / "extract-java-inventory.py"
+    path = Path(
+        os.environ.get(
+            "ACGH_JAVA_INVENTORY_PATH",
+            Path(__file__).resolve().parent / "extract-java-inventory.py",
+        )
+    )
+    if not path.exists():
+        raise ImportError(f"java inventory gate missing: {path}")
     spec = importlib.util.spec_from_file_location("extract_java_inventory_gate", path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"java inventory gate could not be loaded: {path}")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module

@@ -445,12 +445,22 @@ def java_records_for_node(node, policy, framework_policy):
 def java_result_from_source(source, path, policy, framework_policy):
     try:
         nodes = java_annotation_nodes(source)
-    except (SyntaxError, ImportError, OSError) as error:
+    except SyntaxError as error:
+        return {
+            "path": path,
+            "module": None,
+            "annotations": [],
+            "parse_error": str(error),
+            "unavailable_kind": "syntax",
+            "unreadable": None,
+        }
+    except (ImportError, OSError) as error:
         return {
             "path": path,
             "module": None,
             "annotations": [],
             "parse_error": f"java analysis unavailable: {error}",
+            "unavailable_kind": "toolchain",
             "unreadable": None,
         }
 
@@ -482,6 +492,7 @@ def java_result_from_source(source, path, policy, framework_policy):
         "module": None,
         "annotations": annotations,
         "parse_error": None,
+        "unavailable_kind": None,
         "unreadable": None,
     }
 
@@ -520,9 +531,12 @@ def parse_failed(result):
     return bool(result.get("parse_error") or result.get("unreadable"))
 
 
-def java_analysis_unavailable(result):
-    message = result.get("parse_error") or result.get("unreadable") or ""
-    return "java analysis unavailable" in str(message)
+def java_toolchain_unavailable(result):
+    return result.get("unavailable_kind") == "toolchain"
+
+
+def java_syntax_unavailable(result):
+    return result.get("unavailable_kind") == "syntax"
 
 
 def changed_candidates_from_map(mapping):
@@ -682,6 +696,25 @@ def fail_closed_record(path, reason, level="protected", side="head"):
     }
 
 
+def sensitive_annotation_records(path, result, policy, side):
+    records = []
+    for annotation in result.get("annotations", []):
+        level = annotation_level(annotation)
+        if level in policy["block_levels"] or level in policy["approve_levels"]:
+            records.append(
+                {
+                    "path": path,
+                    "name": annotation.get("name"),
+                    "level": level,
+                    "side": side,
+                    "reason": annotation.get("reason"),
+                    "errors": annotation_errors(annotation),
+                    "def_line": annotation.get("def_line"),
+                }
+            )
+    return records
+
+
 def public_record(record):
     result = {
         "path": record["path"],
@@ -797,8 +830,8 @@ def check_function_gov_level(rev_range, sensitive_zones, repo=".", framework_ann
             )
 
         if path.endswith(".java") and (
-            (base_exists and java_analysis_unavailable(base_result))
-            or (head_exists and java_analysis_unavailable(head_result))
+            (base_exists and java_toolchain_unavailable(base_result))
+            or (head_exists and java_toolchain_unavailable(head_result))
         ):
             messages = sorted(
                 {
@@ -840,6 +873,8 @@ def check_function_gov_level(rev_range, sensitive_zones, repo=".", framework_ann
             )
             base_sensitive_levels = sensitive_levels_in_result(base_result, policy)
             base_level = strongest_level(base_sensitive_levels, policy)
+            if path.endswith(".java") and java_syntax_unavailable(head_result):
+                records.extend(sensitive_annotation_records(path, base_result, policy, "base"))
             records.append(
                 fail_closed_record(
                     path,
