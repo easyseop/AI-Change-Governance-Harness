@@ -577,10 +577,32 @@
    - **수정**: `child.type == "modifiers"` 인 자식으로 한정한 뒤 토큰 분해. 기존 `java-callgraph-static-modifier-initializers`(`static final`·`private static`·어노테이션) **유지** + instance 필드 `<init>` 픽스처 신설 + 음성검증(단독 FAIL).
    - 판정 무영향(정직성)이나 **AC#3 이 고치려던 것과 동종·동급**이라 함께 닫는다.
 
+**🔴 보정 재제출(`1164ce0`·`64e7777`) 재리뷰 결과 = 보정요청 (A-0051 · D-095) — 코드 브랜치 머지 계속 보류. 새 태스크 아님, 보정 커밋만 재제출.**
+**✅ 닫힌 것(재작업 불필요)**: **AC#6**(`caller` 축 제거 + `sink_reachable_functions` 정리 — RIG-1 로 신규 6건 전부 FAIL · **fresh F1~F5·F7·F8 7형태가 `main` 과 동일하게 복구** · N4 개명·정정 포함) · **AC#7**(F6 픽스처 — **RIG-2 단독 FAIL** 로 A-0050 의 "184/184 무변화" 공백 정확히 폐쇄) · **무회귀**(192/192 · mutation 332 · 결정론 · 골든패스 113건 동일 · 정책·킷 무접촉) · **§1 보수성**. **AC#8 은 원 결함만 폐쇄(RIG-3 단독 FAIL) — 잔여 오탐 1형태 ⇒ AC#11.**
+**🔴 신규 차단 2건은 A-0050 이 통과시킨 1차 제출분의 잔여다(리뷰어 자기정정 5회째)** — 이번 보정 델타가 만든 것이 아니나 **브랜치 전체가 아직 `main` 에 없으므로 지금 막는다**. Codex 귀책 아님(AC#6·#7·#8 은 문언대로 정확히 구현됨).
+
+9. **🔴 (A-0051 R-3 · 차단 · 과소탐 회귀) 교집합 정밀화를 "sink 폐쇄가 전부 해소된 경우" 로 한정**: 교집합 축은 **양쪽이 다 해소될 때만** 건전하다. sink 쪽 호출지점이 **미해소**면 막다른 길이 대상(`Task.exec`)이 아니라 **미해소 호출의 caller(`Flow.sink`)** 로 기록되므로 **교집합이 구조적으로 항상 공집합** ⇒ 조용히 드롭된다. 배제의 근거가 "타입이 실제로 무관"(F6 = 건전)이 아니라 **"분석이 sink 쪽을 못 풀어서"(불건전)** 인 갈래가 통째로 열려 있다.
+   - **실증(픽스처 밖 fresh · `main`↔브랜치 동일 rev-range · 변경 = `Vault.transfer` 본문)** — **`approval_required`(2) → `pass`(0)**: **G1** `Task task = () -> new Vault().transfer();` + `java.util.List<Task> tasks;` + `sink(){ tasks.get(0).exec(); }` · **G2** `Task get(){return task;}` + `sink(){ get().exec(); }` · **H1** `mid(){ task.exec(); }` + `sink(){ mid(); rows.size(); }` 를 **`hops: 1`** 로(대상이 폐쇄 안이어도 hops 밖이면 동일 드롭 — A-0049 검증축 ⑦).
+   - **대조군 유지 확인**: **G3** `sink(Task t){ t.exec(); }`(파라미터 타입) · **G4** `sink(){ Task t = task; t.exec(); }`(지역변수 타입) 는 `approval_required` 유지 ⇒ 탐지가 통째로 죽은 건 아니고 **`tasks.get(k).exec()`·`get().exec()`·`registry.find(k).handle()` = 콜백 레지스트리/디스패처 표준형만 정확히 뚫린다.**
+   - **수정 방향(리뷰어 실측)**: `sink_dead_ends` 중 **`kind: unresolved` coverage 의 caller 유래(= 불투명)** 가 하나라도 있으면 **대상 해소 여부와 무관하게 보수 승격**.
+   - **회귀 픽스처 3건 신설**(G1·G2·H1) — 전부 `verdict: approval_required`·`exit_code: 2` 단언. **대조군 G3·G4 는 `approval_required`, F6(`…intersection-pass`) 은 `pass` 유지.** **음성검증**: 한정을 제거하면 G1·G2·H1 이 FAIL.
+10. **🔴 (A-0051 R-4 · 차단 · 흔적조차 없는 과소탐) 해소된 인자전달 람다/`::` 가 fail-closed 회수 대상에서 빠지지 않게 한다**: `collect_calls()` 의 **필드 초기화 경로**(`scan_deferred`)는 대상이 해소돼도 deferred 레코드를 남기는데, **메서드 본문 경로**(`extract-java-callgraph.py:700-707`)는 해소되면 **엣지만 만들고 `unresolved.add(...)` 를 하지 않는다**(`else` 갈래에서만 생성). ⇒ sink 가 그 인터페이스를 **불투명하게** 부르면 엣지도 안 닿고 레코드도 없어 **`java_deferred` 가 비고 fail-closed 가 아예 발동하지 않는다.**
+   - **실증(fresh) — G6 레지스트리 표준형**: `class Registry { void put(String k, Task t){…} Task find(String k){…} }` + `Flow.wire(){ reg.put("pay", () -> new Vault().transfer()); }` + `Flow.sink(String k){ reg.find(k).exec(); }` → `main` **`approval_required`(2)** ↔ 브랜치 **`pass`(0)** 이고 `coverage.unevaluated` 에 `lambda_dispatch` **0건**, `fail_closed: []`, `errors: []` = **완전히 깨끗한 통과**. `Task.exec → Vault.transfer` 엣지는 **존재하는데** `Flow.sink → Task.exec` 만 없어 경로가 끊긴다. **R-3 보다 나쁘다 — 흔적조차 없다.**
+   - **수정 방향(리뷰어 실측)**: **불투명 호출지점 → 람다로 구현된 `bodyless` 노드**(= `bodyless` 이면서 나가는 엣지가 있는 노드)로 **보수적 인접 추가**. 이 방향이면 G6 가 **실경로 카드**(`path: [Flow.sink, Task.exec, Vault.transfer]`)로 승격된다. **다른 구현을 택해도 좋으나 아래 7입력 표를 그대로 재현해야 한다.**
+   - **🔴 카드 정직성 필수**: 보수 추정으로 추가된 홉은 **실제 관측 호출과 구분 표시**할 것(예: finding 에 `inferred: true` 또는 `reason` 접미). 표식 없이 실경로처럼 렌더하면 **감사카드 정직성 위반으로 다시 반려**한다.
+   - **회귀 픽스처 1건 신설**(G6) — `approval_required` + 경로 원소 단언. **음성검증 단독 FAIL.**
+   - **🔴 리뷰어가 실측한 7입력 표(재현 필수 · 원복 후 192/192 확인함)**: G1·G2·H1·G6 = **복구(2)** · F1~F5·F7·F8 = 불변(2) · **F6 = `pass` 유지(정밀화 보존)** · **N3**(무관 변경 + 람다가 변경함수에 안 닿음: `Reg.put(Task)` 로 `() -> new Audit().note()` 등록, 변경은 `Vault.transfer`) **= `pass` 유지 ⇒ `main` 으로의 단순 회귀가 아니다** · N2(deferred 0) = `pass`. **스위트 192/192 무변화 · 결정론 md5 3회 동일.**
+   - **(a)AC#9 단독으로는 G6 가, (b)AC#10 단독으로는 G1·G2·H1 이 안 고쳐진다 ⇒ 둘 다 필요**(각각 단독 측정 확인).
+   - **⚠️ 대가**: N1(F6 + sink 폐쇄에 JDK 호출 1개 추가)은 `main` 수준 소음으로 복귀한다. **의도된 후퇴** — O-14 는 A-0050 §4 대로 닫히지 않은 채 TASK-041 로 남는다(수신자 선언 타입 대조 방향, 미실증).
+11. **🟡 (A-0051 O-24 · AC#8 잔여) `has_static_modifier` 어노테이션 인자 문자열 오탐**: `modifiers` 로 한정한 뒤에도 **노드 텍스트를 정규식 토큰화**하므로 어노테이션 인자의 `static` 에 걸린다.
+   - **fresh 실증**: `@SuppressWarnings("static") Task task = () -> log("x");` → `main` `caller: Flow.<init>` ✅ / 브랜치 **`Flow.<clinit>`** ❌.
+   - **수정(리뷰어가 5형태로 실측)**: `modifiers` 자식 중 **텍스트가 정확히 `static` 인 키워드 노드** 존재 여부로 판정 — 어노테이션 문자열=False · `static final`=True · `private static`=True · `@Deprecated private static`=True · 수식어 없음=False **전부 정답**.
+   - 픽스처 1건(위 입력 → `Flow.<init>` 단언) + 기존 `java-callgraph-static-modifiers`·`…-instance-token` 유지 + 음성검증 단독 FAIL. 판정 무영향(정직성)이나 AC#8 과 동종·동급.
+
 **비차단 관찰(감점만 · 차기)**: **O-21** `java-indirect-lambda-argument-fail-closed` 이름/내용 불일치(이제 fail-closed 아니라 실 엣지 탐지 — 개명 권고, 그리고 **이 시나리오의 fail-closed 경로 회귀보호가 사라졌다**) · **O-22** `fail_closed` detail 이 `dead_ends=` 에는 **전체** 막다른 길을, 개수는 **relevant 만** 실어 카드에서 어긋난다(1줄) · **O-23** enum 상수 본문 caller 가 `Reg.<init>` 로 기록되나 실제로는 클래스 초기화 시점이고 익명 하위타입이 `Reg` 로 뭉개진다 · **O-13·O-3·O-15·O-16 이월**.
 
-**의존**: TASK-039 통과·머지(D-093) ⇒ 착수 가능. **🔴 AC#6 은 TASK-038 보다 반드시 먼저** — D-093 의 "먼저 권고" 는 유효하되 **근거가 소음 → 놓침으로 바뀌었다**. 지금 sync 하면 R-1 놓침을 배포 킷에 그대로 싣는다(현행 킷은 Java L3 부재 = 구멍이 아니라 미탑재). TASK-038 이 README·`manifest.yaml` 에 **O-14 소음 특성을 명시**해야 하는 요구는 그대로 유효하다(O-14 는 닫히지 않은 채 남으므로).
-**통과 시**: `java.layers.callgraph` `partial`→`supported` 승격 재검토(Claude·D-076 — **AC#6+AC#7** 폐쇄가 조건. R-1 로 승격 근거가 후퇴했으므로 AC#1+AC#4 만으로는 불충분).
+**의존**: TASK-039 통과·머지(D-093) ⇒ 착수 가능. **🔴 AC#6·#9·#10 은 TASK-038 보다 반드시 먼저** — D-093 의 "먼저 권고" 는 유효하되 **근거가 소음 → 놓침으로 바뀌었다**. 지금 sync 하면 R-1 놓침을 배포 킷에 그대로 싣는다(현행 킷은 Java L3 부재 = 구멍이 아니라 미탑재). TASK-038 이 README·`manifest.yaml` 에 **O-14 소음 특성을 명시**해야 하는 요구는 그대로 유효하다(O-14 는 닫히지 않은 채 남으므로).
+**통과 시**: `java.layers.callgraph` `partial`→`supported` 승격 재검토(Claude·D-076 — **AC#9+AC#10** 폐쇄가 조건. A-0051 R-3·R-4 로 승격 근거가 다시 후퇴했으므로 AC#6+AC#7 만으로는 불충분).
 
 ### TASK-038 ☐ 킷에 Java L3 + 잔손질 반영 (MVP-3 킷 스냅샷 갱신)  (Codex)  *(MVP-3 · X · 킷)*
 **배경**: TASK-035·036·037 로 dev 가 Java 전 계층(J1~J3 + L3) 완비되면 킷을 그 상태로 올린다(형 지시 "자바까지 하고 킷 업데이트"). TASK-026/028 킷 스냅샷 선례.
