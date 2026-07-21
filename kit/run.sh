@@ -169,10 +169,8 @@ from pathlib import Path
 import yaml
 
 card_path, result_path, run_failed = sys.argv[1:]
-with open(card_path, "r", encoding="utf-8") as stream:
-    card = yaml.safe_load(stream) or {}
-
 notes = []
+result = {}
 if run_failed == "1":
     notes.append("capabilities analysis unavailable: check-new-capabilities execution failed")
 else:
@@ -191,6 +189,42 @@ else:
         detail = item.get("error") or item.get("reason") or "analysis error"
         side_text = f" ({side})" if side else ""
         notes.append(f"capabilities analysis unavailable for {path}{side_text}: {detail}")
+
+if result:
+    verdict = result.get("verdict", "approval_required")
+    if verdict == "approval_required":
+        print("    APPROVAL_REQUIRED: 신규 민감 능력 또는 분석 오류가 감지되었습니다.")
+    elif result.get("warned_capabilities"):
+        print("    PASS: watched 신규 능력이 감지되었습니다.")
+    else:
+        print("    PASS: 신규 민감 능력이 감지되지 않았습니다.")
+
+    rendered = []
+    for key, level in (
+        ("new_capabilities", "protected"),
+        ("warned_capabilities", "watched"),
+        ("shadow_capabilities", "shadow"),
+    ):
+        for item in result.get(key, []):
+            rendered.append(f"{level}: {item.get('path', '<unknown>')}::{item.get('id', '<unknown>')}")
+    for item in result.get("fail_closed", []):
+        rendered.append(
+            f"fail_closed: {item.get('path', '<unknown>')} {item.get('reason', 'analysis failed')}"
+        )
+    for line in rendered[:8]:
+        print(f"    {line}")
+    if len(rendered) > 8:
+        print(f"    … 외 {len(rendered) - 8}건")
+
+try:
+    with open(card_path, "r", encoding="utf-8") as stream:
+        card = yaml.safe_load(stream) or {}
+except Exception:
+    print("    capabilities trace 주입 불가: 카드가 유효 YAML 아님")
+    raise SystemExit(0)
+if not isinstance(card, dict) or not isinstance(card.get("change_evidence"), dict):
+    print("    capabilities trace 주입 불가: 카드가 유효 YAML 아님")
+    raise SystemExit(0)
 
 if notes:
     evidence = card.setdefault("change_evidence", {})
@@ -233,9 +267,7 @@ if [ "$HAS_RANGE" = 1 ]; then
   run_gate "check-new-capabilities" "0 2" "$G/check-new-capabilities.py" "$RANGE" "$CAPS" --java-policy "$JAVA_CAPS" --repo . --json
   CAP_OUT="$RUN_OUTPUT"; cap_exit="$RUN_EXIT"
   cap_failed="$RUN_FAILED"
-  if [ "$RUN_FAILED" = 1 ]; then show_analysis_failure "check-new-capabilities"; else
-    printf '%s\n' "$CAP_OUT" | grep -E '"verdict":|"id":|"fail_closed":' | head -8 | sed 's/^/    /'
-  fi
+  if [ "$RUN_FAILED" = 1 ]; then show_analysis_failure "check-new-capabilities"; fi
   cap_trace_json="$(mktemp)"
   printf '%s\n' "$CAP_OUT" > "$cap_trace_json"
   append_capability_trace "$OUT" "$cap_trace_json" "$cap_failed"

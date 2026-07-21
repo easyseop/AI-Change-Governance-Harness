@@ -171,6 +171,35 @@ run_capability_failure_card_case(){
   fi
 }
 
+run_capability_console_case(){
+  local name="$1" runner="$2" repo="$3"
+  local output rc
+  TOTAL=$((TOTAL + 1))
+  output="$(ACGH_GATE_TIMEOUT_SECONDS=1 bash "$runner" HEAD~1..HEAD --repo "$repo" 2>&1)"; rc=$?
+  if [ "$rc" = 2 ] &&
+     printf '%s\n' "$output" | grep -q 'protected: app/service.py::outbound_network'; then
+    echo "PASS $name"; PASS=$((PASS + 1))
+  else
+    echo "FAIL $name (exit=$rc expected=2, missing capability path and level)"
+    printf '%s\n' "$output" | tail -16 | sed 's/^/  /'
+  fi
+}
+
+run_invalid_card_trace_case(){
+  local name="$1" runner="$2" repo="$3" card="$4"
+  local output rc
+  TOTAL=$((TOTAL + 1))
+  output="$(ACGH_GATE_TIMEOUT_SECONDS=1 bash "$runner" HEAD~1..HEAD --repo "$repo" --output "$card" 2>&1)"; rc=$?
+  if [ "$rc" = 2 ] &&
+     printf '%s\n' "$output" | grep -q 'capabilities trace 주입 불가: 카드가 유효 YAML 아님' &&
+     ! printf '%s\n' "$output" | grep -q 'yaml\.parser\|yaml\.scanner'; then
+    echo "PASS $name"; PASS=$((PASS + 1))
+  else
+    echo "FAIL $name (exit=$rc expected=2, invalid-card trace handling regressed)"
+    printf '%s\n' "$output" | tail -20 | sed 's/^/  /'
+  fi
+}
+
 run_missing_language_policy_preflight_case(){
   local name="$1" runner="$2" repo="$3" policies="$4" card="$5"
   local output rc
@@ -240,9 +269,10 @@ run_case target-policy-frozen 1 'BLOCKED' "$KIT/run.sh" "$repo" --policies "$rep
 
 # 신규 능력은 카드가 pass여도 최종 승인요구여야 한다.
 repo="$WORK/capability"; make_repo "$repo"
-printf 'import subprocess\n\ndef run():\n    return subprocess.run(["true"])\n' >"$repo/app/service.py"
+printf 'import requests\n\ndef fetch(url):\n    return requests.get(url)\n' >"$repo/app/service.py"
 git -C "$repo" add . && git -C "$repo" commit -qm capability
 run_case new-capability 2 'APPROVAL_REQUIRED' "$KIT/run.sh" "$repo"
+run_capability_console_case capability-console-path-and-level "$KIT/run.sh" "$repo"
 
 # 대상 repo 에 policies/ 가 없어도 킷 동봉 정책을 절대경로로 배선해야 한다.
 repo="$WORK/language-policy-kit-default"; make_repo "$repo"
@@ -445,6 +475,27 @@ import time
 time.sleep(5)
 PY
 run_capability_failure_card_case gate-timeout-card-trace "$slow/run.sh" "$repo" 'timeout' "$WORK/timeout-card.yaml"
+
+# evidence 게이트 예외로 카드가 YAML 이 아니어도 capabilities fail-closed 처리와 최종 판정은 유지한다.
+invalid="$WORK/kit-invalid-card"; cp -R "$KIT" "$invalid"
+cat >"$invalid/gates/generate-change-evidence.py" <<'PY'
+raise RuntimeError("forced evidence failure")
+PY
+cat >"$invalid/gates/check-new-capabilities.py" <<'PY'
+import json
+import sys
+
+print(json.dumps({
+    "verdict": "approval_required",
+    "new_capabilities": [],
+    "warned_capabilities": [],
+    "shadow_capabilities": [],
+    "fail_closed": [{"path": "app/service.py", "reason": "forced capability failure"}],
+    "errors": [],
+}))
+raise SystemExit(2)
+PY
+run_invalid_card_trace_case evidence-exception-capability-fail-closed "$invalid/run.sh" "$repo" "$WORK/invalid-card.yaml"
 
 echo "Entrypoint summary: $PASS/$TOTAL PASS"
 [ "$PASS" = "$TOTAL" ]
