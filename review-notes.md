@@ -2010,3 +2010,20 @@ parity 는 "정상 경로 등가"만이 아니라 **"실패 경로 등가"까지
 - **§1 보수성**: 게이트 1·`cases.yaml`·픽스처 1·handoff·summaries **뿐**. `extract-callgraph.py`·`check-indirect-impact.py` 바이트 무변경 · `policies/` 무접촉 · **`kit/` `main` 과 완전 동일**(킷은 TASK-038 = 스코프 정확) · 무관 리팩터 0 ⇒ scope-creep 없음.
 - **비차단**: **O-8(신규)** `interface_names` 完전 死파라미터(공집합 강제해도 143/144 무변화) · **O-2(이월·미해소)** 조상확장 무보호 · **O-9(신규)** 픽스처가 추상 전용 인터페이스 케이스 부재로 반쪽 구현을 구별 못함 · **O-3(이월)** `@Autowired`/`@Transactional` 무기능 서술 과대 미정정 · O-4~O-7 무변화.
 - **머지**: **코드 브랜치 보류**. 리뷰 기록만 `main` 머지(D-007). AC#5 에 서브인터페이스 4항목 추가 요청.
+
+## TASK-036 A-0043 보정 재제출 재리뷰 — 2026-07-21 · **R-2 해소 · 통과 · `main` 머지** (A-0044 · D-088)
+- 대상: `codex/2026-07-21-task036-java-callgraph` — **`beb4c6a`(보정)·`d2469f7`(handoff)** 만 재리뷰(멱등성). **TASK-036 AC 5개 전부 종결.**
+- **✅ R-2 종결**: `declaration_supertypes()` 가 `node.children` 의 `extends_interfaces` 계열을 수집(3줄) = A-0043 §3.4 제안 그대로. 반환 계약·`method_targets`·IR 형상 무변경 ⇒ 엣지는 **추가 방향으로만**.
+- **fresh 적대입력 14종 전량 복원**(픽스처 밖 신규 작성): R-2 정확재현 · 3단 체인 · 다중 `extends A, B` · 제네릭 `extends Repo<String>` · 다이아몬드 · `enum`/`record` 서브인터페이스 구현 · `default` 오버라이드 체인 · 중첩 `Holder.Inner` · 스코프명 · **추상 전용** 서브인터페이스 · 추상클래스 대조군 — 전부 구현체 엣지 복원, `unresolved`·`errors` 빔.
+- **오염 검사**: 타입파라미터 바운드(`<T extends Number>`)·`sealed…permits`·어노테이션 modifier 가 **가짜 상위타입으로 새지 않음**. repo 밖 타입(`Number` 수신자)은 정직하게 `unresolved`.
+- **병리·스케일**(새 계층 그래프가 처음 생기므로 필수): 순환 `extends`·자기 `extends` **고정점 수렴·무한루프 없음** · 300단 체인 **0.14s** · 1023 인터페이스 이진트리 **0.03s** ⇒ 폭주 없음.
+- **하류 end-to-end**: sink `Caller.go` forward 2홉 → `PaymentImpl.settle` **탐지 True**(`approval_required`) ↔ 패치만 제거하면 **False**(`pass`). A-0043 이 지적한 **조용한 pass 폐쇄 실증**.
+- **rig-and-revert 4종**: **RIG-A**(3줄 제거) 단독 FAIL **142/144·adversarial 7/8** · **RIG-B**(`extends_interfaces` **만** 제거)도 단독 FAIL ⇒ **원소 단위 load-bearing**(A-0041 G-1 교훈) · **RIG-D**(조상확장 제거) **이번엔 FAIL ⇒ O-2 폐쇄 확인** · RIG-E(구현체 팬아웃) FAIL(무회귀). RIG-C(`super_interfaces`·`superclass` 제거)만 무변화 = 중복(O-10, 문법드리프트 방어로 유지 무해).
+- **Codex 수치 사실확인**: handoff 의 143/144 는 **자기 환경 기준선 144** 기준 → 이 머신(기준선 143)의 142/144 와 **정합**. adversarial 7/8 은 정확 일치. 과대주장 없음.
+- **AC 무회귀**: 결정론 md5 2회 동일 · **파일순서 무관** · **교차파일** 계층 해소 · 동명 오버로드 합집합(AC#4) · 리플렉션 `unresolved` 유지(AC#3) · dev **143/144** · `mutation-check` PASS(유일 실패 `tree-sitter-smoke` = 이 머신 Python 3.9.6 환경건·`main` 동일).
+- **AC#5 요청 4항목 전부 이행**(구현체 `extends` 체인 · `default` 오버라이드 양쪽 소유자 · 음성검증 · 추상클래스 대조군). 검증기가 엣지 **완전일치** 비교 ⇒ 기대값 단위 load-bearing.
+- **🟡 자기정정 → TASK-037 AC#6 신설**: A-0042·A-0043 의 **O-4 "익명 내부클래스 = 과대근사 방향=안전" 은 오판**. 실측 결과 익명 본문이 `Caller.<메서드>` 로 오귀속돼 `f.p()` 에서 **도달 불가**(sink forward 4홉까지 미탐지) = **누락 방향**. `coverage.unevaluated` 는 verdict 무기여라 구제 못 함. **선재·`beb4c6a` 무관**(패치 유무 산출 동일 확인)이라 반려 사유 아니나, TASK-037 이 소비하는 순간 실구멍 ⇒ **AC 로 명시 고정**.
+- **비차단 이월**: O-8 `interface_names` 死파라미터 · O-9 추상 전용 인터페이스 픽스처 부재 · O-3 `@Autowired` 서술 과대 · O-5~O-7 무변화. **신규 O-10** 세트 원소 2개 중복(결함 아님).
+- **정책**: `language-routing.yaml` `java.layers.callgraph` **`stub` 유지** — 소비자 0명(`check-indirect-impact` 아직 `.py` 하드코딩). 승격은 TASK-037 통과 후·TASK-038 AC#3(D-076 계약).
+- **§1 보수성**: 게이트 1·`cases.yaml`·픽스처 1·handoff·summaries **뿐** · Python 추출기 4종 **바이트 무변경** · `policies/`·`kit/` 무접촉 · 무관 리팩터 0.
+- **머지**: 도메인 민감(정산·인증/인가·암호화·DB·infra) **무해당** + dogfood `check-policy-change` PASS ⇒ **비민감** → Claude 가 `main` 머지(D-007). **정직 고지·사실 정정**: 자기보호 zone(`.harness/**`·`tests/*` — D-028) 때문에 감사카드는 `approval_required`/`security-reviewer` 를 낸다. **D-085 의 "카드 protected_touched 없음" 은 틀렸다.** 현행 해석(리뷰+구현자≠머지자가 그 역할)을 **H-0001** 로 형에게 확인 요청(머지 보류 사유 아님).

@@ -480,7 +480,7 @@
 7. **(D-082 O-4) 정책 `status:` 주석 스테일 정리**(사소).
 **비고**: 판정 로직 변경 최소·대부분 정직성/위생. O-1 만 실판정 영향(과차단 제거) → 회귀 픽스처 필수. Codex 저자·Claude 리뷰.
 
-### TASK-036 ☐ Java 콜그래프 추출기 (tree-sitter → 공통 IR · 보수적 과대근사)  (Codex)  *(MVP-3 · X · Java L3-a)*
+### TASK-036 ☑ Java 콜그래프 추출기 (tree-sitter → 공통 IR · 보수적 과대근사)  (Codex)  *(MVP-3 · X · Java L3-a)* — **완료 2026-07-21 (A-0044 · D-088 · 3회차 리뷰 통과)**
 **목적**: `.java` 함수 호출 엣지를 결정적으로 빌드해 **공통 IR #4**(`edges`·`unresolved_calls`)로. 판정 미연결(그래프 산출만). TASK-023(Python 콜그래프) 대응.
 **수용기준**:
 1. tree-sitter 로 메서드 정의별 호출 수집 → **repo 내 메서드로 해소되는 호출만 엣지**(caller→callee, 정규화 이름 `Class.method`). TASK-030 인벤토리·TASK-031 어노테이션 재사용.
@@ -498,6 +498,10 @@
 3. 바뀐 Java 함수 ∈ (sink 로부터 forward N홉) → `indirect_impact`+최소 `approval_required`. **차단 금지**(exit 0/2 만). 감사필드 `sink_id`·`changed_function`·`path`·`hops`. 라우팅 = sink owner. 분석실패 → fail-closed(tool_owner·최소 approval).
 4. N홉 = 정책값(기본 1·하드코딩 금지). shadow 성숙도 지원(신규 sink shadow 시작).
 5. **🔴 parity 픽스처(설계 §1.5 · 이 태스크의 핵심 합격기준)**: MVP-2 의 Python 간접영향 대표 케이스(sink 상류 함수 수정→approval · 무관 수정→pass · N홉 경계)와 **동일 verdict** 를 내는 **Java 등가 픽스처를 `tests/parity/` 쌍**으로 + 음성검증. **과대근사 정직성**: Java 미해소 동적은 `coverage.unevaluated` 노출을 테스트로 고정.
+6. **(D-088 O-4 — Claude 자기정정 · 익명 내부클래스 엣지 소실)** Java 콜그래프가 **판정에 연결되는 순간** 실구멍이 되는 선재 결함을 닫는다. 실증(A-0044 §4): `p = new Port(){ public void run(){ new Ledger().settle(); } }` 에서 ① 익명 본문 메서드가 **바깥 타입에 오귀속**(`Caller.run` 유령 노드)되고 ② `f.run()` 은 본문 없는 `Port.run` 에서 **막다른 길**이라, sink forward **4홉까지 `Ledger.settle` 미탐지** = **누락 방향**(과대근사 아님). `coverage.unevaluated` 에 `new Port` 가 남지만 그 필드는 **verdict 무기여**라 구제 못 한다.
+   - **택1**: (a) 익명 클래스 본문을 **구현 대상 인터페이스의 구현체로 등록**해 엣지를 잇거나(과대근사 방향·권장), (b) 최소한 **verdict 에 기여하는 경로**로 정직 노출(예: `errors` 승격 또는 fail-closed 트리거 편입) — **조용한 `pass` 는 금지**.
+   - **상설 회귀 픽스처 + 음성검증**: 위 3파일 형태(익명 구현 → 인터페이스 필드 → 호출) 를 `tests/fixtures/` 에 고정하고, 처리를 제거하면 그 케이스가 **단독 FAIL** 하는지 확인.
+   - **동시 확인**: 람다(`Port p = () -> …`)도 같은 모양인지 점검해 결과를 기록(닫든 관찰로 남기든 **명시**).
 **의존**: TASK-036 통과 후. → **통과 시 Java L3 완결 = Java↔Python parity 회복.**
 
 ### TASK-038 ☐ 킷에 Java L3 + 잔손질 반영 (MVP-3 킷 스냅샷 갱신)  (Codex)  *(MVP-3 · X · 킷)*
