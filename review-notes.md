@@ -1986,3 +1986,14 @@ parity 는 "정상 경로 등가"만이 아니라 **"실패 경로 등가"까지
 - **§2B 필수질문**: 세 건 다 판정 구멍 아님(exit 6경로 동일·트리거가 리깅/비정상게이트/휴면기능) ⇒ 차단 아님. 단 **관찰로 흘리지 않고 AC 로 고정**.
 - **보수성**: 파일 4개·소유권 침범 0·무관 변경 0. A-0040 의 over-reach(2층 렌더러 교체) 를 **복원 방향으로 되돌려 해소**.
 - **머지**: dogfood 메타층 `check-policy-change` PASS · `frozen_touched`/`protected_touched` 없음 · `reviewer_required: [dev-reviewer]` ⇒ **비민감** → Claude 가 `main` 머지(선례 D-074·D-078·D-080·D-082).
+
+## TASK-036 Java 콜그래프 추출기 리뷰 — 2026-07-21 · **보정요청 · merge 보류** (A-0042 · D-086)
+- 대상: `codex/2026-07-21-task036-java-callgraph` — `74b3857`(구현)·`c483b97`(handoff).
+- **기준선 대조(회귀 0)**: `main` dev **140/141** ↔ 브랜치 dev **143/144**(신규 3건). 실패집합 양쪽 동일(`tree-sitter-smoke` = 이 머신 Python 3.9.6 환경) ⇒ 브랜치 귀속 아님. `kit/`·`policies/` 무접촉이라 킷 영향 없음(킷 반영은 TASK-038).
+- **🔴 R-1 인터페이스 선언 본문이 엣지 대상에서 영구 제외 (AC#2 superset 위반)**: `method_targets()` 의 `owners.difference_update(interface_names)` 가 수신자가 인터페이스면 인터페이스 자신을 **무조건** 타깃에서 뺀다. fresh 적대입력 4종 — ①`default`·구현 0개 ②인터페이스 `static` ③인터페이스 본문 내 무수식 자기호출 **전부 엣지 소실**, ④구현체 오버라이드만 정상. 구조 동형 **추상클래스 대조군은 3엣지 정상** ⇒ 의도상 버그 확정.
+- **§2B 필수질문 = 예 → 비차단 금지**: `check-indirect-impact` 를 직접 import 해 실증 — sink `AuditPort.settle` 역도달성 1/2/3홉 **NONE**, 실제 2홉 경로(`Caller.run→AuditPort.audit→AuditPort.settle`) 미탐지. **`coverage.unevaluated` 는 순수 보고 필드**(254–256 통과 출력, `fail_closed_records`·verdict 무기여)이고 fail-closed 트리거는 `callgraph["errors"]` 뿐 ⇒ 엣지 소실 = 조용한 `verdict: pass`. AC#3 의 미해소 노출은 리플렉션용이지 **정적 해소 가능 호출의 도피처가 아님**.
+- **픽스처가 결함을 고정**: 제외 로직 제거 시 `java-callgraph-conservative` 단독 FAIL(143→142) — 기대 엣지에 `PaymentPort.pay` 부재. 보정 시 기대값 동반 수정 필요.
+- **rig-and-revert 4종**: 팬아웃 제거 → 대상 케이스 **단독 FAIL**(load-bearing ✅) · `difference_update` 제거 → FAIL(결함 고정 증거) · `owners = set()` 제거 → **무변화**(무효 코드) · 조상확장 제거 → **무변화**(무보호).
+- **통과 확인(실증)**: 결정론 md5 2회 동일 · 오버로드 합집합 병합(노드 2·엣지 1) · **노드 `line` = 어노테이션 첫 줄**(데코레이터-라인범위 상설 관심사 충족) · 파싱실패 → `errors` → 하류 fail-closed 승격 · 빈/비-Java repo 무크래시 · IR#4 키·정렬 Python 추출기와 일치(`lang` 만 추가).
+- **비차단 → 차기 AC**: O-1 무효 코드 · O-2 조상확장 무보호 · **O-3 픽스처 `@Autowired`/`@Transactional` 무기능**(삭제해도 PASS — 구현은 순수 타입 기반, handoff 서술 과대·AC#1 "TASK-031 어노테이션 재사용" 미실시) · O-4 익명클래스 유령 노드(과대근사 방향=안전) · O-5 파서 파일마다 재생성 · O-6 제네릭 `[-1]` 자의적 · O-7 parity 픽스처 1홉 최소치라 과대근사 미검증.
+- **§1 보수성**: `extract-callgraph.py` 무개조(의존조건 준수) · Claude/공통 소유 무접촉 · 무관 리팩터 0 · dogfood `check-policy-change` PASS ⇒ scope-creep·over-reach 없음.
