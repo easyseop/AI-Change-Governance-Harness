@@ -2708,6 +2708,117 @@ cases:
       errors_present: false
       deterministic_stdout: true
 
+  - name: java-callgraph-conservative
+    group: adversarial
+    gate: extract-java-callgraph
+    input:
+      repo: tests/fixtures/java-callgraph/repo
+    expect:
+      exit_code: 0
+      edges:
+        - caller: BillingService.auditInjected
+          callee: PaymentPort.audit
+          call: injected.audit
+        - caller: BillingService.auditStandalone
+          callee: StandalonePort.audit
+          call: standalone.audit
+        - caller: BillingService.auditViaBaseInterface
+          callee: BaseSettlementPort.audit
+          call: port.audit
+        - caller: BillingService.auditViaBaseInterface
+          callee: SpecializedSettlementPort.audit
+          call: port.audit
+        - caller: BillingService.billConstructed
+          callee: CardPayment.pay
+          call: constructed.pay
+        - caller: BillingService.billConstructed
+          callee: PaymentPort.pay
+          call: constructed.pay
+        - caller: BillingService.billConstructed
+          callee: RegionalCardPayment.pay
+          call: constructed.pay
+        - caller: BillingService.billConstructed
+          callee: WirePayment.pay
+          call: constructed.pay
+        - caller: BillingService.billInjected
+          callee: CardPayment.pay
+          call: injected.pay
+        - caller: BillingService.billInjected
+          callee: PaymentPort.pay
+          call: injected.pay
+        - caller: BillingService.billInjected
+          callee: RegionalCardPayment.pay
+          call: injected.pay
+        - caller: BillingService.billInjected
+          callee: WirePayment.pay
+          call: injected.pay
+        - caller: BillingService.settleViaAbstractClass
+          callee: AbstractSettlementPort.settle
+          call: port.settle
+        - caller: BillingService.settleViaAbstractClass
+          callee: ConcreteSettlementPort.settle
+          call: port.settle
+        - caller: BillingService.settleViaBaseInterface
+          callee: BaseSettlementPort.settle
+          call: port.settle
+        - caller: BillingService.settleViaBaseInterface
+          callee: SettlementPayment.settle
+          call: port.settle
+        - caller: BillingService.settleViaConcreteClass
+          callee: AbstractSettlementPort.settle
+          call: port.settle
+        - caller: BillingService.settleViaConcreteClass
+          callee: ConcreteSettlementPort.settle
+          call: port.settle
+        - caller: BillingService.useStandaloneUtility
+          callee: StandalonePort.utility
+          call: StandalonePort.utility
+        - caller: StandalonePort.delegate
+          callee: StandalonePort.helper
+          call: helper
+      unresolved_calls:
+        - caller: BillingService.reflect
+          kind: dynamic
+          name: method.invoke
+      coverage_unevaluated:
+        - caller: BillingService.reflect
+          kind: dynamic
+          name: method.invoke
+      errors_present: false
+      deterministic_stdout: true
+
+  - name: parity-java-callgraph
+    group: parity
+    gate: extract-java-callgraph
+    input:
+      repo: tests/fixtures/parity/java-callgraph/repo
+    expect:
+      exit_code: 0
+      edges:
+        - caller: Flow.sink
+          callee: Flow.helper
+          call: helper
+      unresolved_calls: []
+      coverage_unevaluated: []
+      errors_present: false
+      deterministic_stdout: true
+
+  - name: parity-python-callgraph
+    group: parity
+    gate: extract-callgraph
+    input:
+      repo: tests/fixtures/parity/python-callgraph/repo
+    expect:
+      exit_code: 0
+      edges:
+        - caller: app.flow.sink
+          callee: app.flow.helper
+          call: helper
+      unresolved_calls: []
+      coverage_unevaluated: []
+      errors_present: false
+      deterministic_stdout: true
+
   - name: indirect-impact-direct
     group: adversarial
     gate: check-indirect-impact

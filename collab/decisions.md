@@ -1702,3 +1702,68 @@ end-to-end: 서브인터페이스 케이스 **미탐지 → `pass`** / 추상클
 
 **D-007 처리**: 코드 브랜치 **머지 보류**, 리뷰 기록만 `main` 머지. 재제출은 **보정 커밋만** 재리뷰(멱등성).
 AC#5 고정 세트에 서브인터페이스 계층 4항목(구현체 `extends` 체인 · `default` 오버라이드 · 음성검증 · 추상클래스 대조군) 추가 요청.
+
+## D-088 TASK-036 A-0043 보정 재제출 재리뷰 — **R-2 해소 · 리뷰 통과 · `main` 머지** (A-0044) — 2026-07-21
+
+대상 `codex/2026-07-21-task036-java-callgraph` — **`beb4c6a`(보정)·`d2469f7`(handoff)** 만 재리뷰(멱등성).
+
+**✅ R-2 종결 · TASK-036 AC 5개 전부 종결. 재제출 불필요.**
+`declaration_supertypes()` 가 `node.children` 에서 `extends_interfaces` 계열을 수집하도록 **3줄** 확장 —
+A-0043 §3.4 가 제시한 패치 그대로. 반환 계약(정렬 simple name)·`method_targets`·IR 형상 무변경,
+엣지는 **추가 방향으로만** 움직인다.
+
+**픽스처 밖 fresh 적대입력 14종 전량 복원**: R-2 정확재현(`PaymentPort extends BasePort`) · 3단 체인 ·
+다중 `extends A, B` · 제네릭 `extends Repo<String>` · 다이아몬드 · `enum`/`record` 서브인터페이스 구현 ·
+`default` 오버라이드 체인 · 중첩(`Holder.Inner`) · 스코프명 · **추상 전용** 서브인터페이스 · 추상클래스 대조군 —
+전부 구현체 엣지 복원, `unresolved`·`errors` 공히 빔.
+**오염 없음**: 타입파라미터 바운드(`<T extends Number>`)·`sealed…permits`·어노테이션 modifier 가
+가짜 상위타입으로 새지 않음(repo 밖 타입은 `unresolved` 로 정직하게 남음).
+**병리·스케일**: 순환 `extends`(Cy1↔Cy2)·자기 `extends` **고정점 수렴·무한루프 없음** ·
+300단 체인 **0.14s** · 1023 인터페이스 이진트리 **0.03s** ⇒ 새 계층 그래프 폭주 없음.
+
+**하류 end-to-end**: `check-indirect-impact` 직접 import — sink `Caller.go` forward 2홉에서
+`PaymentImpl.settle` **탐지 True**(`approval_required`), 같은 입력에 패치만 제거하면 **False**(`pass`).
+A-0043 이 지적한 **조용한 `pass` 폐쇄 실증**.
+
+**rig-and-revert 4종(음성검증)**: **RIG-A**(3줄 전체 제거) `java-callgraph-conservative` **단독 FAIL 142/144·adversarial 7/8** ·
+**RIG-B**(`extends_interfaces` **만** 제거) **도 단독 FAIL** ⇒ 신규 능력이 **원소 단위로 load-bearing**(A-0041 G-1 교훈 적용) ·
+**RIG-D**(조상확장 제거) **이번엔 FAIL** ⇒ **O-2(조상확장 무보호) 폐쇄 확인**(직전 리뷰까진 제거해도 PASS) ·
+**RIG-E**(구현체 팬아웃 제거) FAIL(기존 가드 무회귀). **RIG-C**(`super_interfaces`·`superclass` 원소 제거)만 무변화 = 중복(O-10).
+Codex 보고 수치(143/144·adversarial 7/8)는 **자기 환경 기준선 144** 기준이라 이 머신(기준선 143)의 142/144 와 **정합**.
+
+**AC#5 요청 4항목 전부 이행**: ①구현체 `extends` 체인 ②`default` 오버라이드 양쪽 소유자 ③음성검증 ④추상클래스 대조군.
+검증기가 엣지 **완전일치** 비교라 **기대값 단위로 load-bearing**.
+
+**AC 무회귀 실증**: 결정론 md5 2회 동일 · **파일순서 무관** · **교차파일** 계층 해소 · 동명 오버로드 합집합(AC#4) ·
+리플렉션 `unresolved` 유지(AC#3) · dev **143/144**·`tests/mutation-check.sh` **PASS**
+(유일 실패 `tree-sitter-smoke` = 이 머신 Python 3.9.6 환경건·`main` 동일 ⇒ 브랜치 귀속 아님).
+
+**§1 보수성**: 보정 커밋 = 게이트 1·`cases.yaml`·픽스처 1·handoff·summaries **뿐**.
+`extract-callgraph.py`·`check-indirect-impact.py`·`extract-java-inventory.py`·`extract-sinks.py` **바이트 무변경**
+(TASK-036 "Python 추출기 무개조" 의존조건 준수) · `policies/`·`kit/` **무접촉**(킷은 TASK-038 = 스코프 정확) ·
+무관 리팩터 0 · `py_compile`·`git diff --check` PASS ⇒ scope-creep·over-reach 없음.
+
+**🟡 차기 AC 가드 → TASK-037 AC#6 신설 (자기정정)**: A-0042·A-0043 에서 **O-4 익명 내부클래스를
+"과대근사 방향=안전"이라 적은 것은 오판**이다. 실측 —
+`p = new Port(){ public void run(){ new Ledger().settle(); } }` 의 본문이 `Caller.run` 이라는 **연결 안 된 유령 노드**로
+오귀속되고 `Caller.go → Port.run`(본문 없는 추상 선언)은 **막다른 길** ⇒ sink forward **4홉까지 미탐지** = **누락 방향**.
+`coverage.unevaluated` 에 `new Port` 가 남지만 그 필드는 **verdict 무기여**(A-0042 §2.3 확립).
+**선재이며 `beb4c6a` 와 무관**(패치 유무로 산출 완전 동일 확인) ⇒ **이번 반려 사유 아님**.
+TASK-036 은 판정 미연결이라 지금은 구멍이 아니나 **TASK-037 이 소비하는 순간 R-2 와 같은 모양의 실구멍** ⇒
+§2B 원칙대로 비차단으로 흘리지 않고 **TASK-037 AC#6 으로 명시 고정**.
+
+**비차단 이월**: O-8 `interface_names` 死파라미터(정리 권장) · O-9 추상 전용 인터페이스 픽스처 부재(반쪽 구현 미구별·저심각) ·
+O-3 `@Autowired`/`@Transactional` 서술 과대 · O-5~O-7 무변화. **신규 O-10**: 세트의 `super_interfaces`·`superclass` 는
+필드조회와 중복이나 **문법버전 드리프트 방어**로 읽어 유지 무해(결함 아님).
+
+**정책 상태**: `language-routing.yaml` `java.layers.callgraph` 는 **`stub` 유지**.
+`check-indirect-impact` 가 아직 `.py` 하드코딩이라 Java 콜그래프 **소비자 0명** — 지금 승격하면
+못 하는 분석을 광고하는 셈. 승격은 **TASK-037 통과 후(dev)·TASK-038 AC#3(킷)**, D-076 계약대로 Claude 가 한다.
+
+**민감도·머지**: 정산·인증/인가·암호화·DB migration·infra **무해당** · dogfood 메타층 `check-policy-change` **PASS**
+⇒ **비민감** ⇒ **Claude 가 `main` 머지**(구현자≠머지자). 선례 D-074·D-078·D-080·D-082·D-085.
+**정직 고지 + 사실 정정**: 자기보호 zone(`.harness/**`·`tests/cases.yaml`·`tests/run-tests.sh` — D-028)에 걸려
+감사카드는 `verdict: approval_required`·`required_approval: security-reviewer` 를 낸다.
+**D-085 에 적은 "카드 protected_touched 없음" 은 틀렸다**(TASK-035 도 같은 zone 을 건드렸다).
+현행 해석 = repo 내부에선 Claude 적대적 리뷰 + 구현자≠머지자가 그 역할을 하고 D-007 의 "민감"은
+CLAUDE.md §3 **도메인 목록**을 뜻한다 — 다만 명문화된 적이 없어 **H-0001** 로 형 확인 요청(**머지 보류 사유 아님**).

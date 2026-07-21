@@ -32,6 +32,7 @@ GATES = {
     "bootstrap-sensitive-functions": ".harness/gates/bootstrap-sensitive-functions.py",
     "extract-sinks": ".harness/gates/extract-sinks.py",
     "extract-callgraph": ".harness/gates/extract-callgraph.py",
+    "extract-java-callgraph": ".harness/gates/extract-java-callgraph.py",
     "check-indirect-impact": ".harness/gates/check-indirect-impact.py",
     "language-router": ".harness/gates/language-router.py",
     "check-tree-sitter-languages": ".harness/gates/check-tree-sitter-languages.py",
@@ -319,7 +320,7 @@ def case_command(case):
         ]
         return command
 
-    if gate == "extract-callgraph":
+    if gate in {"extract-callgraph", "extract-java-callgraph"}:
         return [
             "python3",
             script,
@@ -1205,7 +1206,7 @@ def main():
                 errors = validate_bootstrap_sensitive_functions(case, result, completed.returncode)
             elif case["gate"] == "extract-sinks":
                 errors = validate_extract_sinks(case, result, completed.returncode)
-            elif case["gate"] == "extract-callgraph":
+            elif case["gate"] in {"extract-callgraph", "extract-java-callgraph"}:
                 errors = validate_extract_callgraph(case, result, completed.returncode)
             elif case["gate"] == "check-indirect-impact":
                 errors = validate_indirect_impact(case, result, completed.returncode)
