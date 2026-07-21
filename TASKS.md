@@ -397,7 +397,7 @@
 > **parity 가 공짜 아닌 유일 지점 = L3(간접영향)**: Java DI/AOP/인터페이스로 이름기반 콜그래프가 실제 엣지를 놓침 → **보수적 과대근사**(인터페이스 호출→모든 구현체 엣지·`@Autowired`→모든 구현·프록시 직접엣지)로 **상위집합 산출 = 안전 parity 달성**(놓침 없음·과탐은 승인상한이라 감내). 정밀 parity 는 후속 네이티브 심볼솔버. 상세 = 설계문서 §5.
 > **명시 비범위(설계 §7)**: cross-commit 누적(→ 후속 마일스톤·baseline 저장 필요)·타입기반 정밀 콜그래프(→ 네이티브 보강)·전 언어 동시.
 
-### TASK-029 ☐ 다국어 어댑터 seam — 공통 IR 계약 + 확장자 라우터 + tree-sitter 도입  (Codex)  *(MVP-3 · J0)*
+### TASK-029 ☑ 다국어 어댑터 seam — 공통 IR 계약 + 확장자 라우터 + tree-sitter 도입  (Codex)  *(MVP-3 · J0)*  — **통과·머지완료(D-072, 2026-07-20)**
 **목적**: 언어별 파서를 판정 엔진에서 분리하는 **배관**을 깐다. Java 파싱 자체는 J1 — 여기선 seam·라우터·정직성·의존 도입까지.
 **수용기준**:
 1. **공통 IR 4종 스키마 확정**(설계 §3.1) — 인벤토리·능력신호·거버넌스주석·콜그래프. 현행 Python 게이트 출력에 `lang` 필드 추가로 정합(스키마 문서화 + 예시). **기존 Python 게이트 로직 무개조**(필드 추가만·현행 91/91 무회귀 = #1 가드).
@@ -409,7 +409,7 @@
 **산출**: 라우터·IR 문서·정책(Codex 저자) + 픽스처 + tree-sitter 도입. **비고**: Python `ast` 무개조가 최우선. Java 파싱 없음(J1).
 **진행**: 2026-07-19 1차 제출(`d1dbdca`) 리뷰 → **보정요청 R-1/R-2/R-3** · 코드 머지 보류 (D-069). 제출 주장 전부 재현(101/101 · tree-sitter 4문법 실로드 · pin=실설치본 · `ast` 무개조 · frozen `.java` fresh 실증 exit 1 + coverage 병기 · RIG-1 단독 FAIL). **R-1** `validate_inventory` 전체비교→부분비교 전환이 **가드를 죽임**(유령 아이템 rig: main FAIL 97/98 vs 브랜치 101/101 무음). **R-2** `language-routing.yaml` **부재 시 무음**으로 언어 coverage 전멸(형제 정책은 fail-closed) · 픽스처 0건. **R-3** 킷 무접촉 = AC#4 미충족 · dev↔kit md5 동일성 최초 균열((a) sync 또는 (b) "dev 전용" 명시 택1). 비차단 이월: **O-A** 카드에 파서/문법 버전 0건(AC#6b 부분) → **TASK-030 AC 로**, **O-B** `tests/parity/` 러너 훅 부재(AC#6a 부분) → **TASK-031 AC#7 전제로**, O-C `not_checked` dedup, O-D 스모크 환경의존. 상세 `collab/answers/A-0026.md`·D-069·`review-notes.md`.
 
-### TASK-030 ☐ Java 함수/메서드 인벤토리 추출기 (tree-sitter → 공통 IR)  (Codex)  *(MVP-3 · J1)*
+### TASK-030 ☑ Java 함수/메서드 인벤토리 추출기 (tree-sitter → 공통 IR)  (Codex)  *(MVP-3 · J1)*  — **통과·머지완료(D-074, 2026-07-20)**
 **목적**: `.java` 를 tree-sitter 로 파싱해 class/method/constructor 인벤토리를 **공통 IR #1** 로. Python 인벤토리와 동일 스키마 → `map-diff-to-functions` 헝크↔메서드 교집합·classify 재사용.
 **수용기준**:
 1. class/method/constructor **정규화 이름**(`Class.method`·중첩·이너클래스)·**시작/끝 라인범위**·**어노테이션 목록** 추출. `lang: java`.
@@ -419,7 +419,7 @@
 5. 결정적(md5 2회) + `--json`. `map-diff-to-functions` 가 Java IR 을 소비해 Java 헝크↔메서드 매핑 산출됨을 픽스처로 실증(공통 교집합 로직 재사용 확인).
 **의존**: TASK-029 통과 후.
 
-### TASK-031 ☐ Java `@Gov` + Spring 어노테이션 카탈로그 → 함수레벨 민감도  (Codex)  *(MVP-3 · J2)*
+### TASK-031 ☑ Java `@Gov` + Spring 어노테이션 카탈로그 → 함수레벨 민감도  (Codex)  *(MVP-3 · J2)*  — **통과·머지완료(D-078, 2026-07-21)**
 **목적**: Java 어노테이션을 민감도 신호로. 변경 메서드의 effective level → 기존 `check-function-gov-level` 판정 재사용(frozen=blocked/protected=approval/watched=warn).
 **수용기준**:
 1. `@Gov(level=, reason=, [owner=])` 파싱(문자열 리터럴 keyword) — Python `@gov` 규약 이식(strongest-wins 승계·중복필드 strongest·invalid→protected 보수, TASK-008 계보).
@@ -444,7 +444,7 @@
    (e) 회귀 픽스처(**현재 0건 = 미측정**): 파서 부재 강제 + 정책 supported → 미분석 노출·`exit 0` / 층별 문구가 capabilities 미분석 명시 / 각각 **음성검증 단독 FAIL**.
 **의존**: TASK-030 통과 후.
 
-### TASK-032 ☐ Java 능력 카탈로그 + 신규능력 감지  (Codex)  *(MVP-3 · J3)*
+### TASK-032 ☑ Java 능력 카탈로그 + 신규능력 감지  (Codex)  *(MVP-3 · J3)*  — **통과·머지완료(D-080 → 킷보정 D-082, 2026-07-21)**
 **목적**: Java 위험 능력을 카탈로그로 추출 → 기존 `check-new-capabilities`(base..head 신규 도입만 approval) 재사용. 2층 불변식(자동 차단 금지·승인상한).
 **수용기준**:
 1. Java 능력 카탈로그(`sensitive-capabilities.yaml` 확장 또는 언어별 분리·source/owner 메타): `Runtime.exec`/`ProcessBuilder`(command_exec) · `ObjectInputStream.readObject`(unsafe_deserialization) · `Class.forName`/`Method.invoke`(reflection) · 문자열 SQL `Statement.execute*`(sql_injection_surface) · `Cipher`/`MessageDigest`(crypto) · `InitialContext.lookup`(jndi_lookup) · `RestTemplate`/`WebClient`/`HttpClient`(outbound_http). 등급은 정책값(protected 상한·frozen 오면 clamp — 2층 불변식).
@@ -460,7 +460,54 @@
 11. **language-routing 승격은 Claude 가 한다**(Q-0007 Q5): `java.layers.capabilities` 는 이 태스크 **리뷰 통과 전까지 `stub` 유지**. Codex 는 `policies/language-routing.yaml` 을 건드리지 않는다. 통과 후 Claude 가 `supported` 로 올리고 `status:` 하한도 재평가한다(D-076 under-claim 계약).
 **의존**: TASK-031 통과 후. **정책 선행조건 충족**: `policies/java-sensitive-capabilities.yaml` · `collab/answers/A-0036.md` · D-079.
 
-**MVP-3 의존·순서**: 029(seam) → 030(인벤토리) → 031(주석/Spring) → 032(능력). 각 통과·머지 후 다음. 이후 W1(프론트)·X(콜그래프→간접영향) 는 J 완결 후 AC 정밀화.
+**MVP-3 의존·순서**: 029(seam) → 030(인벤토리) → 031(주석/Spring) → 032(능력). J 라인 **완결**(2026-07-21). 이후: **035(잔손질) → 036·037(X = Java 간접영향 L3) → 038(킷 반영)** → 그 다음 W1(프론트) AC 정밀화.
+
+# MVP-3 X 단계 — Java 간접영향(L3) + 잔손질 + 킷  *(설계 D-083, 2026-07-21 · 형 지시 "자바까지 완성 후 킷 업데이트")*
+
+> **왜 X 인가(parity)**: J 라인(029~032)으로 Java **직접 탐지**(함수·@Gov/Spring·능력)는 완결됐으나, **간접영향(L3 = sink 역도달성)은 Java 에서 stub** — Python(MVP-2)엔 있는 층이 Java 엔 없다 = **parity 구멍**(D-062 최우선 원칙 위반). 프론트(W1) 얹기 전에 이 구멍을 닫아 Java↔Python parity 회복.
+> **현행 코드 사실(2026-07-21 확인)**: `check-indirect-impact.py`·`extract-callgraph.py`·`extract-sinks.py` 는 **아직 `.py` 하드코딩**(언어중립 아님). `language-router` 는 `callgraph` 층을 알지만 `java.layers.callgraph=stub`. → X = **Java 콜그래프/sink 추출기 신설 + 간접영향 게이트 언어중립화**.
+> **불변 원칙**: 차단 절대 금지·승인요구 상한(MVP-2 L3 동일). Python 골든패스(간접영향 기존 픽스처) **무회귀 최우선**.
+
+### TASK-035 ☐ MVP-3 J 라인 잔손질 — 열린 관찰 7건 폐쇄  (Codex)  *(D-080·D-082 O-건 소진)*
+**목적**: W1(프론트)로 같은 결함을 복제하기 전에, J 라인이 남긴 관찰 7건을 닫는다(소규모·Codex 1회전 목표).
+**수용기준**:
+1. **🔴 (D-080 O-1·위험 최대) 언어 카탈로그 지연 로드(lazy load)**: 변경에 `.java` 가 **하나도 없으면** Java 정책/카탈로그를 **로드하지 않는다** — 현재는 무조건 선로드라 **Java 정책 부재 시 순수 Python PR 이 exit 2 오작동**(D-079 실패모드 dev 경로 재진입). 검증: `.py` 만 바뀐 PR + Java 정책 부재 → **pass/exit 0**(회귀 픽스처 + 음성검증). 킷 preflight 도 동일 원칙 재확인.
+2. **(D-080 O-2) 무정보 바인딩 미탐 씨앗**: Java `var`/`Object` 무정보 바인딩이 `unresolved_dynamic` 노출을 **억제하지 않도록** — 해소불가 호출은 반드시 coverage 로 노출(조용한 미탐 방지). 픽스처 고정.
+3. **(D-080 O-3) coverage 문구 이행**: `ACGH_*_OVERRIDE` 무시 사실을 coverage 문구에 실제 반영(AC#8 override 게이팅의 정직 표기).
+4. **(D-082 O-1) 킷 진입점 grep 정확일치**: `run-entrypoint-tests.sh` 의 층 문구 grep 이 **접두 부분일치**라 층 회귀 맹점 — 정확일치(또는 경계 앵커)로 좁혀 회귀를 실제로 잡게. 음성검증(층 문구 변조 시 FAIL).
+5. **(D-082 O-2) capabilities 실패 카드 trace 대칭**: `gov_level` 은 분석실패 흔적을 카드에 남기는데 `capabilities` 는 안 남김(D-076 trace 계약 비대칭) — capabilities 분석 실패도 카드에 trace 노출.
+6. **(D-082 O-3) `kit/manifest.yaml` J3 반영**: manifest 가 J3(Java 능력) 미반영 — 게이트 목록·버전 갱신.
+7. **(D-082 O-4) 정책 `status:` 주석 스테일 정리**(사소).
+**비고**: 판정 로직 변경 최소·대부분 정직성/위생. O-1 만 실판정 영향(과차단 제거) → 회귀 픽스처 필수. Codex 저자·Claude 리뷰.
+
+### TASK-036 ☐ Java 콜그래프 추출기 (tree-sitter → 공통 IR · 보수적 과대근사)  (Codex)  *(MVP-3 · X · Java L3-a)*
+**목적**: `.java` 함수 호출 엣지를 결정적으로 빌드해 **공통 IR #4**(`edges`·`unresolved_calls`)로. 판정 미연결(그래프 산출만). TASK-023(Python 콜그래프) 대응.
+**수용기준**:
+1. tree-sitter 로 메서드 정의별 호출 수집 → **repo 내 메서드로 해소되는 호출만 엣지**(caller→callee, 정규화 이름 `Class.method`). TASK-030 인벤토리·TASK-031 어노테이션 재사용.
+2. **🔴 보수적 과대근사(설계 §5 · parity 안전방향)**: 정적으로 대상이 불확정인 호출을 **버리지 말고 상위집합으로 연결** — ① **인터페이스 메서드 호출 → repo 내 그 인터페이스의 모든 구현체(`implements`/`extends` 열거)로 엣지** ② **`@Autowired`/생성자 주입 필드 → 그 타입의 모든 구현으로 해소** ③ **`@Transactional`·AOP 프록시 경유 → 직접 엣지로 취급**(프록시 무시). 결과 = 실제 런타임 엣지의 superset(진짜 엣지 안 놓침).
+3. **해소 실패 호출**(리플렉션·완전 동적·컨테이너 밖 배선)은 버리지 않고 `unresolved_calls`/`coverage.unevaluated` 로 노출(조용한 누락 금지·ADR-001 D4).
+4. **결정론**(md5 2회) + `--json`. 동명 오버로드·조건부 정의는 보수적 병합(합집합).
+5. **🔴 고정 적대 세트**: 인터페이스 다형성(1인터페이스 N구현)·`@Autowired` 주입·리플렉션 미해소 각각 + 음성검증(과대근사 무력화 시 참케이스 엣지 소실 → FAIL). **parity 픽스처**: 동일 구조 Python 콜그래프와 엣지 도달성 등가(구조 대응).
+**의존**: TASK-035 후(또는 병행 가능). Python `extract-callgraph.py` **무개조**(별도 Java 추출기 신설).
+
+### TASK-037 ☐ Java sink 추출 + `check-indirect-impact` 언어중립화 + Java 간접영향 배선  (Codex)  *(MVP-3 · X · Java L3-b — Java L3 완결)*
+**목적**: Java sink 을 등록하고, 간접영향 게이트를 **언어중립화**해 Java 콜그래프(TASK-036)를 소비 → 바뀐 Java 함수가 sink 상류면 승인요구. TASK-022·024·025(Python L3) 대응.
+**수용기준**:
+1. **Java sink 추출**(TASK-022 대응): frozen-zone Java 함수 자동 sink · `@Gov(sink=true)` Java 어노테이션 · `sink-registry` 명시 등록. 일반 @Gov·protected 는 sink 아님. `extract-sinks.py` 를 어댑터 분기(Java 추출)로 확장하거나 Java sink 추출기 신설.
+2. **🔴 `check-indirect-impact` 언어중립화**: 현행 `.py` 하드코딩(라인 55·76·`extract-callgraph`/`extract-sinks` 직접호출)을 **어댑터 분기**로 — 변경 파일을 language-router 로 라우팅해 언어별 콜그래프·sink 을 **병합**해 판정. **🔴 Python 골든패스 무회귀 최우선**(기존 Python 간접영향 픽스처·85+ 스위트 전량 유지 = #1 가드).
+3. 바뀐 Java 함수 ∈ (sink 로부터 forward N홉) → `indirect_impact`+최소 `approval_required`. **차단 금지**(exit 0/2 만). 감사필드 `sink_id`·`changed_function`·`path`·`hops`. 라우팅 = sink owner. 분석실패 → fail-closed(tool_owner·최소 approval).
+4. N홉 = 정책값(기본 1·하드코딩 금지). shadow 성숙도 지원(신규 sink shadow 시작).
+5. **🔴 parity 픽스처(설계 §1.5 · 이 태스크의 핵심 합격기준)**: MVP-2 의 Python 간접영향 대표 케이스(sink 상류 함수 수정→approval · 무관 수정→pass · N홉 경계)와 **동일 verdict** 를 내는 **Java 등가 픽스처를 `tests/parity/` 쌍**으로 + 음성검증. **과대근사 정직성**: Java 미해소 동적은 `coverage.unevaluated` 노출을 테스트로 고정.
+**의존**: TASK-036 통과 후. → **통과 시 Java L3 완결 = Java↔Python parity 회복.**
+
+### TASK-038 ☐ 킷에 Java L3 + 잔손질 반영 (MVP-3 킷 스냅샷 갱신)  (Codex)  *(MVP-3 · X · 킷)*
+**배경**: TASK-035·036·037 로 dev 가 Java 전 계층(J1~J3 + L3) 완비되면 킷을 그 상태로 올린다(형 지시 "자바까지 하고 킷 업데이트"). TASK-026/028 킷 스냅샷 선례.
+**수용기준**:
+1. `sync-from-dev.sh` → 신규 Java 콜그래프/sink 추출기 + 언어중립화된 `check-indirect-impact` + 정책이 킷에 반영(dev↔kit md5 동일·누락검증 통과·게이트 수 갱신).
+2. `run.sh` 에 **Java 간접영향층이 기존 간접영향 배선을 통해 작동**(언어중립화 덕에 별도 배선 불필요할 수 있음 — 확인). `--policies`·sink-registry 오버라이드 일관. 정책 부재 fail-safe.
+3. `manifest.yaml`/`README.md` — Java L3(callgraph·sink) 반영·"Java 간접영향 지원" 명기. `language-routing.yaml` `java.layers.callgraph` **stub→supported 승격은 Claude 가**(리뷰 통과 후·D-076 계약).
+4. `kit/selftest.sh` 전량 green + **Java 간접영향 rig-and-revert**(sink 상류 Java 함수 수정→승인요구·fresh 적대입력). 기존 진입점 무회귀.
+**의존**: TASK-037 통과·머지 후 착수.
 
 ## MVP-3 공통 (Codex)
 - **🔴 파이썬 동등성(parity) = 최우선 합격기준**(형 지시): 각 J-태스크는 Python 대응층과 **동일 성능**을 실증해야 통과. **교차언어 등가 픽스처**(`tests/parity/`·py판+java판 동일 verdict 단언 + 음성검증)가 없으면 미완. 불완전성은 **항상 과탐(approval) 쪽으로 반올림 — 과소탐(놓침) 금지**(놓침 = parity 위반). 정의 = 설계 §1.5.
