@@ -1997,3 +1997,16 @@ parity 는 "정상 경로 등가"만이 아니라 **"실패 경로 등가"까지
 - **통과 확인(실증)**: 결정론 md5 2회 동일 · 오버로드 합집합 병합(노드 2·엣지 1) · **노드 `line` = 어노테이션 첫 줄**(데코레이터-라인범위 상설 관심사 충족) · 파싱실패 → `errors` → 하류 fail-closed 승격 · 빈/비-Java repo 무크래시 · IR#4 키·정렬 Python 추출기와 일치(`lang` 만 추가).
 - **비차단 → 차기 AC**: O-1 무효 코드 · O-2 조상확장 무보호 · **O-3 픽스처 `@Autowired`/`@Transactional` 무기능**(삭제해도 PASS — 구현은 순수 타입 기반, handoff 서술 과대·AC#1 "TASK-031 어노테이션 재사용" 미실시) · O-4 익명클래스 유령 노드(과대근사 방향=안전) · O-5 파서 파일마다 재생성 · O-6 제네릭 `[-1]` 자의적 · O-7 parity 픽스처 1홉 최소치라 과대근사 미검증.
 - **§1 보수성**: `extract-callgraph.py` 무개조(의존조건 준수) · Claude/공통 소유 무접촉 · 무관 리팩터 0 · dogfood `check-policy-change` PASS ⇒ scope-creep·over-reach 없음.
+
+## TASK-036 A-0042 보정 재제출 재리뷰 — 2026-07-21 · **R-1 해소 · 신규 R-2 로 재보정요청 · merge 보류** (A-0043 · D-087)
+- 대상: `codex/2026-07-21-task036-java-callgraph` — **`c71a5b0`(보정)·`c362e79`(handoff)** 만 재리뷰(멱등성).
+- **✅ R-1 종결**: A-0042 §2.5 두 번째 대안(인터페이스 소유자 무제외) 채택 + 무효 코드 O-1 동시 제거. 적대입력 4종(default·구현0 / 오버라이드 / 인터페이스 `static` / 본문 자기호출) **전부 엣지 복원**, `unresolved`·`errors` 공히 빔. **하류 실증**: sink `Caller.run` forward 2홉 → `AuditPort.settle` **탐지 True** = `pass`→`approval_required` 로 뒤집힘.
+- **RIG-1(음성검증)**: 제외 로직 복원 → `java-callgraph-conservative` **단독 FAIL(142/144·adversarial 7/8)**, Codex 보고 수치와 정확히 일치. 검증기가 엣지 **완전일치** 비교라 신규 4시나리오가 **기대값 단위로 load-bearing**(A-0041 G-1 교훈 적용).
+- **🔴 R-2 신규(선재) — `interface … extends …` 전면 미인식**: `declaration_supertypes()` 가 `superclass`·`interfaces` 두 필드만 조회. tree-sitter-java 는 `interface B extends A` 를 **`extends_interfaces` 자식 노드**로 주므로 **어느 필드로도 안 잡힌다**(직접 덤프 확인). 픽스처 `implementations` 맵에 인터페이스 간 링크 **0건**. ⇒ AC#2 ① "`implements`/**`extends`** 열거"의 `extends` 절반 미구현.
+- **§2B 필수질문 = 예 → 비차단 금지**: fresh 입력(`PaymentPort extends BasePort` · `PaymentImpl implements PaymentPort` · `BasePort` 수신자) → 엣지가 `Caller.go→BasePort.settle` **뿐**, 실제 타깃 `PaymentImpl.settle` **소실**. **구조 동형 추상클래스 대조군은 2엣지 정상** ⇒ 의도상 버그. end-to-end: 서브인터페이스 **미탐지 `pass`** ↔ 대조군 **탐지 `approval_required`**. `coverage.unevaluated`·`errors` **둘 다 빈 배열** ⇒ 하류 fail-closed 구제 불가, 미해소 목록에조차 안 남아 **R-1 보다 은닉성 높음**.
+- **보정 비용 실증**: `extends_interfaces`/`super_interfaces` 자식 처리 **3줄** 추가 → 소실 엣지 복원 + **스위트 143/144 유지(회귀 0)**. Claude 가 직접 패치해 확인 ⇒ 대규모 리팩터 강요 아님.
+- **자기정정 2건**: ① A-0042 §2.3 "역도달성" 은 **방향 표기 오류** — `reachable_paths` 는 sink 에서 `caller→callee` **전진**(TASK-037 AC#3). 당시 엣지가 literally NONE 이라 **결론은 유효**, 표기만 정정. ② R-2 는 `74b3857` 에도 있던 **선재 결함을 A-0042 에서 놓친 것**(보정 회귀 아님).
+- **통과 확인**: 결정론 md5 2회 동일 · 리플렉션 `unresolved` 무회귀 · `enum implements` 정상 · `A.super.f()` 해소 · dev **143/144**(보정 전과 동일·회귀 0) ↔ `main` 140/141, 유일 실패 `tree-sitter-smoke` = 이 머신 Python 3.9.6 환경건(`main` 동일).
+- **§1 보수성**: 게이트 1·`cases.yaml`·픽스처 1·handoff·summaries **뿐**. `extract-callgraph.py`·`check-indirect-impact.py` 바이트 무변경 · `policies/` 무접촉 · **`kit/` `main` 과 완전 동일**(킷은 TASK-038 = 스코프 정확) · 무관 리팩터 0 ⇒ scope-creep 없음.
+- **비차단**: **O-8(신규)** `interface_names` 完전 死파라미터(공집합 강제해도 143/144 무변화) · **O-2(이월·미해소)** 조상확장 무보호 · **O-9(신규)** 픽스처가 추상 전용 인터페이스 케이스 부재로 반쪽 구현을 구별 못함 · **O-3(이월)** `@Autowired`/`@Transactional` 무기능 서술 과대 미정정 · O-4~O-7 무변화.
+- **머지**: **코드 브랜치 보류**. 리뷰 기록만 `main` 머지(D-007). AC#5 에 서브인터페이스 4항목 추가 요청.
