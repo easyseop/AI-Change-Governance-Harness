@@ -144,6 +144,7 @@ def has_static_modifier(source_bytes, node):
     return any(
         "static" in re.findall(r"[A-Za-z_][A-Za-z0-9_]*", node_text(source_bytes, child))
         for child in node.children
+        if child.type == "modifiers"
     )
 
 

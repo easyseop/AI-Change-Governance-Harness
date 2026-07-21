@@ -152,24 +152,14 @@ def sink_reachable_bodyless_functions(sinks, adjacency, bodyless_functions):
     return relevant
 
 
-def sink_reachable_functions(sinks, adjacency):
-    relevant = set()
-    for sink in sinks:
-        start = sink.get("function")
-        if start:
-            relevant.add(start)
-        relevant.update(reachable_paths(adjacency, start, sink.get("hops", 1)))
-    return relevant
-
-
-def sink_relevant_deferred_records(java_deferred, sink_dead_ends, sink_reachable):
+def sink_relevant_deferred_records(java_deferred, sink_dead_ends):
     relevant = []
     for item in java_deferred:
         dispatch_targets = set(item.get("dispatch_targets") or [])
         if dispatch_targets and dispatch_targets.intersection(sink_dead_ends):
             relevant.append(item)
             continue
-        if not dispatch_targets and item.get("caller") in sink_reachable:
+        if not dispatch_targets and sink_dead_ends:
             relevant.append(item)
     return relevant
 
@@ -334,10 +324,7 @@ def check_indirect_impact(
     sink_dead_ends = sink_reachable_bodyless_functions(
         sinks.get("sinks", []), adjacency, java_bodyless
     )
-    sink_reachable = sink_reachable_functions(sinks.get("sinks", []), adjacency)
-    relevant_java_deferred = sink_relevant_deferred_records(
-        java_deferred, sink_dead_ends, sink_reachable
-    )
+    relevant_java_deferred = sink_relevant_deferred_records(java_deferred, sink_dead_ends)
     if relevant_java_deferred:
         errors.extend({"gate": "extract-java-callgraph", **item} for item in relevant_java_deferred)
         fail_closed_records.append(
