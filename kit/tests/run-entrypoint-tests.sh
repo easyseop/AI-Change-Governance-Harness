@@ -135,12 +135,39 @@ run_language_policy_case(){
   output="$(ACGH_GATE_TIMEOUT_SECONDS=1 bash "$runner" HEAD~1..HEAD --repo "$repo" --policies "$KIT/policies" --output "$card" 2>&1)"; rc=$?
   if [ "$rc" = 0 ] &&
      printf '%s\n' "$output" | grep -q 'PASS' &&
-     grep -q 'java .java layers not available: callgraph' "$card"; then
+     grep -Eq "^[[:space:]]*- ['\"]?java \.java layers not available: callgraph['\"]?[[:space:]]*$" "$card"; then
     echo "PASS $name"; PASS=$((PASS + 1))
   else
     echo "FAIL $name (exit=$rc expected=0, missing kit language routing coverage)"
     printf '%s\n' "$output" | tail -16 | sed 's/^/  /'
     [ -f "$card" ] && tail -30 "$card" | sed 's/^/  card: /'
+  fi
+}
+
+run_language_policy_negative_case(){
+  local name="$1" source_card="$2" rigged_card="$3"
+  TOTAL=$((TOTAL + 1))
+  sed 's/layers not available: callgraph/layers not available: callgraph, capabilities/' "$source_card" > "$rigged_card"
+  if ! grep -Eq "^[[:space:]]*- ['\"]?java \.java layers not available: callgraph['\"]?[[:space:]]*$" "$rigged_card"; then
+    echo "PASS $name"; PASS=$((PASS + 1))
+  else
+    echo "FAIL $name (exact layer assertion accepted a prefixed/suffixed regression)"
+  fi
+}
+
+run_capability_failure_card_case(){
+  local name="$1" runner="$2" repo="$3" expected_text="$4" card="$5"
+  local output rc
+  TOTAL=$((TOTAL + 1))
+  output="$(ACGH_GATE_TIMEOUT_SECONDS=1 bash "$runner" HEAD~1..HEAD --repo "$repo" --output "$card" 2>&1)"; rc=$?
+  if [ "$rc" = 2 ] &&
+     printf '%s\n' "$output" | grep -q "$expected_text" &&
+     grep -q 'capabilities analysis unavailable' "$card"; then
+    echo "PASS $name"; PASS=$((PASS + 1))
+  else
+    echo "FAIL $name (exit=$rc expected=2, missing capability failure trace)"
+    printf '%s\n' "$output" | tail -12 | sed 's/^/  /'
+    [ -f "$card" ] && tail -20 "$card" | sed 's/^/  card: /'
   fi
 }
 
@@ -227,6 +254,7 @@ git -C "$repo" add app change-intent.yaml && git -C "$repo" commit -qm base-with
 printf 'class AccountService {}\n' >"$repo/app/AccountService.java"
 git -C "$repo" add -A && git -C "$repo" commit -qm language-policy-kit-default
 run_language_policy_case language-routing-kit-policy-default "$KIT/run.sh" "$repo" "$WORK/language-policy-card.yaml"
+run_language_policy_negative_case language-routing-exact-layer-negative "$WORK/language-policy-card.yaml" "$WORK/language-policy-rigged-card.yaml"
 
 # 레거시 override 정책 디렉터리에 language-routing 이 없으면 차단 카드가 아니라 분석 실패로 닫아야 한다.
 repo="$WORK/language-policy-legacy-override"; make_repo "$repo"
@@ -236,8 +264,8 @@ printf '\n# harmless legacy override change\n' >>"$repo/app/service.py"
 git -C "$repo" add app/service.py && git -C "$repo" commit -qm language-policy-legacy-override
 run_missing_language_policy_preflight_case language-routing-legacy-override-preflight "$KIT/run.sh" "$repo" "$legacy_policies" "$WORK/language-policy-legacy-card.yaml"
 
-# 필수 정책 preflight 는 5개 항목 모두에서 분석실패 exit 2 + blocked 카드 미생성을 보장해야 한다.
-for required_policy in sensitive-zones.yaml sensitive-capabilities.yaml java-sensitive-capabilities.yaml approval-routing.yaml framework-annotations.yaml; do
+# 언어 비의존 필수 정책은 분석실패 exit 2 + blocked 카드 미생성을 보장해야 한다.
+for required_policy in sensitive-zones.yaml sensitive-capabilities.yaml approval-routing.yaml framework-annotations.yaml; do
   repo="$WORK/preflight-${required_policy%.yaml}"; make_repo "$repo"
   missing_policies="$repo/policies"
   rm "$missing_policies/$required_policy"
@@ -245,6 +273,19 @@ for required_policy in sensitive-zones.yaml sensitive-capabilities.yaml java-sen
   git -C "$repo" add app/service.py && git -C "$repo" commit -qm "missing-$required_policy"
   run_missing_required_policy_preflight_case "required-policy-${required_policy%.yaml}-preflight" "$KIT/run.sh" "$repo" "$missing_policies" "$required_policy" "$WORK/preflight-${required_policy%.yaml}-card.yaml"
 done
+
+# Java 카탈로그는 Java 변경에만 필수다. 순수 Python 변경은 정책을 지연 로드해 통과한다.
+repo="$WORK/preflight-java-policy-python"; make_repo "$repo"
+rm "$repo/policies/java-sensitive-capabilities.yaml"
+printf '\n# harmless Python-only change\n' >>"$repo/app/service.py"
+git -C "$repo" add app/service.py && git -C "$repo" commit -qm missing-java-policy-python-only
+run_case java-policy-lazy-python-pass 0 'PASS' "$KIT/run.sh" "$repo" --policies "$repo/policies" --output "$WORK/preflight-java-python-card.yaml"
+
+repo="$WORK/preflight-java-policy-java"; make_repo "$repo"
+rm "$repo/policies/java-sensitive-capabilities.yaml"
+printf 'class Changed {}\n' >"$repo/app/Changed.java"
+git -C "$repo" add app/Changed.java && git -C "$repo" commit -qm missing-java-policy-java-change
+run_missing_required_policy_preflight_case required-policy-java-sensitive-capabilities-preflight "$KIT/run.sh" "$repo" "$repo/policies" "java-sensitive-capabilities.yaml" "$WORK/preflight-java-card.yaml"
 
 # Spring security annotation changes are wired through framework-annotations.yaml into the L1 function gate.
 repo="$WORK/java-framework"; make_repo "$repo"
@@ -396,14 +437,14 @@ broken="$WORK/kit-missing"; cp -R "$KIT" "$broken"; rm "$broken/gates/check-new-
 repo="$WORK/missing"; make_repo "$repo"
 printf 'def changed():\n    return 1\n' >>"$repo/app/service.py"
 git -C "$repo" add . && git -C "$repo" commit -qm changed
-run_case missing-gate 2 '분석 실패: check-new-capabilities' "$broken/run.sh" "$repo"
+run_capability_failure_card_case missing-gate-card-trace "$broken/run.sh" "$repo" '분석 실패: check-new-capabilities' "$WORK/missing-gate-card.yaml"
 
 slow="$WORK/kit-timeout"; cp -R "$KIT" "$slow"
 cat >"$slow/gates/check-new-capabilities.py" <<'PY'
 import time
 time.sleep(5)
 PY
-run_case gate-timeout 2 'timeout' "$slow/run.sh" "$repo"
+run_capability_failure_card_case gate-timeout-card-trace "$slow/run.sh" "$repo" 'timeout' "$WORK/timeout-card.yaml"
 
 echo "Entrypoint summary: $PASS/$TOTAL PASS"
 [ "$PASS" = "$TOTAL" ]

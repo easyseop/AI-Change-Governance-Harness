@@ -185,6 +185,15 @@ def load_java_inventory_module():
     return module
 
 
+def override_coverage():
+    override_path = os.environ.get("ACGH_JAVA_INVENTORY_PATH")
+    if override_path and os.environ.get("ACGH_ALLOW_TEST_OVERRIDES") != "1":
+        return [
+            "ignored ACGH_JAVA_INVENTORY_PATH override because ACGH_ALLOW_TEST_OVERRIDES=1 was not set"
+        ]
+    return []
+
+
 def java_match_signature(signature):
     remaining = signature
     while remaining.startswith("@"):
@@ -409,6 +418,7 @@ def classify_python_function_changes(rev_range, repo="."):
         "base_commit": base_commit,
         "head_commit": head_commit,
         "files": files,
+        "coverage": override_coverage(),
     }
 
 

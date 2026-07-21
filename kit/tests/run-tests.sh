@@ -614,6 +614,8 @@ def validate_function_mapping(case, result, exit_code):
     if result.get("error"):
         errors.append(f"unexpected error: {result['error']}")
         return errors
+    if "coverage" in expect:
+        assert_equal(errors, "coverage", result.get("coverage"), expect["coverage"])
 
     actual_files = []
     include_parse_error = any(
@@ -645,6 +647,8 @@ def validate_function_classification(case, result, exit_code):
     if result.get("error"):
         errors.append(f"unexpected error: {result['error']}")
         return errors
+    if "coverage" in expect:
+        assert_equal(errors, "coverage", result.get("coverage"), expect["coverage"])
 
     actual_files = []
     for file_record in result.get("files", []):
