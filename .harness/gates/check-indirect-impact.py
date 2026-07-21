@@ -143,8 +143,12 @@ def reachable_paths(adjacency, sink, max_hops):
 def sink_reachable_bodyless_functions(sinks, adjacency, bodyless_functions):
     relevant = set()
     for sink in sinks:
-        reachable = reachable_paths(adjacency, sink.get("function"), sink.get("hops", 1))
-        relevant.update(function for function in reachable if function in bodyless_functions)
+        start = sink.get("function")
+        reachable = reachable_paths(adjacency, start, sink.get("hops", 1))
+        candidates = set(reachable)
+        if start:
+            candidates.add(start)
+        relevant.update(function for function in candidates if function in bodyless_functions)
     return relevant
 
 
@@ -300,6 +304,10 @@ def check_indirect_impact(
         node.get("id")
         for node in java_graph.get("nodes", [])
         if node.get("bodyless") and node.get("id")
+    } | {
+        item.get("caller")
+        for item in java_graph.get("coverage", {}).get("unevaluated", [])
+        if item.get("kind") == "unresolved" and item.get("caller")
     }
     sink_dead_ends = sink_reachable_bodyless_functions(
         sinks.get("sinks", []), adjacency, java_bodyless

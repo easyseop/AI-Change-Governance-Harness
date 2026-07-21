@@ -140,6 +140,10 @@ def has_anonymous_class_body(node):
     return any(child.type == "class_body" for child in node.named_children)
 
 
+def has_static_modifier(source_bytes, node):
+    return any(node_text(source_bytes, child).strip() == "static" for child in node.children)
+
+
 def class_direct_field_bindings(source_bytes, node):
     bindings = {}
     body = node.child_by_field_name("body")
@@ -548,25 +552,27 @@ def collect_calls(
                     interface_names,
                 ) if owner_type else []
                 for child in anonymous_body.named_children:
-                    if child.type not in CALLABLE_DECLARATIONS:
-                        continue
-                    body_targets, body_unresolved = subtree_call_targets(
-                        source_bytes,
-                        child.child_by_field_name("body") or child,
-                        method["bindings"],
-                        method["owner"],
-                        methods_by_owner,
-                        method_details,
-                        implementations,
-                        ancestors,
-                        type_names_by_simple,
-                        interface_names,
-                    )
-                    for dispatch_target in dispatch_targets:
-                        for target in body_targets:
-                            edges.add((dispatch_target, target, node_line(child), f"new {owner_type}"))
-                        for kind, name, line in body_unresolved:
-                            unresolved.add((dispatch_target, kind, name, line))
+                    if child.type in CALLABLE_DECLARATIONS:
+                        body_targets, body_unresolved = subtree_call_targets(
+                            source_bytes,
+                            child.child_by_field_name("body") or child,
+                            method["bindings"],
+                            method["owner"],
+                            methods_by_owner,
+                            method_details,
+                            implementations,
+                            ancestors,
+                            type_names_by_simple,
+                            interface_names,
+                        )
+                        for dispatch_target in dispatch_targets:
+                            for target in body_targets:
+                                edges.add((dispatch_target, target, node_line(child), f"new {owner_type}"))
+                            for kind, name, line in body_unresolved:
+                                unresolved.add((dispatch_target, kind, name, line))
+                    elif child.type in {"field_declaration", "constant_declaration", "static_initializer", "block"}:
+                        for kind, name, line in deferred_nodes(source_bytes, child):
+                            unresolved.add((method["id"], kind, name, line))
                 if not dispatch_targets:
                     unresolved.add(
                         (method["id"], "anonymous_class", f"new {owner_type}", node_line(node))
@@ -642,33 +648,49 @@ def collect_initializer_deferred(source_bytes, tree):
             owner = ".".join(type_stack + [local])
             body = node.child_by_field_name("body")
             if body is not None:
+                scan_initializer_members(body, owner)
                 for child in body.named_children:
-                    if child.type == "field_declaration":
-                        scan_deferred(child, f"{owner}.<init>")
-                    elif child.type == "static_initializer":
-                        scan_deferred(child, f"{owner}.<clinit>")
-                    elif child.type == "block":
-                        scan_deferred(child, f"{owner}.<init>")
                     visit(child, type_stack + [local])
             return
         for child in node.named_children:
             visit(child, type_stack)
 
+    def scan_initializer_members(body, owner):
+        for child in body.named_children:
+            if child.type == "field_declaration":
+                caller = f"{owner}.<clinit>" if has_static_modifier(source_bytes, child) else f"{owner}.<init>"
+                scan_deferred(child, caller)
+            elif child.type == "constant_declaration":
+                scan_deferred(child, f"{owner}.<clinit>")
+            elif child.type == "static_initializer":
+                scan_deferred(child, f"{owner}.<clinit>")
+            elif child.type == "block":
+                scan_deferred(child, f"{owner}.<init>")
+            elif child.type in {"enum_body_declarations", "class_body_declarations"}:
+                scan_initializer_members(child, owner)
+
     def scan_deferred(subtree, caller):
-        for child in walk(subtree):
-            if child is not subtree and nested_in_deferred_body(child, subtree):
-                continue
-            if child.type == "lambda_expression":
-                unresolved.add((caller, "lambda_dispatch", "lambda", node_line(child)))
-            elif child.type == "object_creation_expression" and has_anonymous_class_body(child):
-                names = type_names(source_bytes, child.child_by_field_name("type"))
-                owner_type = names[-1] if names else "<unknown>"
-                unresolved.add((caller, "anonymous_class", f"new {owner_type}", node_line(child)))
-            elif child.type == "method_reference":
-                unresolved.add((caller, "method_reference", node_text(source_bytes, child).strip(), node_line(child)))
+        for kind, name, line in deferred_nodes(source_bytes, subtree):
+            unresolved.add((caller, kind, name, line))
 
     visit(tree.root_node, [])
     return unresolved
+
+
+def deferred_nodes(source_bytes, subtree):
+    found = set()
+    for child in walk(subtree):
+        if child is not subtree and nested_in_deferred_body(child, subtree):
+            continue
+        if child.type == "lambda_expression":
+            found.add(("lambda_dispatch", "lambda", node_line(child)))
+        elif child.type == "object_creation_expression" and has_anonymous_class_body(child):
+            names = type_names(source_bytes, child.child_by_field_name("type"))
+            owner_type = names[-1] if names else "<unknown>"
+            found.add(("anonymous_class", f"new {owner_type}", node_line(child)))
+        elif child.type == "method_reference":
+            found.add(("method_reference", node_text(source_bytes, child).strip(), node_line(child)))
+    return found
 
 
 def extract_callgraph(repo):
