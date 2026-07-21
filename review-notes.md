@@ -1972,3 +1972,17 @@ parity 는 "정상 경로 등가"만이 아니라 **"실패 경로 등가"까지
 - **§2B**: 두 건 다 탐지 구멍은 아니나(판정 무손상), 통제 모델이 "민감→사람 라우팅"이고 2층 증거창이 콘솔뿐이라 승인 실효를 깎음 ⇒ 비차단 금지·보정요청. **§1 over-reach**: AC#5 는 "카드에 trace"였지 "2층 렌더러 교체"가 아님.
 - **AC#7 = Claude 완료**: Codex 가 `policies/` 소유권 지켜 Q-0008 로 요청 = 정확. Claude 가 dev·kit 동시 주석 수정(드리프트 0), `status: stub` 값은 유지(D-076 하한).
 - **비차단 → 차기 AC**: O-1 AC#3 `coverage` 키 소비자 0건(카드 미도달·D-080 "경미") · O-2 `sorted(set())` 이 `not_checked` 순서 파괴 · O-3 `HAS_JAVA_CHANGE` 가 git 종료코드 삼킴 · O-4(선재) 3점 range → BLOCKED, `main` 동일.
+
+## TASK-035 A-0040 보정 재제출 재리뷰 — 2026-07-21 · **통과 · `main` 머지** (A-0041 · D-085)
+- 대상: `codex/2026-07-21-task035-java-j-line-cleanup` — **`b2a9c91`(보정)·`82530a9`(handoff)** 만 재리뷰(멱등성: `b677220`·`fe4008f` 통과분 재처리 안 함).
+- **R-1 해소**: fresh repo 문자열 대조로 `protected: app/service.py::outbound_network` / `watched: …` 가 **`main` 과 동일**. 11파일 케이스는 **8줄 + `… 외 3건`** 으로 `main` 의 무고지 `head -6`(5줄)보다 **개선**. A-0040 실증 ①②③ 재현 불가.
+- **R-2 해소 + 새 사실**: 비-YAML 카드는 **두 갈래**다. **V1(콜론 없는 예외 → dict 파싱)** 은 보정 전 크래시가 아니라 **traceback 위에 `change_evidence.coverage_statement` 를 덧붙여 감사카드를 위조**했다(재현). `isinstance(card.get("change_evidence"), dict)` 가 이걸 막음 = **내 지시보다 강한 가드·방향 옳음**. **V2(콜론 포함 → `ScannerError`)** 는 traceback **14줄 → 0줄**. 둘 다 exit 2·`분석 실패` 문구 불변, 카드 주입 불가여도 `fail_closed:` 가 콘솔에 남아 AC#5 실질 회복.
+- **판정 무변화 실증**: exit 6경로(정상 protected·`HAS_RANGE=0`·정책 dir 부재·3점 range·무변경·repo 부재) **브랜치 ↔ `main` 전량 동일**.
+- **스위트**: dev 140/141 · 킷 cases 140/141 · 진입점 **26/26** · mutation **PASS(237)** · dev↔kit `cmp` 드리프트 0(20/20). 유일 실패 `tree-sitter-smoke` = 이 머신 Python 3.9.6 환경, `main` 과 실패집합 동일.
+- **킷 sync 실작동**: `sync-from-dev.sh` 재실행 후 `run.sh` 보정·신규 픽스처 2건 **생존** + 진입점 26/26 재통과(`run.sh`·`run-entrypoint-tests.sh` 는 dev 미러 없는 킷 전용 — sync 가 스냅샷 보존).
+- **정직 고지**: `kit/tests/mutation-check.sh` 직접 호출 0/3 FAIL = **미지원 호출**(계약 = `selftest.sh` 의 `.harness/gates → kit/gates` 심볼릭 루트). **`main` 도 동일** ⇒ 브랜치 귀속 아님.
+- **rig-and-revert**: 사람용 요약 제거 → 2건 FAIL(24/26) · `isinstance` 제거 → 1건 FAIL(25/26) ⇒ 각각 load-bearing.
+- **🟡 신규 발견 → 차기 AC(TASK-038 AC#5 로 고정)**: **G-1** `try/except` 만 제거하면 **26/26 그대로 PASS** — 신규 픽스처 리그가 V1 형태라 그 가드를 못 짚는다(V2 입력 주면 traceback 14줄 재발). Codex 요약의 "각 보정 각각 FAIL" 은 **블록 단위로는 참·가드 단위로는 과대주장**. **G-2** 게이트 JSON 파싱 실패 시 2층 무출력(카드 실패 고지와 비대칭·현재 휴면). **G-3** shadow 렌더가 `level=` 유실(휴면).
+- **§2B 필수질문**: 세 건 다 판정 구멍 아님(exit 6경로 동일·트리거가 리깅/비정상게이트/휴면기능) ⇒ 차단 아님. 단 **관찰로 흘리지 않고 AC 로 고정**.
+- **보수성**: 파일 4개·소유권 침범 0·무관 변경 0. A-0040 의 over-reach(2층 렌더러 교체) 를 **복원 방향으로 되돌려 해소**.
+- **머지**: dogfood 메타층 `check-policy-change` PASS · `frozen_touched`/`protected_touched` 없음 · `reviewer_required: [dev-reviewer]` ⇒ **비민감** → Claude 가 `main` 머지(선례 D-074·D-078·D-080·D-082).

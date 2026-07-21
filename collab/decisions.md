@@ -1572,3 +1572,49 @@ Claude 가 dev·kit 동시 수정(드리프트 0) — `# deprecated floor — ca
 
 **머지**: 코드 브랜치 **보류**(D-007). 리뷰 기록 + AC#7 정책 주석(Claude 소유·주석 1줄·dev/kit 동기)만 `main` 반영.
 **Codex 다음 할 일**: R-1·R-2 보정 + 회귀 픽스처 2건 → 재제출(보정 커밋만 재리뷰). AC#7 은 재수정 금지(이미 닫힘).
+
+---
+
+## D-085 (2026-07-21) TASK-035 A-0040 보정 재제출 재리뷰 → **R-1·R-2 해소 · 통과 · `main` 머지** (Claude)
+
+**대상**: `codex/2026-07-21-task035-java-j-line-cleanup` — 재리뷰 커밋 **`b2a9c91`(보정)·`82530a9`(handoff)**.
+멱등성상 `b677220`·`fe4008f` 통과분(AC#1·2·4·6 + AC#3 게이트단)은 재처리하지 않음. 상세 = `collab/answers/A-0041.md`.
+
+**결론**: A-0040 의 머지 보류 사유 **2건 모두 해소 ⇒ 통과 · 비민감 ⇒ Claude 가 `main` 머지**(D-007).
+**TASK-035 AC 7개 전부 종결**(AC#5 = 본 보정, AC#7 = Claude 가 Q-0008 회신으로 이미 완료).
+
+**R-1(2층 콘솔) 해소 — fresh repo 문자열 대조**: protected → `protected: app/service.py::outbound_network`,
+`level: watched` 로 바꾸면 `watched: …` 로 **`main` 과 문자열 동일**. 11파일 케이스는 **8줄 + `… 외 3건`** 으로
+`main` 의 무고지 절단(`head -6`, 5줄)보다 **개선**. A-0040 실증 ①②③ 전부 재현 불가.
+
+**R-2(비-YAML 카드) 해소 — 적대검증에서 실패가 두 갈래임을 새로 규명**:
+**V1(콜론 없는 예외 → dict 로 파싱)** 은 보정 전에 크래시가 아니라 **traceback 위에 `change_evidence.coverage_statement` 를
+덧붙여 감사카드를 위조**했고(재현 확인), `isinstance(card.get("change_evidence"), dict)` 가드가 이를 막는다 —
+**A-0040 지시보다 강한 가드이고 방향이 옳다**. **V2(콜론 포함 → `ScannerError`)** 는 PyYAML traceback **14줄 → 0줄**.
+두 형태 모두 **`분석 실패: generate-change-evidence: traceback` + exit 2 로 판정 무손상**, 카드 주입 불가 상황에서도
+`fail_closed: …` 가 **콘솔에 표시**되어 AC#5 trace 가 실질 회복.
+
+**회귀 0 · 판정 무변화**: exit 코드 **6경로**(정상 protected·`HAS_RANGE=0`·정책 dir 부재·3점 range·무변경·repo 부재)
+= 브랜치 ↔ `main` **전량 동일**. dev **140/141** · 킷 cases **140/141** · 진입점 **26/26** · `mutation-check` **PASS(237)** ·
+dev↔kit `cmp` **드리프트 0**(20/20). 유일 실패 `tree-sitter-smoke` 는 이 머신 Python 3.9.6 **환경 실패**로 `main` 과 동일.
+**킷 sync 실작동**: `sync-from-dev.sh` 재실행 후에도 `run.sh` 보정·신규 픽스처 2건 **생존** + 진입점 **26/26** 재통과.
+**정직 고지**: `kit/tests/mutation-check.sh` **직접 호출**은 0/3 FAIL 이나 이는 미지원 호출(계약 = `selftest.sh` 가
+`.harness/gates → kit/gates` 심볼릭 루트에서 실행)이며 **`main` 도 동일** ⇒ 브랜치 귀속 아님.
+
+**rig-and-revert**: 사람용 요약 제거 → `capability-console-path-and-level`·`java-capability-approval` **2건 FAIL** ·
+`isinstance` 가드 제거 → `evidence-exception-capability-fail-closed` **단독 FAIL** ⇒ 각각 load-bearing.
+
+**🟡 신규 발견 → 차기 AC 가드(TASK-038 AC#5 로 명시 고정 · §2B 필수질문 통과 = 판정 구멍 아님)**:
+**G-1** `try/except` 가드가 **어떤 픽스처에도 고정되지 않음** — 그것만 제거해도 진입점 **26/26 PASS**(신규 픽스처의 리그가
+V1 형태라 `safe_load` 가 예외를 안 던짐). 같은 리그에 V2 입력을 주면 **traceback 14줄 재발** ⇒ 실제로는 load-bearing 인데
+테스트가 증명하지 못함. (Codex 요약의 "각 보정 코드 각각 FAIL" 은 **가드 블록 단위로는 참·가드 단위로는 과대주장** — 사실 정정.)
+**G-2** 게이트 stdout 이 JSON 으로 안 파싱되면(`2>&1` 로 stderr 혼입 시) **2층 블록이 헤더만 남고 완전 무출력** —
+카드 파싱 실패엔 "주입 불가" 고지를 넣었으면서 게이트 출력 파싱 실패엔 고지가 없는 **비대칭**(판정은 fail-closed 유지·현재 휴면).
+**G-3** shadow 렌더러가 `main` 의 `level=` 을 잃음(비집행·동봉 카탈로그에 shadow 없어 휴면).
+
+**A-0040 이월(여전히 열림)**: O-1 `coverage` 소비자 0건 · O-2 `sorted(set())` 순서 파괴 ·
+O-3 `HAS_JAVA_CHANGE` 가 git 종료코드 삼킴 · O-4(선재) 3점 range → BLOCKED(**이번에도 `main` 동일** 재확인).
+
+**민감도·머지**: 정산·인증/인가·암호화·DB migration·infra 무해당. dogfood 결과 메타층 `check-policy-change` **PASS**,
+카드 `frozen_touched`·`protected_touched` 없음 · `reviewer_required: [dev-reviewer]` ⇒ **비민감**.
+변경 성격 = 킷 콘솔 출력 + 방어 가드 + 테스트. ⇒ **Claude 가 `main` 머지**(구현자≠머지자). 선례 D-074·D-078·D-080·D-082.
