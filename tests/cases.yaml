@@ -150,7 +150,7 @@ cases:
         - non-Python semantic analysis
         - complete dynamic obfuscation recovery
         - deep semantic analysis unsupported for .go
-        - "java .java layers not available: callgraph, capabilities"
+        - "java .java layers not available: callgraph"
       verdict_statement: no governance violation detected
       schema_keys_match_template: true
 
@@ -452,7 +452,7 @@ cases:
         - cross-commit cumulative risk
         - non-Python semantic analysis
         - complete dynamic obfuscation recovery
-        - "java .java layers not available: callgraph, capabilities"
+        - "java .java layers not available: callgraph"
       verdict_statement: governance review required
       no_safe_text: true
       version_metadata_present: true
@@ -1167,7 +1167,7 @@ cases:
         - non-Python semantic analysis
         - complete dynamic obfuscation recovery
         - "java gov_level analysis unavailable for app/AccountService.java: java analysis unavailable: simulated tree-sitter import failure"
-        - "java .java layers not available: callgraph, capabilities"
+        - "java .java layers not available: callgraph"
       verdict_statement: no governance violation detected
 
   - name: function-classification

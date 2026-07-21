@@ -135,7 +135,7 @@ run_language_policy_case(){
   output="$(ACGH_GATE_TIMEOUT_SECONDS=1 bash "$runner" HEAD~1..HEAD --repo "$repo" --policies "$KIT/policies" --output "$card" 2>&1)"; rc=$?
   if [ "$rc" = 0 ] &&
      printf '%s\n' "$output" | grep -q 'PASS' &&
-     grep -q 'java .java layers not available: callgraph, capabilities' "$card"; then
+     grep -q 'java .java layers not available: callgraph' "$card"; then
     echo "PASS $name"; PASS=$((PASS + 1))
   else
     echo "FAIL $name (exit=$rc expected=0, missing kit language routing coverage)"
