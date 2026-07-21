@@ -2040,3 +2040,22 @@ parity 는 "정상 경로 등가"만이 아니라 **"실패 경로 등가"까지
 - **차기 AC**: **TASK-038 AC#6** 신설 — 킷 `run.sh` 가 `--language-routing "$POL/language-routing.yaml"` 명시 전달 + 대상 repo 동명 파일 무영향을 진입점 케이스로 고정.
 - **정책**: `java.layers.callgraph` **`stub` 유지**(소비자 = 이 태스크, 아직 미통과). 승격은 통과 후 Claude(D-076·TASK-038 AC#3).
 - 머지: **코드 보류**. 리뷰 기록만 `main`.
+
+## TASK-037 A-0045 보정 재제출 재리뷰 — **R-1·R-2·R-3 해소 · 신규 R-4·R-5 재보정요청** · A-0046 · D-090
+
+- 대상 `codex/2026-07-21-task037-java-indirect-impact` 보정 커밋 `7f4859a`·`0cb241b`, `origin/main`=`d399435` 대비. 멱등성: `c670753`·`67c3422` 재처리 안 함. 미머지 codex 브랜치는 이 1개뿐.
+- **✅ R-1 종결(재작업 불필요)**: 권장한 **(a) 노선**으로 닫힘 — 익명·람다 본문을 함수형 인터페이스 구현체로 등록. fresh ADV-1/ADV-1b 재현 시 **양쪽 모두** 실 발견(`[Flow.sink, Port.run, Ledger.settle]`·hops 2·`settlement-reviewer`), 차선(b) fail-closed 가 아니라 진짜 탐지. **O-1 전역 소음도 동시 해소**(무관 변경: `approval_required`→`pass`).
+- **✅ R-3 종결**: §3.5 요구대로 **게이트 레벨**에서 폐쇄(`kit/` 무접촉). 퇴화 `{}`·`extensions` 드리프트 → `pass`(0)에서 **`approval_required`(2)** 로, `errors`+`coverage`+`fail_closed` 3채널 노출. 부분 드리프트는 누락 경로 정확 지목. **자기무력화(`main` 회귀)도 폐쇄** — 판정 근거가 git name-status 산출이라 **정책이 자기 감시를 못 끈다**.
+- **✅ R-2 종결**: 다국어 repo 단일언어 커밋 `errors` 빔. **과잉억제 아님** — 실재하지 않는 registry 함수는 여전히 오류를 낸다(음성검증).
+- **✅ O-2 종결**: `TEST_CASE_GROUP=parity` **9/9 → 15/15**.
+- **🔴 R-4 (신규 · 보정이 만든 회귀)**: `nested_in_deferred_body` 가 중첩 본문을 제거했는데 대체 처리기 `subtree_call_targets()` 에 **`lambda_expression` 분기도 중첩 익명 처리도 없다**(깊이 1 전용). **익명-in-람다**에서 엣지가 `Flow.sink→Port.run→Inner.go` 막다른 길 + `coverage` **완전히 빔** ⇒ **보정 전 exit 2 → 보정 후 exit 0**. 실제 런타임 도달 경로를 **전에는 잡던 것을 이제 놓친다**. 람다-in-람다도 coverage 1건→`[]` 퇴화. AC#6 가드가 **자기 스킵 때문에 발동 못 하는** 구조.
+- **🔴 R-5 (신규)**: A-0045 §2(b) 는 "`lambda_dispatch` 를 익명과 **같은 fail-closed 승격 경로에 편입**" 이었는데 **`kind` 만 만들고 승격 미배선**(필터가 여전히 `== "anonymous_class"`). ⇒ ① **람다 인자전달**(`executor.submit`/`forEach` 형) ② **`default` 보유 함수형 인터페이스**(`len(methods)==1` 이 default·static 계수) 가 조용한 `pass`. **수정 1줄 실증** — `in {"anonymous_class","lambda_dispatch"}` 로 두 형태 `approval_required` 전환 + **157/157 불변**.
+- **구조적 원인**: 보정이 **보수적 fallback(정의부 귀속 엣지)을 제거**했는데(그 자체는 정확도 개선 — 저장만 하고 호출 안 하는 형태의 과탐 1건 소멸 실증) 대체 처리가 **깊이 1·직접대입·단일메서드 인터페이스**만 커버 ⇒ 나머지가 과탐이 아니라 **누락**. MVP-3 "항상 과탐 반올림·과소탐 금지" 역방향. **fallback 을 걷어낸 만큼 미확정을 전부 fail-closed 로 회수**해야 등가.
+- **§2B**: R-4·R-5 둘 다 "거버넌스에 직접 구멍" = **예**(R-4 는 보정 전보다 나쁨) ⇒ 비차단 금지.
+- **통과 확인**: 회귀 0(dev `main` **144/144** → 브랜치 **157/157**, adversarial 8→15·parity 9→15) · mutation **PASS(265)** · 결정론 md5 3회 · 실diff **0.53s**(`main` 0.85s) · dogfood PASS.
+- **rig 9종 전부 대상만 단독 FAIL**: 1(람다 분기)·2(익명 배선)·5(라우팅 블록)·**5a/5b/5c(errors/coverage/fail_closed 각각 단독)**·6(registry 교차언어)·7(deferred 스킵)·8(선언 early-return). **원소 단위 load-bearing**(A-0041 G-1 기준) 충족 — 장식 없음.
+- **환경 고지 · A-0045 자기정정**: `tree-sitter-smoke` 환경 실패 **소멸**(이 머신이 pin 0.26.0/0.23.5 로 정렬) — 이번 수치엔 환경 예외 **없음**.
+- **§1 보수성 통과**: 게이트 3·`cases.yaml`·픽스처 29·handoff·summaries **뿐**. **`kit/` 는 `main` 과 diff 0 바이트**(TASK-038 스코프 준수) · `policies/`·`docs/`·Claude 소유 무접촉 · 무관 리팩터 0 · A-0045 가 지적한 커밋 문구 과장도 정정. 반려는 **순수 논리 결함**.
+- **비차단/차기**: **O-6** 메서드 레퍼런스 `::` 완전 무표식(선재 — 같은 자리에서 함께 닫기 권장, 아니면 차기 J AC) · **O-7** `java-indirect-anonymous-fail-closed` 이름이 바뀐 기대값과 불일치 · **O-8** `functional_method_targets` 가 default/static 계수(추상만 세면 정확도 상승) · O-3·O-4 이월 · O-5 는 TASK-038 AC#6 신설 완료(이제 **이중방어**).
+- **킷 노출 고지**: `kit/gates/` 3개 게이트는 **보정 전 스냅샷** ⇒ 배포 킷에 R-1·R-3 구멍 잔존, TASK-038 sync 까지가 노출 구간(스코프상 정상).
+- 머지: **코드 보류**. 리뷰 기록만 `main`. 민감 변경 없음 ⇒ H-XXXX 불필요.
