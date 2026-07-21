@@ -556,8 +556,31 @@
    - **수정 1줄**(`modifiers` 텍스트를 토큰 분해해 `"static"` 포함 여부로 판정) + `static final`·`private static`·어노테이션 동반 픽스처 + 음성검증.
 4. **🟡 (A-0049 O-19) enum 상수 본문 coverage 무표식**: `enum Reg { A { Task t = () -> …; } ; }` 는 여전히 **coverage 빔**(`scan_initializer_members` 가 `enum_constant` 의 `class_body` 를 안 봄). AC#8 컨테이너 축의 마지막 잔여. 구조적 논증상 verdict 누락은 재현되지 않았으나(실 도달 경로는 `bodyless`/`unresolved` 로 회수) **정직성(coverage 표식) 결손**이므로 닫는다. 픽스처 1건.
 5. **무회귀**: `tests/run-tests.sh` 전량 · `mutation-check.sh` · Python 골든패스 불변 · 결정론. **정책·킷 무접촉**(킷 반영은 TASK-038).
-**의존**: TASK-039 통과·머지(D-093) ⇒ 착수 가능. **AC#1 은 TASK-038 보다 먼저 권고** — 킷은 배포·실사용 최전선이라 소음째 스냅샷하면 경보 피로가 실사용자에게 그대로 간다. 순서를 바꾼다면 TASK-038 이 README·`manifest.yaml` 에 **이 소음 특성을 명시**해야 한다.
-**통과 시**: `java.layers.callgraph` `partial`→`supported` 승격 재검토(Claude·D-076 — AC#1+AC#4 폐쇄가 조건).
+
+**🔴 1차 제출(`4573b51`·`ea0191c`) 리뷰 결과 = 보정요청 (A-0050 · D-094) — 코드 브랜치 머지 보류. 새 태스크 아님, 보정 커밋만 재제출.**
+**✅ 닫힌 것(재작업 불필요)**: **AC#2**(미해소 `::` fallback — RIG-C 단독 FAIL · A-0041 G-1 종결) · **AC#4**(enum 상수 본문 — RIG-B 단독 FAIL) · **AC#5**(184/184 · mutation 317 · 결정론 · 정책/킷 무접촉) · 부수 강화 2건도 load-bearing(`invocation_parameter_type`=RIG-D, `constant_declaration` 필드 바인딩=RIG-E). **AC#3 은 원 결함은 닫혔으나(RIG-A 단독 FAIL) 반대편 오탐을 새로 만들었다 → AC#8.**
+**🔴 AC#1 은 미충족 — 게다가 AC#1 문구 자신이 결함이었다(리뷰어 자기정정 4회째)**: AC#1 은 "**`caller` 축 금지**"(위 3번째 불릿)와 "**N4 를 `pass` 로 단언**"(불변식)을 **동시에** 걸었는데, N4 의 sink 막다른 길은 `rows.size()`(외부 호출)이라 **대상 불명 지연 콜백을 `pass` 로 만들 수 있는 축은 `caller` 축뿐**이다 ⇒ 두 요구는 양립 불가. Codex 는 유일한 해를 구현했고 **§1 위반도 구현 품질 문제도 아니다.** 아래 AC#6 이 이 모순을 **N4 쪽을 접는 방향으로** 정정한다.
+
+6. **🔴 (A-0050 R-1 · 차단 · 과소탐 회귀) `caller` 축 fallback 제거**: `check-indirect-impact.py` `sink_relevant_deferred_records` 의 `if not dispatch_targets and item.get("caller") in sink_reachable:` 를 **`if not dispatch_targets and sink_dead_ends:`**(대상 불명 = 보수 승격)로 교체. 사용처가 사라지는 `sink_reachable_functions` 도 함께 정리.
+   - **원인**: `collect_calls` 의 lambda `else` 갈래는 `tuple(dispatch_targets)` 가 **항상 `()`**(`if dispatch_targets:` 의 else)이므로, 함수형 인터페이스가 **repo 밖(JDK·외부)이면 판정이 통째로 `caller` 축**으로 넘어간다.
+   - **실증(픽스처 밖 fresh · `main`↔브랜치 동일 rev-range · sink `Flow.sink` hops 4 · 변경 = `Vault.transfer` 본문)** — **6형태가 `approval_required`(2) → `pass`(0)**: **F1** `Runnable task;`+`wire(){task=()->new Vault().transfer();}`+`sink(){task.run();}` · **F2** 같은 자리 익명 `new Runnable(){…}` · **F3** `ExecutorService pool;`+`wire(){pool.submit(()->…);}` · **F4** `wire(){task = vault::transfer;}` · **F7** `static Runnable task;`+`static { task = () -> …; }` · **F8** `static Runnable task = () -> …;`. **대조군 F5**(등록 지점이 sink 함수 자신 안)는 `approval_required` 유지.
+   - **F7·F8 은 구조적 100% 드롭**: `<clinit>`·`<init>` 은 **합성 id 라 그래프 노드가 아니어서 `sink_reachable` 에 절대 들어오지 않는다**(= 위 AC#1 검증축 ⑤ 가 예고한 함정).
+   - **보정안은 리뷰어가 실증했다**: 위 교체를 브랜치 워크트리에 직접 적용 → **F1~F4·F7·F8 전부 복구 · F5 불변 · 스위트 183/184(유일 FAIL = N4)** · TASK-039 신규 11케이스 전량 `approval_required` 유지 · 소음 `pass` 2케이스 유지 · Python 골든패스 불변(원복 후 184/184 재확인).
+   - **회귀 픽스처 6건 신설**(F1·F2·F3·F4·F7·F8) — 전부 `verdict: approval_required`·`exit_code: 2` 단언. **음성검증**: fallback 을 되돌리면 6건이 FAIL.
+   - **🔴 N4(`java-indirect-deferred-jdk-noise-pass`) 기대값을 `approval_required` 로 정정**하고 케이스명도 그에 맞게 고친다(예: `java-indirect-deferred-jdk-unknown-target-fail-closed`). 사유(대상 불명 = 보수 판정)를 픽스처 README 또는 케이스 주석에 남길 것. **이 항목은 리뷰어 지시 정정분이므로 Codex 귀책 아님.**
+   - **⚠️ 이 보정으로 O-14(소음)는 닫히지 않는다 — 의도된 후퇴**(과소탐보다 과탐 = MVP-3 계약). 건전한 폐쇄 방향(미해소 호출의 **수신자 선언 타입** ↔ 지연 레코드 **대상 타입** 일치 시에만 막다른 길로 계수)은 **미실증**이라 이번 범위 밖 → TASK-041.
+7. **🔴 (A-0050 R-2 · 차단 · 회귀보호 0) dispatch 대상 교집합 축을 픽스처로 고정**: **RIG-F 실증** — `dispatch_targets.intersection(sink_dead_ends)` 를 `dispatch_targets and sink_dead_ends`(교집합 무시)로 바꿔도 **184/184 무변화** ⇒ AC#1 의 핵심 정밀화가 스위트에서 **한 건도 단언되지 않는다**.
+   - **픽스처 1건 신설(F6 형태)**: dispatch 대상이 `sink_dead_ends` 와 **교차하지 않는** 지연 dispatch → `pass`. 예) `interface Task { void exec(); } interface Other { void go(); } class Flow { Task task; Other other = () -> new Vault().transfer(); void sink(){ task.exec(); } }` (브랜치 `pass` / `main` `approval_required` 로 fresh 확인됨).
+   - **음성검증 필수**: 교집합을 truthiness 로 치환하면 이 케이스가 **단독 FAIL** 해야 한다.
+8. **🟡 (A-0050 O-20 · AC#3 이 만든 반대편 오탐) `has_static_modifier` 과대매칭**: 현행은 `node.children` **전체**(타입·declarator·초기화식 포함)를 토큰화해 `"static"` 을 찾는다 ⇒ **초기화식 텍스트에 `static` 토큰이 있으면 instance 필드가 `<clinit>` 로 오표기**.
+   - **fresh 실증**: `class Flow { void log(String v){int m=1;} Task task = () -> log("static"); }` → `main` `caller: Flow.<init>` ✅ / 브랜치 `Flow.<clinit>` ❌.
+   - **수정**: `child.type == "modifiers"` 인 자식으로 한정한 뒤 토큰 분해. 기존 `java-callgraph-static-modifier-initializers`(`static final`·`private static`·어노테이션) **유지** + instance 필드 `<init>` 픽스처 신설 + 음성검증(단독 FAIL).
+   - 판정 무영향(정직성)이나 **AC#3 이 고치려던 것과 동종·동급**이라 함께 닫는다.
+
+**비차단 관찰(감점만 · 차기)**: **O-21** `java-indirect-lambda-argument-fail-closed` 이름/내용 불일치(이제 fail-closed 아니라 실 엣지 탐지 — 개명 권고, 그리고 **이 시나리오의 fail-closed 경로 회귀보호가 사라졌다**) · **O-22** `fail_closed` detail 이 `dead_ends=` 에는 **전체** 막다른 길을, 개수는 **relevant 만** 실어 카드에서 어긋난다(1줄) · **O-23** enum 상수 본문 caller 가 `Reg.<init>` 로 기록되나 실제로는 클래스 초기화 시점이고 익명 하위타입이 `Reg` 로 뭉개진다 · **O-13·O-3·O-15·O-16 이월**.
+
+**의존**: TASK-039 통과·머지(D-093) ⇒ 착수 가능. **🔴 AC#6 은 TASK-038 보다 반드시 먼저** — D-093 의 "먼저 권고" 는 유효하되 **근거가 소음 → 놓침으로 바뀌었다**. 지금 sync 하면 R-1 놓침을 배포 킷에 그대로 싣는다(현행 킷은 Java L3 부재 = 구멍이 아니라 미탑재). TASK-038 이 README·`manifest.yaml` 에 **O-14 소음 특성을 명시**해야 하는 요구는 그대로 유효하다(O-14 는 닫히지 않은 채 남으므로).
+**통과 시**: `java.layers.callgraph` `partial`→`supported` 승격 재검토(Claude·D-076 — **AC#6+AC#7** 폐쇄가 조건. R-1 로 승격 근거가 후퇴했으므로 AC#1+AC#4 만으로는 불충분).
 
 ### TASK-038 ☐ 킷에 Java L3 + 잔손질 반영 (MVP-3 킷 스냅샷 갱신)  (Codex)  *(MVP-3 · X · 킷)*
 **배경**: TASK-035·036·037 로 dev 가 Java 전 계층(J1~J3 + L3) 완비되면 킷을 그 상태로 올린다(형 지시 "자바까지 하고 킷 업데이트"). TASK-026/028 킷 스냅샷 선례.

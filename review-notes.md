@@ -2104,3 +2104,18 @@ parity 는 "정상 경로 등가"만이 아니라 **"실패 경로 등가"까지
 - **정책**: `java.layers.callgraph` **`partial` 유지** — `supported` 는 O-19·O-14·O-3 탓에 과대주장(under-claim 원칙). 승격 조건을 TASK-040 AC#1 + O-19 폐쇄로 명문화(D-076).
 - **킷**: R-1 차단 사유 해소 ⇒ TASK-038 착수 가능. 단 **TASK-040 AC#1 먼저 권고** — 현 상태 스냅샷은 실 Java repo 거의 모든 PR 이 승인요구 = **경보 피로로 3층 무력화**. 순서 변경 시 README·manifest 에 소음 특성 명시.
 - 머지: **비민감**(게이트 로직+테스트 · 정산/인증/암호화/DB/infra 무해당 · 선례 D-088·D-091) ⇒ Claude 가 `main` 머지. H-XXXX 불필요.
+
+## TASK-040 리뷰 (`4573b51`·`ea0191c`) — 🔴 보정요청 (A-0050 · D-094) — 2026-07-22
+- **판정**: 코드 브랜치 **머지 보류**. 리뷰 기록만 `main` 머지(D-007). 새 태스크 아님 — 보정 커밋만 재제출.
+- **🔴 R-1(차단·과소탐 회귀)**: `dispatch_targets` 가 비면 **`caller ∈ sink_reachable`** 로 판정 — A-0049 가 배제한 축. `collect_calls` lambda `else` 는 `dispatch_targets` 가 **항상 `()`** 라 **repo 밖 함수형 인터페이스는 전부 이 축**으로 간다. **fresh 6형태 `approval_required`→`pass`**(F1 JDK 필드·F2 익명·F3 `submit`·F4 `::`·F7 static 블록·F8 static 필드). 대조군 F5(등록 지점 = sink 자신) 불변. **F7·F8 은 구조적 100% 드롭**(합성 `<clinit>`/`<init>` 은 그래프 노드가 아님 = A-0049 검증축 ⑤). `main` 보다 나쁨 ⇒ §2B 필수질문 **예**, 비차단 금지.
+- **보정안 실증 완료**: fallback → `if not dispatch_targets and sink_dead_ends:` 로 교체 시 **6형태 전부 복구 · 스위트 183/184(유일 FAIL = N4)** · TASK-039 11케이스·소음 2케이스·Python 골든패스 불변(원복 후 184/184).
+- **🔴 R-2(차단·회귀보호 0)**: **RIG-F** — 교집합을 truthiness 로 치환해도 **184/184 무변화** ⇒ AC#1 핵심 축이 **장식**. 축 자체는 작동(fresh F6: `interface Other` 분리 → 브랜치 `pass`/`main` `approval_required`) — **픽스처가 없다**.
+- **🔴 O-20(신규)**: `has_static_modifier` 가 `node.children` **전체**를 토큰화 ⇒ `Task task = () -> log("static");` 이 **instance 필드인데 `<clinit>`** 로 오표기(`main` 은 `<init>` ✅). AC#3 이 고치려던 것과 동종 ⇒ AC#8 로 함께 폐쇄.
+- **✅ 통과**: AC#2(RIG-C 단독 FAIL — A-0041 G-1 **종결**) · AC#4(RIG-B) · AC#5 · 부수 강화 2건(RIG-D `invocation_parameter_type` · RIG-E `constant_declaration` 바인딩). AC#3 은 원 결함만 폐쇄(RIG-A).
+- **🔴 자기정정 4회 연속**: **AC#1 이 "caller 축 금지 + N4 pass" 라는 모순된 두 요구를 걸었다.** N4 의 막다른 길은 외부 호출이라 **대상 불명 콜백을 `pass` 로 만들 수 있는 축은 caller 축뿐** ⇒ 양립 불가. **Codex 는 유일한 해를 구현했다 — 귀책 아님.** 이번 지시는 **워크트리 직접 패치 → fresh 탐지축 → fresh 소음축 → 스위트 → 원복** 을 전부 측정한 뒤 확정했다. **O-14 는 닫히지 않고 남는다(의도된 후퇴)** — 건전한 폐쇄는 수신자 타입 ↔ 대상 타입 일치 축이며 미실증 ⇒ TASK-041.
+- **검증(전부 독립 재현·무발견≠통과)**: **184/184** · mutation **PASS(317)** — **Codex 신고와 정확히 일치, 과장 없음** · 결정론 md5 3회 · **전 입력 exit 0/2 뿐** · `git diff --check` clean · **Python 골든패스 113케이스 문자 단위 동일** · rig 6종(A~E load-bearing, **F 만 무변화**). 기대값 변경 3건은 **강화/해소** 이지 약화 아님.
+- **계측 자기정정**: `.git` 없는 스크래치 사본에서 `expected-present`·`expected-none` 2건 FAIL = **아티팩트**, 실 워크트리 재측정으로 183/184 정정. Codex 귀책 아님. (`timeout` 은 감싸지 않았다 — Rosetta 가짜 FAIL 회피.)
+- **§1 통과**: 게이트 2·`cases.yaml`·`run-tests.sh` 검증자 2블록·픽스처 4세트·handoff·summaries **뿐**. `kit/`·`policies/`·`docs/`·`templates/`·`AGENTS.md`·Claude 소유 **무접촉** ⇒ **킷 심층리뷰 해당 없음**. 무관 리팩터 0. 브랜치 미동기화 재제출 5회째.
+- **정책**: `partial` 유지 — R-1 로 승격 근거 후퇴. 승격 조건을 **AC#6+AC#7** 로 갱신(D-076).
+- **킷**: TASK-038 **sync 계속 차단** — 지금 sync 하면 R-1 놓침을 배포 킷에 싣는다. 근거가 소음 → **놓침**으로 격상.
+- 머지: 리뷰 기록만. **비민감**(게이트 로직+테스트) ⇒ H-XXXX 불필요.
