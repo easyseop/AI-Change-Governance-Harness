@@ -17,6 +17,7 @@ DEFAULT_INVALID_LEVEL = "protected"
 LEVEL_STRENGTH = {"watched": 0, "protected": 1}
 GATE_DIR = Path(__file__).resolve().parent
 UNRESOLVED_DYNAMIC_METHODS = {"forName", "getMethod", "loadClass", "invoke", "newInstance"}
+UNINFORMATIVE_RECEIVER_TYPES = {"Object", "var"}
 
 
 def load_gate_module(filename, module_name):
@@ -250,7 +251,9 @@ def collect_signals(source_bytes, tree, capabilities):
                         cap,
                         {"kind": "methods", "name": method, "line": node_line(node)},
                     )
-                if method in UNRESOLVED_DYNAMIC_METHODS and not root_type:
+                if method in UNRESOLVED_DYNAMIC_METHODS and (
+                    not root_type or root_type in UNINFORMATIVE_RECEIVER_TYPES
+                ):
                     unresolved_dynamic.append(
                         {
                             "kind": "method_invocation",

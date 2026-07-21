@@ -994,6 +994,8 @@ cases:
       fixture_dir: tests/fixtures/java-function-mapping
     expect:
       exit_code: 0
+      coverage:
+        - "ignored ACGH_JAVA_INVENTORY_PATH override because ACGH_ALLOW_TEST_OVERRIDES=1 was not set"
       files:
         - path: app/AccountService.java
           status: M
@@ -3050,6 +3052,24 @@ cases:
       parse_error_present: true
       errors: []
 
+  - name: java-capabilities-uninformative-bindings
+    gate: extract-java-capabilities
+    input:
+      source_file: tests/fixtures/java-capabilities/uninformative-bindings.java
+    expect:
+      exit_code: 0
+      capability_ids: []
+      unresolved_dynamic:
+        - kind: method_invocation
+          name: invoke
+          line: 4
+          reason: receiver type unresolved
+        - kind: method_invocation
+          name: invoke
+          line: 5
+          reason: receiver type unresolved
+      errors: []
+
   - name: java-capabilities-frozen-clamp
     gate: check-new-capabilities
     input:
@@ -3139,6 +3159,19 @@ cases:
     input:
       fixture_dir: tests/fixtures/new-java-capabilities/python-benign
       java_policy: policies/java-sensitive-capabilities.yaml
+    expect:
+      verdict: pass
+      exit_code: 0
+      new_capabilities: []
+      warned_capabilities: []
+      fail_closed: []
+      errors_present: false
+
+  - name: new-java-capabilities-python-benign-missing-java-policy
+    gate: check-new-capabilities
+    input:
+      fixture_dir: tests/fixtures/new-java-capabilities/python-benign
+      java_policy: tests/fixtures/java-capabilities/missing-policy.yaml
     expect:
       verdict: pass
       exit_code: 0

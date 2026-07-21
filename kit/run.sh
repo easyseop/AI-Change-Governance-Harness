@@ -36,6 +36,13 @@ while [ $# -gt 0 ]; do case "$1" in
   *) echo "알 수 없는 인자: $1"; exit 64;;
 esac; done
 
+# base..head 범위여야 함수·능력·정책 게이트가 돈다(git 두 ref 필요).
+HAS_RANGE=0; case "$RANGE" in *..*) HAS_RANGE=1;; esac
+HAS_JAVA_CHANGE=0
+if [ "$HAS_RANGE" = 1 ] && git -C "$REPO" diff --name-only "$RANGE" -- '*.java' 2>/dev/null | grep -q .; then
+  HAS_JAVA_CHANGE=1
+fi
+
 if [ ! -d "$POL" ]; then
   echo "✗ 분석 실패: 정책 디렉토리 없음: $POL"
   echo "  tool_owner: change-governance-kit-owner"
@@ -49,16 +56,18 @@ ROUTING="$POL/approval-routing.yaml"
 SINKS="$POL/sink-registry.yaml"
 LANGUAGE_ROUTING="$POL/language-routing.yaml"
 FRAMEWORK_ANNOTATIONS="$POL/framework-annotations.yaml"
-for required_policy in "$ZONES" "$CAPS" "$JAVA_CAPS" "$ROUTING" "$SINKS" "$LANGUAGE_ROUTING" "$FRAMEWORK_ANNOTATIONS"; do
+for required_policy in "$ZONES" "$CAPS" "$ROUTING" "$SINKS" "$LANGUAGE_ROUTING" "$FRAMEWORK_ANNOTATIONS"; do
   if [ ! -f "$required_policy" ]; then
     echo "✗ 분석 실패: 필수 정책 파일 없음: $required_policy"
     echo "  tool_owner: change-governance-kit-owner"
     exit 2
   fi
 done
-
-# base..head 범위여야 함수·능력·정책 게이트가 돈다(git 두 ref 필요).
-HAS_RANGE=0; case "$RANGE" in *..*) HAS_RANGE=1;; esac
+if [ "$HAS_JAVA_CHANGE" = 1 ] && [ ! -f "$JAVA_CAPS" ]; then
+  echo "✗ 분석 실패: 필수 정책 파일 없음: $JAVA_CAPS"
+  echo "  tool_owner: change-governance-kit-owner"
+  exit 2
+fi
 
 cd "$REPO" || { echo "✗ 대상 repo 없음: $REPO"; exit 66; }
 INTENT=""; [ -f change-intent.yaml ] && INTENT="change-intent.yaml"
@@ -149,6 +158,83 @@ show_analysis_failure(){
   echo "      tool_owner: change-governance-kit-owner"
   [ -n "$RUN_OUTPUT" ] && printf '%s\n' "$RUN_OUTPUT" | head -6 | sed 's/^/      /'
 }
+
+append_capability_trace(){
+  local card="$1" capability_json="$2" run_failed="$3"
+  python3 - "$card" "$capability_json" "$run_failed" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+import yaml
+
+card_path, result_path, run_failed = sys.argv[1:]
+notes = []
+result = {}
+if run_failed == "1":
+    notes.append("capabilities analysis unavailable: check-new-capabilities execution failed")
+else:
+    try:
+        result = json.loads(Path(result_path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        result = {}
+    for item in result.get("fail_closed", []):
+        notes.append(
+            f"capabilities analysis unavailable for {item.get('path', '<unknown>')}: "
+            f"{item.get('reason', 'analysis failed')}"
+        )
+    for item in result.get("errors", []):
+        path = item.get("path", "<unknown>")
+        side = item.get("side")
+        detail = item.get("error") or item.get("reason") or "analysis error"
+        side_text = f" ({side})" if side else ""
+        notes.append(f"capabilities analysis unavailable for {path}{side_text}: {detail}")
+
+if result:
+    verdict = result.get("verdict", "approval_required")
+    if verdict == "approval_required":
+        print("    APPROVAL_REQUIRED: 신규 민감 능력 또는 분석 오류가 감지되었습니다.")
+    elif result.get("warned_capabilities"):
+        print("    PASS: watched 신규 능력이 감지되었습니다.")
+    else:
+        print("    PASS: 신규 민감 능력이 감지되지 않았습니다.")
+
+    rendered = []
+    for key, level in (
+        ("new_capabilities", "protected"),
+        ("warned_capabilities", "watched"),
+        ("shadow_capabilities", "shadow"),
+    ):
+        for item in result.get(key, []):
+            rendered.append(f"{level}: {item.get('path', '<unknown>')}::{item.get('id', '<unknown>')}")
+    for item in result.get("fail_closed", []):
+        rendered.append(
+            f"fail_closed: {item.get('path', '<unknown>')} {item.get('reason', 'analysis failed')}"
+        )
+    for line in rendered[:8]:
+        print(f"    {line}")
+    if len(rendered) > 8:
+        print(f"    … 외 {len(rendered) - 8}건")
+
+try:
+    with open(card_path, "r", encoding="utf-8") as stream:
+        card = yaml.safe_load(stream) or {}
+except Exception:
+    print("    capabilities trace 주입 불가: 카드가 유효 YAML 아님")
+    raise SystemExit(0)
+if not isinstance(card, dict) or not isinstance(card.get("change_evidence"), dict):
+    print("    capabilities trace 주입 불가: 카드가 유효 YAML 아님")
+    raise SystemExit(0)
+
+if notes:
+    evidence = card.setdefault("change_evidence", {})
+    coverage = evidence.setdefault("coverage_statement", {})
+    not_checked = coverage.setdefault("not_checked", [])
+    coverage["not_checked"] = sorted(set(not_checked + notes))
+    with open(card_path, "w", encoding="utf-8") as stream:
+        yaml.safe_dump(card, stream, allow_unicode=True, sort_keys=False)
+PY
+}
 echo "════════════════════════════════════════════════════════════════"
 echo "  변경 감사카드 · AI Change Governance Kit"
 echo "════════════════════════════════════════════════════════════════"
@@ -178,11 +264,14 @@ fi
 cap_exit=0
 echo "▸ [2층] 신규 위험 능력 (외부호출·암복호·실행 등 신규 도입?)"
 if [ "$HAS_RANGE" = 1 ]; then
-  run_gate "check-new-capabilities" "0 2" "$G/check-new-capabilities.py" "$RANGE" "$CAPS" --java-policy "$JAVA_CAPS" --repo .
+  run_gate "check-new-capabilities" "0 2" "$G/check-new-capabilities.py" "$RANGE" "$CAPS" --java-policy "$JAVA_CAPS" --repo . --json
   CAP_OUT="$RUN_OUTPUT"; cap_exit="$RUN_EXIT"
-  if [ "$RUN_FAILED" = 1 ]; then show_analysis_failure "check-new-capabilities"; else
-    printf '%s\n' "$CAP_OUT" | head -6 | sed 's/^/    /'
-  fi
+  cap_failed="$RUN_FAILED"
+  if [ "$RUN_FAILED" = 1 ]; then show_analysis_failure "check-new-capabilities"; fi
+  cap_trace_json="$(mktemp)"
+  printf '%s\n' "$CAP_OUT" > "$cap_trace_json"
+  append_capability_trace "$OUT" "$cap_trace_json" "$cap_failed"
+  rm -f "$cap_trace_json"
 else
   cap_exit=2; ANALYSIS_FAILURES+=("check-new-capabilities: range_required")
   echo "    ✗ 분석 실패: base..head 범위 아님 (능력 층 미실행)"

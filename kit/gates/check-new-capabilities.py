@@ -201,10 +201,15 @@ def sort_fail_closed(records):
 def check_new_capabilities(rev_range, policy, repo=".", java_policy=DEFAULT_JAVA_POLICY):
     base, head = split_rev_range(rev_range)
     paths = changed_capability_paths(base, head, repo)
-    metadata_by_language = {
-        "python": catalog_metadata(policy, capability_gate),
-        "java": catalog_metadata(java_policy, java_capability_gate),
+    languages = {
+        "java" if path.endswith(".java") else "python"
+        for path in paths
     }
+    metadata_by_language = {}
+    if "python" in languages:
+        metadata_by_language["python"] = catalog_metadata(policy, capability_gate)
+    if "java" in languages:
+        metadata_by_language["java"] = catalog_metadata(java_policy, java_capability_gate)
     new_capabilities = []
     warned_capabilities = []
     shadow_capabilities = []
