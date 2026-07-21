@@ -2059,3 +2059,17 @@ parity 는 "정상 경로 등가"만이 아니라 **"실패 경로 등가"까지
 - **비차단/차기**: **O-6** 메서드 레퍼런스 `::` 완전 무표식(선재 — 같은 자리에서 함께 닫기 권장, 아니면 차기 J AC) · **O-7** `java-indirect-anonymous-fail-closed` 이름이 바뀐 기대값과 불일치 · **O-8** `functional_method_targets` 가 default/static 계수(추상만 세면 정확도 상승) · O-3·O-4 이월 · O-5 는 TASK-038 AC#6 신설 완료(이제 **이중방어**).
 - **킷 노출 고지**: `kit/gates/` 3개 게이트는 **보정 전 스냅샷** ⇒ 배포 킷에 R-1·R-3 구멍 잔존, TASK-038 sync 까지가 노출 구간(스코프상 정상).
 - 머지: **코드 보류**. 리뷰 기록만 `main`. 민감 변경 없음 ⇒ H-XXXX 불필요.
+
+## TASK-037 A-0046 재보정 재제출 재리뷰 — **R-4·R-5 해소 · 리뷰 통과 · `main` 머지** · A-0047 · D-091
+
+- 대상 `codex/2026-07-21-task037-java-indirect-impact` head `ae9aaa0`, 재리뷰 커밋 `66c5133`·`ae9aaa0`. `origin/main`=`607572b`, 대조군 `0cb241b`. 멱등성: 앞선 4커밋 재처리 안 함. `fetch --prune` 후 **미머지 codex 브랜치 1개뿐**(나머지 전부 머지 완료).
+- **✅ R-4 종결**: `subtree_call_targets` 가 중첩 deferred body 의 람다/익명을 `coverage.unevaluated` 로 회수 + 승격. **A-0046 §3.1 의 exit 2 → exit 0 회귀 소멸**, 상설 픽스처 `java-indirect-nested-anonymous`/`-lambda` 로 고정(기대값이 `caller: Port.run` 원소까지 박힘).
+- **✅ R-5 종결**: 승격 필터 `in {"anonymous_class","lambda_dispatch"}` — 람다 인자전달·`default` 보유 함수형 인터페이스가 `approval_required`.
+- **fresh 적대입력 9형태(픽스처 밖·별도 repo)**: 7형태가 `pass`(0)→`approval_required`(2) — 익명-in-람다-in-람다(깊이 3)·람다 인자전달·`default`+`static` 인터페이스·**익명-in-익명**·**익명-in-익명-in-익명**·**익명 본문 속 람다**(뒤 3형태는 A-0046 미지명 = 덤)·무관변경 소음. **대조군 불변**: 직접대입 람다 실탐지·**Python 골든패스** 보정 전과 동일.
+- **rig 원소 단위**: **E1**(승격 필터) 3케이스만 FAIL · **E4**(subtree 람다) 단독 · **E5**(subtree 익명) 단독 = load-bearing. **E2·E3**(중첩본문 기록) **161/161 무변화 = 픽스처 공백** — 다만 구조상 바깥 deferred body 가 이미 E4/E5 로 승격되므로 **verdict 를 뒤집을 수 없는 정직성 전용 원소**(결함 아님 → O-11).
+- **통과 확인**: 157→**161/161**(adversarial 15→19·parity 15/15) · mutation **PASS(273)** · 결정론 md5 3회 · dogfood PASS · verdict 는 `approval_required(2)`/`pass(0)` 2갈래뿐(자동차단 없음) · Codex 신고 수치 **독립 재현 일치**.
+- **§1 통과**: 게이트 2(4줄·12줄)·`cases.yaml` 4케이스·픽스처 4세트·handoff·summaries **뿐**. **`kit/` diff 0 바이트**(⇒ 킷 심층리뷰는 변경분 부재로 해당 없음) · 정책·문서·Claude 소유 무접촉 · 무관 리팩터 0.
+- **🔴 차기 AC(TASK-039 신설)**: **O-9** 필드/static 이니셜라이저의 dispatch 가 **엣지도 coverage 도 없음**(필드 초기화 **익명** = AC#6 이 지명한 모양인데 `pass`; 같은 코드를 생성자에 두면 탐지 = 순회 범위가 원인) · **O-10** 승격이 repo 전역·무조건이라 **sink 0개 repo 에서도** `forEach(r -> …)` 한 줄로 무관 변경이 승인요구 = 경보 피로(**자기정정**: A-0046 §4.2 에서 내가 1줄 수정을 지시하며 소음을 검증하지 않은 결과 — 리뷰어 책임) · **O-6** `::` 이월 · **O-11** E2/E3 픽스처 · **O-8** default/static 계수 · **O-7** 개명.
+- **내가 짠다면(O-10)**: sink 전방폐쇄(N홉) 안에 **본문 없는 추상/인터페이스 메서드 = 막다른 길**이 있을 때만 미해소 dispatch 승격 — fresh 세트에서 실구멍 6형태 승격 유지·소음 2형태만 `pass` 로 정확히 분리.
+- **정책**: `java.layers.callgraph` `stub` → **`partial`**(`supported` 는 O-9·O-6 탓에 과대주장 = false card). 어댑터 활성화는 확장자 기준이라 판정은 정상 작동, 카드엔 한계 계속 노출(161/161 무회귀). `supported` 는 TASK-039 후 재검토.
+- 머지: **비민감**(하네스 게이트 코드 · 정산/인증/암호화/DB/infra 무해당 · 선례 D-088) ⇒ Claude 가 `main` 머지(`3527edb`). H-XXXX 불필요.

@@ -490,7 +490,7 @@
 5. **🔴 고정 적대 세트**: 인터페이스 다형성(1인터페이스 N구현)·`@Autowired` 주입·리플렉션 미해소 각각 + 음성검증(과대근사 무력화 시 참케이스 엣지 소실 → FAIL). **parity 픽스처**: 동일 구조 Python 콜그래프와 엣지 도달성 등가(구조 대응).
 **의존**: TASK-035 후(또는 병행 가능). Python `extract-callgraph.py` **무개조**(별도 Java 추출기 신설).
 
-### TASK-037 ☐ Java sink 추출 + `check-indirect-impact` 언어중립화 + Java 간접영향 배선  (Codex)  *(MVP-3 · X · Java L3-b — Java L3 완결)*
+### TASK-037 ☑ Java sink 추출 + `check-indirect-impact` 언어중립화 + Java 간접영향 배선  (Codex)  *(MVP-3 · X · Java L3-b — Java L3 완결)* — **완료 2026-07-21 (A-0047 · D-091 · 3회차 리뷰 통과·머지)**
 **목적**: Java sink 을 등록하고, 간접영향 게이트를 **언어중립화**해 Java 콜그래프(TASK-036)를 소비 → 바뀐 Java 함수가 sink 상류면 승인요구. TASK-022·024·025(Python L3) 대응.
 **수용기준**:
 1. **Java sink 추출**(TASK-022 대응): frozen-zone Java 함수 자동 sink · `@Gov(sink=true)` Java 어노테이션 · `sink-registry` 명시 등록. 일반 @Gov·protected 는 sink 아님. `extract-sinks.py` 를 어댑터 분기(Java 추출)로 확장하거나 Java sink 추출기 신설.
@@ -503,13 +503,30 @@
    - **상설 회귀 픽스처 + 음성검증**: 위 3파일 형태(익명 구현 → 인터페이스 필드 → 호출) 를 `tests/fixtures/` 에 고정하고, 처리를 제거하면 그 케이스가 **단독 FAIL** 하는지 확인.
    - **동시 확인**: 람다(`Port p = () -> …`)도 같은 모양인지 점검해 결과를 기록(닫든 관찰로 남기든 **명시**).
 **의존**: TASK-036 통과 후. → **통과 시 Java L3 완결 = Java↔Python parity 회복.**
+**완료 기록**: AC#1~#6 전부 충족(A-0047 §1). AC#6 은 **메서드/생성자 본문 범위에서** 폐쇄 — 익명·람다·인자전달·`default` 인터페이스·중첩(익명-in-람다·람다-in-람다·익명-in-익명) 전부 `pass`→`approval_required`. **범위 한계(초기화 컨텍스트·`::`)는 TASK-039 로 이월**. 정책 `java.layers.callgraph` = `stub` → **`partial`**(`supported` 아님 — A-0047 §7).
+
+### TASK-039 ☐ Java L3 커버리지 구멍 폐쇄 + 승격 정밀화 (deferred dispatch 3종)  (Codex)  *(MVP-3 · X · Java L3-c)*
+**배경**: TASK-037 통과·머지(D-091) 후 A-0047 이 fresh 적대입력으로 확인한 **선재 구멍 2건 + 소음 1건**. 전부 **판정 계층**이므로 킷 스냅샷(TASK-038)보다 **먼저** 처리하는 것을 권장한다(구멍이 배포 킷에 실린 뒤 고치면 노출 구간이 길어진다).
+**수용기준**:
+1. **🔴 (A-0047 O-9) 메서드 본문 *밖*의 dispatch 무표식 폐쇄**: `collect_calls` 는 `method_declaration`·`constructor_declaration` 본문만 순회한다 ⇒ **필드 이니셜라이저·static/instance 이니셜라이저 블록**의 호출은 **엣지도 `coverage` 기록도 없다**. 실증(보정 전·후 동일 = 선재): `Task task = () -> new Vault().transfer();` · `Task task = new Task(){ public void exec(){ new Vault().transfer(); } };` · `static { task = () -> …; }` 3형태 모두 sink 도달 변경인데 **`pass`(exit 0)·`coverage` 빔**(생성자에 같은 코드를 두면 정상 탐지 = 원인이 순회 범위임을 증명).
+   - **택1**: (a) 초기화 컨텍스트를 소유 타입의 합성 노드(예: `Owner.<clinit>`/`Owner.<init>`)로 귀속해 **엣지를 잇거나**(권장 — 생성자와 동일 취급이면 자연스럽다), (b) 최소한 **`coverage.unevaluated` + fail-closed 로 회수**. **조용한 `pass` 금지**(AC 문언은 위치를 한정하지 않는다).
+   - **상설 회귀 픽스처 3형태 + 음성검증**(처리 제거 시 각 케이스 단독 FAIL).
+2. **🔴 (A-0047 O-6 이월) 메서드 레퍼런스 `::` 폐쇄**: `task = v::transfer;` / `Vault::settle` 은 람다·익명과 **같은 dispatch 모양인데 엣지도 coverage 기록도 없다**(무표식 = 조용한 `pass`). 람다와 **동일한 경로**(해소되면 엣지, 아니면 `lambda_dispatch` 급 coverage+fail-closed)로 처리 + 픽스처 + 음성검증.
+3. **🔴 (A-0047 O-10) 승격 정밀화 — 전역 무조건 fail-closed 의 소음 제거**: 현재 `check-indirect-impact` 는 `java_graph.coverage.unevaluated` **전량**을 승격한다 — sink 와의 관계도, **sink 존재 여부도** 보지 않는다. 실증: **등록 sink 0개** repo 에서 `rows.forEach(r -> log(r))` 한 줄 때문에 무관 파일 변경이 `approval_required`. 실 Java repo 면 **거의 모든 PR 이 상시 승인요구** = 경보 피로로 3층이 무력화된다.
+   - **방향(제안)**: 미해소 dispatch 를 **sink 전방폐쇄(N홉) 안에 "본문 없는 추상/인터페이스 메서드 = 막다른 길" 이 존재할 때만** 승격. A-0047 의 fresh 세트에서 이 판별식은 **실구멍 6형태는 전부 승격 유지 · 소음 2형태만 `pass`** 로 정확히 갈린다.
+   - **🔴 불변식**: 정밀화가 **과소탐을 만들면 안 된다** — 위 AC#1·#2 픽스처와 기존 익명/람다 픽스처가 **전부 `approval_required` 유지**임을 회귀로 고정. 소음 케이스(sink 무관 lambda·sink 0개 repo)는 **`pass` 단언 케이스로 신설**.
+   - (동반) **O-8**: `functional_method_targets` 의 `len(methods) == 1` 이 `default`·`static` 까지 계수한다 → **추상 메서드만** 세면 `default` 보유 함수형 인터페이스가 fail-closed 가 아니라 **실 탐지**로 상승(정확도↑·소음↓).
+4. **(A-0047 O-11) 중첩 기록 회귀 픽스처 공백 메우기**: `subtree_call_targets` 의 **중첩본문 내** 람다/익명 기록 2원소는 제거해도 **161/161 이 그대로다**(A-0047 §3 rig E2·E3). 기능은 실재하나(깊이 3 fresh 입력의 `coverage` 에 실제로 찍힘) **픽스처가 없다** ⇒ 익명-in-람다-in-람다 · 익명-in-익명-in-익명 를 픽스처로 고정하고 **`coverage_unevaluated` 원소를 단언**해 A-0041 G-1 "원소 단위 load-bearing" 을 완성한다.
+5. **(A-0047 O-7) 케이스 개명**: `java-indirect-anonymous-fail-closed` 는 기대값이 **실 indirect impact** 로 바뀌었는데 이름이 fail-closed 라 리뷰어를 오도한다.
+6. **무회귀**: `tests/run-tests.sh` 전량 · `mutation-check.sh` · Python 골든패스 불변. 정책·킷 무접촉(킷 반영은 TASK-038).
+**의존**: TASK-037 머지 후(완료). **TASK-038 보다 먼저 권장.** 통과 시 `java.layers.callgraph` `partial`→`supported` 승격 재검토(Claude·D-076).
 
 ### TASK-038 ☐ 킷에 Java L3 + 잔손질 반영 (MVP-3 킷 스냅샷 갱신)  (Codex)  *(MVP-3 · X · 킷)*
 **배경**: TASK-035·036·037 로 dev 가 Java 전 계층(J1~J3 + L3) 완비되면 킷을 그 상태로 올린다(형 지시 "자바까지 하고 킷 업데이트"). TASK-026/028 킷 스냅샷 선례.
 **수용기준**:
 1. `sync-from-dev.sh` → 신규 Java 콜그래프/sink 추출기 + 언어중립화된 `check-indirect-impact` + 정책이 킷에 반영(dev↔kit md5 동일·누락검증 통과·게이트 수 갱신).
 2. `run.sh` 에 **Java 간접영향층이 기존 간접영향 배선을 통해 작동**(언어중립화 덕에 별도 배선 불필요할 수 있음 — 확인). `--policies`·sink-registry 오버라이드 일관. 정책 부재 fail-safe.
-3. `manifest.yaml`/`README.md` — Java L3(callgraph·sink) 반영·"Java 간접영향 지원" 명기. `language-routing.yaml` `java.layers.callgraph` **stub→supported 승격은 Claude 가**(리뷰 통과 후·D-076 계약).
+3. `manifest.yaml`/`README.md` — Java L3(callgraph·sink) 반영. **단 "Java 간접영향 **지원**" 이라고 단정하지 말 것** — dev 정책은 D-091 시점에 `java.layers.callgraph` = **`partial`** 이다(`supported` 아님 · A-0047 §7: 초기화 컨텍스트·`::` 미커버). 킷 정책도 **`partial` 로 동기화**하고 README 는 **커버 범위와 한계**(메서드/생성자 본문 dispatch 는 잡음 · 필드/static 초기화·`::` 는 미커버)를 함께 적는다. `partial`→`supported` 승격은 **TASK-039 완료 후 Claude 가**(D-076 계약).
 4. `kit/selftest.sh` 전량 green + **Java 간접영향 rig-and-revert**(sink 상류 Java 함수 수정→승인요구·fresh 적대입력). 기존 진입점 무회귀.
 5. **(D-085 G-1·G-2·G-3 — TASK-035 재리뷰 신규 발견 · 킷 콘솔/가드 정직성)** 아래 3건을 닫는다. 전부 판정 무영향이라 **출력·테스트 계층만** 손댄다(판정 로직 변경 금지):
    - **🔴 G-1 `try/except` 가드 고정**: `run.sh` `append_capability_trace` 의 두 가드 중 **`isinstance` 쪽만 픽스처에 고정돼 있고 `try/except` 는 제거해도 진입점 26/26 PASS** 다(D-085 실증). 원인 = 기존 리그 `raise RuntimeError("forced evidence failure")` 가 **YAML dict 로 파싱되는 형태(V1)** 라 `safe_load` 가 예외를 안 던짐. → **예외 메시지에 콜론이 든 리그**(예: `raise RuntimeError("boom: bad value: x")` → `ScannerError`, 형태 V2) **진입점 케이스 1건 추가** + **음성검증**(`try/except` 만 제거 시 그 케이스 단독 FAIL·PyYAML traceback 재출현). 두 형태 모두 **최종 verdict·exit 불변** 단언 포함.
@@ -519,7 +536,7 @@
    - `run_gate "check-indirect-impact" …` 에 **`--language-routing "$POL/language-routing.yaml"` 명시 전달** — 다른 정책 인자(`$ZONES`·`$SINKS`)와 동일하게 `--policies` 오버라이드를 따르도록.
    - **진입점 케이스 2건**: ① 대상 repo 에 `policies/language-routing.yaml`(`adapters: {}`)을 심어도 **판정 무영향**(sink 상류 변경이 그대로 승인요구) ② `--policies` 로 준 디렉터리의 라우팅 정책이 실제로 쓰임. **음성검증**: 명시 전달을 제거하면 ①이 단독 FAIL.
    - 게이트 자체의 fail-closed(D-089 R-3 보정)는 **TASK-037 재제출에서 닫는다** — 이 AC 는 킷 배선만 책임진다(중복 방어).
-**의존**: TASK-037 통과·머지 후 착수. **단 AC#5 는 TASK-036/037 과 무관**하므로 먼저 처리해도 된다(권장 — 회귀 픽스처 공백 기간 단축).
+**의존**: TASK-037 통과·머지 완료(D-091) ⇒ 착수 가능. **단 AC#5 는 TASK-036/037 과 무관**하므로 먼저 처리해도 된다(권장 — 회귀 픽스처 공백 기간 단축). **🔴 순서 권고**: 판정 구멍(TASK-039 AC#1·#2)과 소음(AC#3)을 **먼저** 닫고 킷에 실을 것 — 킷은 배포·실사용 최전선이라 구멍째 스냅샷하면 노출 구간이 길어진다.
 
 ## MVP-3 공통 (Codex)
 - **🔴 파이썬 동등성(parity) = 최우선 합격기준**(형 지시): 각 J-태스크는 Python 대응층과 **동일 성능**을 실증해야 통과. **교차언어 등가 픽스처**(`tests/parity/`·py판+java판 동일 verdict 단언 + 음성검증)가 없으면 미완. 불완전성은 **항상 과탐(approval) 쪽으로 반올림 — 과소탐(놓침) 금지**(놓침 = parity 위반). 정의 = 설계 §1.5.
