@@ -2708,6 +2708,75 @@ cases:
       errors_present: false
       deterministic_stdout: true
 
+  - name: java-callgraph-conservative
+    group: adversarial
+    gate: extract-java-callgraph
+    input:
+      repo: tests/fixtures/java-callgraph/repo
+    expect:
+      exit_code: 0
+      edges:
+        - caller: BillingService.billConstructed
+          callee: CardPayment.pay
+          call: constructed.pay
+        - caller: BillingService.billConstructed
+          callee: RegionalCardPayment.pay
+          call: constructed.pay
+        - caller: BillingService.billConstructed
+          callee: WirePayment.pay
+          call: constructed.pay
+        - caller: BillingService.billInjected
+          callee: CardPayment.pay
+          call: injected.pay
+        - caller: BillingService.billInjected
+          callee: RegionalCardPayment.pay
+          call: injected.pay
+        - caller: BillingService.billInjected
+          callee: WirePayment.pay
+          call: injected.pay
+      unresolved_calls:
+        - caller: BillingService.reflect
+          kind: dynamic
+          name: method.invoke
+      coverage_unevaluated:
+        - caller: BillingService.reflect
+          kind: dynamic
+          name: method.invoke
+      errors_present: false
+      deterministic_stdout: true
+
+  - name: parity-java-callgraph
+    group: parity
+    gate: extract-java-callgraph
+    input:
+      repo: tests/fixtures/parity/java-callgraph/repo
+    expect:
+      exit_code: 0
+      edges:
+        - caller: Flow.sink
+          callee: Flow.helper
+          call: helper
+      unresolved_calls: []
+      coverage_unevaluated: []
+      errors_present: false
+      deterministic_stdout: true
+
+  - name: parity-python-callgraph
+    group: parity
+    gate: extract-callgraph
+    input:
+      repo: tests/fixtures/parity/python-callgraph/repo
+    expect:
+      exit_code: 0
+      edges:
+        - caller: app.flow.sink
+          callee: app.flow.helper
+          call: helper
+      unresolved_calls: []
+      coverage_unevaluated: []
+      errors_present: false
+      deterministic_stdout: true
+
   - name: indirect-impact-direct
     group: adversarial
     gate: check-indirect-impact
