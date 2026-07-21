@@ -283,14 +283,9 @@ def method_targets(
     interface_names,
 ):
     owners = set(type_names_by_simple.get(owner_type, set()))
-    interface_receiver = any(owner in interface_names for owner in owners)
-    if interface_receiver and implementations.get(owner_type):
-        owners = set()
     owners.update(implementations.get(owner_type, set()))
     for owner in list(owners):
         owners.update(ancestors.get(owner, set()))
-    if interface_receiver:
-        owners.difference_update(interface_names)
     targets = set()
     for owner in owners:
         targets.update(methods_by_owner.get((owner, method_name), set()))

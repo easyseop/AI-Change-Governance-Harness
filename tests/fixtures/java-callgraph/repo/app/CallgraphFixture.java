@@ -2,6 +2,20 @@ package app;
 
 interface PaymentPort {
     void pay();
+
+    default void audit() {}
+}
+
+interface StandalonePort {
+    default void audit() {}
+
+    static void utility() {}
+
+    private void helper() {}
+
+    default void delegate() {
+        helper();
+    }
 }
 
 class CardPayment implements PaymentPort {
@@ -33,6 +47,18 @@ class BillingService {
 
     void billConstructed() {
         constructed.pay();
+    }
+
+    void auditInjected() {
+        injected.audit();
+    }
+
+    void auditStandalone(StandalonePort standalone) {
+        standalone.audit();
+    }
+
+    void useStandaloneUtility() {
+        StandalonePort.utility();
     }
 
     void reflect(Method method, Object target) throws Exception {

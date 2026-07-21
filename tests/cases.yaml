@@ -2716,8 +2716,17 @@ cases:
     expect:
       exit_code: 0
       edges:
+        - caller: BillingService.auditInjected
+          callee: PaymentPort.audit
+          call: injected.audit
+        - caller: BillingService.auditStandalone
+          callee: StandalonePort.audit
+          call: standalone.audit
         - caller: BillingService.billConstructed
           callee: CardPayment.pay
+          call: constructed.pay
+        - caller: BillingService.billConstructed
+          callee: PaymentPort.pay
           call: constructed.pay
         - caller: BillingService.billConstructed
           callee: RegionalCardPayment.pay
@@ -2729,11 +2738,20 @@ cases:
           callee: CardPayment.pay
           call: injected.pay
         - caller: BillingService.billInjected
+          callee: PaymentPort.pay
+          call: injected.pay
+        - caller: BillingService.billInjected
           callee: RegionalCardPayment.pay
           call: injected.pay
         - caller: BillingService.billInjected
           callee: WirePayment.pay
           call: injected.pay
+        - caller: BillingService.useStandaloneUtility
+          callee: StandalonePort.utility
+          call: StandalonePort.utility
+        - caller: StandalonePort.delegate
+          callee: StandalonePort.helper
+          call: helper
       unresolved_calls:
         - caller: BillingService.reflect
           kind: dynamic
