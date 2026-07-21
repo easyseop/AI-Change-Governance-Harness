@@ -3076,7 +3076,7 @@ cases:
       deterministic_stdout: true
 
   - name: parity-java-indirect-direct
-    group: adversarial
+    group: parity
     gate: check-indirect-impact
     input:
       fixture_dir: tests/fixtures/parity/java-indirect-direct
@@ -3098,7 +3098,7 @@ cases:
       errors_present: false
 
   - name: parity-python-indirect-direct
-    group: adversarial
+    group: parity
     gate: check-indirect-impact
     input:
       fixture_dir: tests/fixtures/parity/python-indirect-direct
@@ -3120,6 +3120,7 @@ cases:
       errors_present: false
 
   - name: parity-java-indirect-unrelated
+    group: parity
     gate: check-indirect-impact
     input:
       fixture_dir: tests/fixtures/parity/java-indirect-unrelated
@@ -3135,6 +3136,7 @@ cases:
       errors_present: false
 
   - name: parity-python-indirect-unrelated
+    group: parity
     gate: check-indirect-impact
     input:
       fixture_dir: tests/fixtures/parity/python-indirect-unrelated
@@ -3143,6 +3145,7 @@ cases:
     expect: *indirect_parity_pass
 
   - name: parity-java-indirect-hop-boundary
+    group: parity
     gate: check-indirect-impact
     input:
       fixture_dir: tests/fixtures/parity/java-indirect-boundary
@@ -3151,6 +3154,7 @@ cases:
     expect: *indirect_parity_pass
 
   - name: parity-python-indirect-hop-boundary
+    group: parity
     gate: check-indirect-impact
     input:
       fixture_dir: tests/fixtures/parity/python-indirect-boundary
@@ -3168,25 +3172,144 @@ cases:
     expect:
       verdict: approval_required
       exit_code: 2
+      indirect_impact:
+        - sink_id: anonymous_sink
+          changed_function: Ledger.settle
+          path: [Flow.sink, Port.run, Ledger.settle]
+          hops: 2
+          reviewer: security-reviewer
+          maturity: enforcing
+      shadow_hits: []
+      reviewer_required: [security-reviewer]
+      fail_closed_present: false
+      errors_present: false
+      coverage_unevaluated:
+        - caller: Port.run
+          kind: unresolved
+          name: new Ledger
+        - caller: Port.run
+          kind: unresolved
+          name: new Ledger
+      deterministic_stdout: true
+
+  - name: java-indirect-lambda-dispatch
+    group: adversarial
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/java-indirect-lambda
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones-empty.yaml
+      sink_registry: tests/fixtures/java-indirect-lambda/sink-registry.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      indirect_impact:
+        - sink_id: lambda_sink
+          changed_function: Ledger.settle
+          path: [Flow.sink, Port.run, Ledger.settle]
+          hops: 2
+          reviewer: security-reviewer
+          maturity: enforcing
+      shadow_hits: []
+      reviewer_required: [security-reviewer]
+      fail_closed_present: false
+      errors_present: false
+      coverage_unevaluated:
+        - caller: Port.run
+          kind: unresolved
+          name: new Ledger
+      deterministic_stdout: true
+
+  - name: indirect-routing-degenerate-fail-closed
+    group: adversarial
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/indirect-routing-degenerate
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones-empty.yaml
+      sink_registry: tests/fixtures/indirect-routing-degenerate/sink-registry.yaml
+      language_routing: tests/fixtures/language-routing/no-adapters.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
       indirect_impact: []
       shadow_hits: []
       reviewer_required: [tool_owner]
       fail_closed_present: true
       errors_present: true
       coverage_unevaluated:
-        - caller: Flow.lambdaWire
-          kind: unresolved
-          name: new Ledger
-        - caller: Flow.run
-          kind: unresolved
-          name: new Ledger
-        - caller: Flow.wire
-          kind: anonymous_class
-          name: new Port
-        - caller: Flow.wire
-          kind: unresolved
-          name: new Ledger
-      deterministic_stdout: true
+        - caller: app/flow.py
+          kind: language_routing_missing_adapter
+          name: python
+
+  - name: indirect-routing-partial-drift-fail-closed
+    group: adversarial
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/indirect-routing-partial
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones-empty.yaml
+      sink_registry: tests/fixtures/indirect-routing-partial/sink-registry.yaml
+      language_routing: tests/fixtures/language-routing/java-only.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      indirect_impact:
+        - sink_id: java_sink
+          changed_function: Flow.helper
+          path: [Flow.sink, Flow.helper]
+          hops: 1
+          reviewer: java-reviewer
+          maturity: enforcing
+      shadow_hits: []
+      reviewer_required: [java-reviewer, tool_owner]
+      fail_closed_present: true
+      errors_present: true
+      coverage_unevaluated:
+        - caller: app/flow.py
+          kind: language_routing_missing_adapter
+          name: python
+
+  - name: indirect-registry-multilang-java-only
+    group: adversarial
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/indirect-registry-multilang-java
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones-empty.yaml
+      sink_registry: tests/fixtures/indirect-registry-multilang-java/sink-registry.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      indirect_impact:
+        - sink_id: java_sink
+          changed_function: Flow.helper
+          path: [Flow.sink, Flow.helper]
+          hops: 1
+          reviewer: java-reviewer
+          maturity: enforcing
+      shadow_hits: []
+      reviewer_required: [java-reviewer]
+      fail_closed_present: false
+      errors_present: false
+
+  - name: indirect-registry-multilang-python-only
+    group: adversarial
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/indirect-registry-multilang-python
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones-empty.yaml
+      sink_registry: tests/fixtures/indirect-registry-multilang-python/sink-registry.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      indirect_impact:
+        - sink_id: py_sink
+          changed_function: app.flow.helper
+          path: [app.flow.sink, app.flow.helper]
+          hops: 1
+          reviewer: py-reviewer
+          maturity: enforcing
+      shadow_hits: []
+      reviewer_required: [py-reviewer]
+      fail_closed_present: false
+      errors_present: false
 
   - name: metamorphic-import-alias
     group: metamorphic

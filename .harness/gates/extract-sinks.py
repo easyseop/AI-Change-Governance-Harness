@@ -443,22 +443,29 @@ def unique_sorted_sinks(sinks):
 def extract_sinks(repo, sensitive_zones, sink_registry, languages=None):
     repo = os.path.abspath(repo)
     active = set(languages or {"python", "java"})
+    python_functions, python_source_by_path, python_errors = collect_repo_functions(repo)
+    java_functions, java_source_by_path_all, java_errors_all = collect_java_functions(repo)
+    functions = []
+    source_by_path = {}
+    java_source_by_path = {}
+    errors = []
     if "python" in active:
-        functions, source_by_path, errors = collect_repo_functions(repo)
-    else:
-        functions, source_by_path, errors = [], {}, []
+        functions.extend(python_functions)
+        source_by_path = python_source_by_path
+        errors.extend(python_errors)
     if "java" in active:
-        java_functions, java_source_by_path, java_errors = collect_java_functions(repo)
-    else:
-        java_functions, java_source_by_path, java_errors = [], {}, []
-    functions.extend(java_functions)
-    errors.extend(java_errors)
-    functions_by_name = {function["function"]: function for function in functions}
+        functions.extend(java_functions)
+        java_source_by_path = java_source_by_path_all
+        errors.extend(java_errors_all)
+    registry_functions_by_name = {
+        function["function"]: function
+        for function in python_functions + java_functions
+    }
     policy = load_sensitive_zones(sensitive_zones)
 
     gov_records, gov_errors = gov_sinks(source_by_path)
     java_gov_records, java_gov_errors = java_gov_sinks(java_source_by_path)
-    registry_records, registry_errors = registry_sinks(sink_registry, functions_by_name)
+    registry_records, registry_errors = registry_sinks(sink_registry, registry_functions_by_name)
     sinks = gov_records + java_gov_records + frozen_sinks(functions, policy) + registry_records
     errors.extend(gov_errors)
     errors.extend(java_gov_errors)

@@ -185,6 +185,26 @@ def fail_closed(reason, detail=None):
     return record
 
 
+def language_for_path(path):
+    if path.endswith(".py"):
+        return "python"
+    if path.endswith(".java"):
+        return "java"
+    return None
+
+
+def required_languages_from_routing(routing):
+    required = {}
+    for path in routing.get("changed_files", []):
+        language = language_for_path(normalize_path(path))
+        if language:
+            required.setdefault(language, []).append(normalize_path(path))
+    return {
+        language: sorted(paths)
+        for language, paths in sorted(required.items())
+    }
+
+
 def check_indirect_impact(
     rev_range,
     sensitive_zones,
@@ -200,6 +220,7 @@ def check_indirect_impact(
             if record.get("adapter") in {"python", "java"}
         }
     )
+    required_languages = required_languages_from_routing(routing)
     mapping = map_gate.map_diff_to_functions(rev_range, repo)
     classification = classify_gate.classify_python_function_changes(rev_range, repo)
     callgraphs = []
@@ -239,6 +260,30 @@ def check_indirect_impact(
         errors.append({"gate": "extract-sinks", **error})
     if sinks.get("errors"):
         fail_closed_records.append(fail_closed("extract-sinks reported errors"))
+
+    routing_coverage = []
+    for language, paths in required_languages.items():
+        if language in active_languages:
+            continue
+        detail = f"{language}: {', '.join(paths)}"
+        errors.append(
+            {
+                "gate": "language-router",
+                "error": "language_routing_missing_adapter",
+                "language": language,
+                "paths": paths,
+            }
+        )
+        routing_coverage.append(
+            {
+                "caller": ",".join(paths),
+                "kind": "language_routing_missing_adapter",
+                "name": language,
+            }
+        )
+        fail_closed_records.append(
+            fail_closed("language routing omitted changed supported files", detail)
+        )
 
     changed_functions = unique_candidates(
         changed_candidates_from_map(mapping)
@@ -293,7 +338,8 @@ def check_indirect_impact(
         "shadow_hits": shadow_hits,
         "coverage": {
             "unevaluated": sorted(
-                [item for _, graph in callgraphs for item in graph.get("coverage", {}).get("unevaluated", [])],
+                [item for _, graph in callgraphs for item in graph.get("coverage", {}).get("unevaluated", [])]
+                + routing_coverage,
                 key=lambda item: json.dumps(item, sort_keys=True),
             ),
         },
