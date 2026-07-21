@@ -1948,3 +1948,16 @@ parity 는 "정상 경로 등가"만이 아니라 **"실패 경로 등가"까지
 - **§2B**: 킷=배포 최전선, selftest=지원 무결성 게이트 ⇒ RED 채 머지=깨진 킷 배포 = 비차단 불가. ★★ 킷 (4)sync 빠짐없이·(5)selftest 전량 재현 해당.
 - **보정 지시(Codex)**: ① 3줄 → `callgraph` · ② `run-entrypoint-tests.sh:138` grep → `callgraph`(킷 전용, 직접) · ③ **`kit/selftest.sh --quick` 139/139+22/22 재현 필수**(R-1 은 dev 스위트만 돌려 놓침).
 - **설계 공백**: D-080 R-1 이 킷 sync 를 `kit/policies` 단일로만 명시 → "dev tests/cases.yaml 변경 = 킷 tests 미러 동반" 을 킷 sync 체크리스트에 추가.
+
+## TASK-032 R-1 보정 재제출 재리뷰 — 2026-07-21 · **통과 · AC#11 승격 합동 머지** (A-0039 · D-082)
+- 대상(멱등): 보정 커밋 `6e2126d`(킷 미러 4곳)·`41284ca`(기록)만. 선행 `fa45ccb`/`eda00f5` 는 D-081 확정분.
+- **환경 상한 고지**: 이 머신 Python **3.9.6** 단독 → pin `tree-sitter==0.26.0`·`tree-sitter-javascript==0.25.0` 이 3.9 용으로 PyPI 에 **없음**(실측 최신 0.23.2/0.23.1) ⇒ `tree-sitter-smoke` 1건 환경 FAIL, 상한 **138/139**. **`main` 무변경 기준선도 138/139 + 진입점 22/22** 로 대조 → 브랜치 무관 선재 제약.
+- **합동 상태 실증**: dev **138/139**(실패집합 = 기준선과 동일) · 킷 `selftest.sh` cases **138/139** + **진입점 22/22** · `mutation-check` **PASS**(mutations 234) ⇒ D-081 킷 RED(3 FAIL·21/22) **해소**.
+- **rig-and-revert(R1)**: 킷 4곳 되돌림 → **135/139 + 21/22** 로 D-081 RED 정확 재현 ⇒ 4곳 전부 load-bearing.
+- **정책 회귀 rig(R2)**: 킷 정책만 stub 으로 → cases 3건이 잡음(135/139). **진입점은 22/22 통과** ⇒ O-1.
+- **fresh 적대입력**(픽스처 밖 새 repo): `Runtime.getRuntime().exec` + `Class.forName`/`Method.invoke` head 도입 → 2층 `command_exec`·`reflection` → **exit 2**; 카드 실물 `layers available: capabilities, gov_level, inventory` / `not available: callgraph` = 사실 일치.
+- **fail-closed 5경로 fresh 재현**: 분석기 부재(ImportError 심)·카탈로그 손상(`--policies` 오버라이드)·`HAS_RANGE=0`·`language-routing.yaml` 부재·정책 디렉터리 부재 → 전부 **exit 2**. 승격이 fail-closed 무약화.
+- **킷 sync 실작동**: 합동상태 `sync-from-dev.sh` 재실행 → 게이트 20/20·드리프트 0. **역방향**: dev 가 stub 이면 sync 가 킷 승격을 **원복** ⇒ 합동 머지 필수(실증).
+- **하류**: `language-routing` 소비처 = `generate-change-evidence.language_coverage()` 하나. `check-new-capabilities` 는 라우팅 미참조 ⇒ 승격 blast radius = 카드 문구 1줄. `deep_analysis` 는 전 층 supported 요구 → java 는 여전히 `not_yet_available`(과대주장 없음).
+- **비차단 → 차기 AC**: O-1 진입점 grep 접두 부분일치 · O-2 capabilities 실패의 카드 trace 부재(D-076 대칭) · O-3 `kit/manifest.yaml` J3 미반영(선재) · O-4 정책 주석 스테일.
+- **머지**: 비민감(분석 층 선언 갱신 + 기대값 동기화 · dogfood 에서 `check-policy-change` PASS) → Claude 가 `main` 합동 머지(D-039 선례 동일 범주).
