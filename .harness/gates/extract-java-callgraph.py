@@ -141,7 +141,10 @@ def has_anonymous_class_body(node):
 
 
 def has_static_modifier(source_bytes, node):
-    return any(node_text(source_bytes, child).strip() == "static" for child in node.children)
+    return any(
+        "static" in re.findall(r"[A-Za-z_][A-Za-z0-9_]*", node_text(source_bytes, child))
+        for child in node.children
+    )
 
 
 def class_direct_field_bindings(source_bytes, node):
@@ -149,14 +152,19 @@ def class_direct_field_bindings(source_bytes, node):
     body = node.child_by_field_name("body")
     if body is None:
         return bindings
-    for child in body.named_children:
-        if child.type != "field_declaration":
-            continue
-        type_name = declared_type(source_bytes, child)
-        if not type_name:
-            continue
-        for name in variable_names(source_bytes, child):
-            bindings[name] = type_name
+
+    def visit_fields(subtree):
+        for child in subtree.named_children:
+            if child.type in {"field_declaration", "constant_declaration"}:
+                type_name = declared_type(source_bytes, child)
+                if not type_name:
+                    continue
+                for name in variable_names(source_bytes, child):
+                    bindings[name] = type_name
+            elif child.type in {"enum_body_declarations", "class_body_declarations"}:
+                visit_fields(child)
+
+    visit_fields(body)
     return bindings
 
 
@@ -344,6 +352,79 @@ def functional_method_targets(
     return sorted(set(targets))
 
 
+def method_parameter_types(source_bytes, method_node):
+    params = next(
+        (child for child in method_node.named_children if child.type == "formal_parameters"),
+        None,
+    )
+    if params is None:
+        return []
+    types = []
+    for child in params.named_children:
+        if child.type not in {"formal_parameter", "spread_parameter"}:
+            continue
+        types.append(declared_type(source_bytes, child))
+    return types
+
+
+def argument_index(node):
+    parent = node.parent
+    if parent is None or parent.type != "argument_list":
+        return None
+    index = 0
+    for child in parent.named_children:
+        if child.start_byte == node.start_byte and child.end_byte == node.end_byte:
+            return index
+        index += 1
+    return None
+
+
+def invocation_parameter_type(
+    source_bytes,
+    node,
+    bindings,
+    current_owner,
+    methods_by_owner,
+    method_details,
+    implementations,
+    ancestors,
+    type_names_by_simple,
+    interface_names,
+):
+    index = argument_index(node)
+    argument_list = node.parent
+    invocation = argument_list.parent if argument_list is not None else None
+    if index is None or invocation is None or invocation.type != "method_invocation":
+        return None
+    name = named_text(source_bytes, invocation, "name") or "<dynamic>"
+    owner_type = receiver_type(
+        source_bytes,
+        invocation.child_by_field_name("object"),
+        bindings,
+        current_owner,
+    )
+    targets = method_targets(
+        name,
+        owner_type,
+        methods_by_owner,
+        implementations,
+        ancestors,
+        type_names_by_simple,
+        interface_names,
+    ) if owner_type else []
+    parameter_types = set()
+    for target in targets:
+        method = method_details.get(target)
+        if method is None:
+            continue
+        params = method_parameter_types(source_bytes, method["tree_node"])
+        if index < len(params) and params[index]:
+            parameter_types.add(params[index])
+    if len(parameter_types) == 1:
+        return sorted(parameter_types)[0]
+    return None
+
+
 def assigned_target_type(source_bytes, node, bindings):
     parent = node.parent
     if parent is None:
@@ -417,16 +498,16 @@ def subtree_call_targets(
     for node in walk(subtree):
         if node is not subtree and nested_in_deferred_body(node, subtree):
             if node.type == "lambda_expression":
-                unresolved.add(("lambda_dispatch", "lambda", node_line(node)))
+                unresolved.add(("lambda_dispatch", "lambda", node_line(node), ()))
             elif node.type == "object_creation_expression" and has_anonymous_class_body(node):
                 names = type_names(source_bytes, node.child_by_field_name("type"))
                 owner_type = names[-1] if names else "<unknown>"
-                unresolved.add(("anonymous_class", f"new {owner_type}", node_line(node)))
+                unresolved.add(("anonymous_class", f"new {owner_type}", node_line(node), ()))
             elif node.type == "method_reference":
-                unresolved.add(("method_reference", node_text(source_bytes, node).strip(), node_line(node)))
+                unresolved.add(("method_reference", node_text(source_bytes, node).strip(), node_line(node), ()))
             continue
         if node is not subtree and node.type == "lambda_expression":
-            unresolved.add(("lambda_dispatch", "lambda", node_line(node)))
+            unresolved.add(("lambda_dispatch", "lambda", node_line(node), ()))
             continue
         if node.type == "method_invocation":
             name = named_text(source_bytes, node, "name") or "<dynamic>"
@@ -446,12 +527,12 @@ def subtree_call_targets(
                 targets.update(resolved)
             else:
                 kind = "dynamic" if name in REFLECTIVE_METHODS else "unresolved"
-                unresolved.add((kind, call_text or name, node_line(node)))
+                unresolved.add((kind, call_text or name, node_line(node), ()))
         elif node.type == "object_creation_expression":
             names = type_names(source_bytes, node.child_by_field_name("type"))
             owner_type = names[-1] if names else None
             if has_anonymous_class_body(node):
-                unresolved.add(("anonymous_class", f"new {owner_type or '<unknown>'}", node_line(node)))
+                unresolved.add(("anonymous_class", f"new {owner_type or '<unknown>'}", node_line(node), ()))
                 continue
             resolved = method_targets(
                 "<init>",
@@ -463,7 +544,7 @@ def subtree_call_targets(
                 interface_names,
             ) if owner_type else []
             if not resolved and owner_type and not has_anonymous_class_body(node):
-                unresolved.add(("unresolved", f"new {owner_type}", node_line(node)))
+                unresolved.add(("unresolved", f"new {owner_type}", node_line(node), ()))
         elif node.type == "method_reference":
             resolved = referenced_method_targets(
                 source_bytes,
@@ -479,7 +560,7 @@ def subtree_call_targets(
             if resolved:
                 targets.update(resolved)
             else:
-                unresolved.add(("method_reference", node_text(source_bytes, node).strip(), node_line(node)))
+                unresolved.add(("method_reference", node_text(source_bytes, node).strip(), node_line(node), ()))
     return targets, unresolved
 
 
@@ -523,7 +604,7 @@ def collect_calls(
                     edges.add((method["id"], target, node_line(node), call_text))
             else:
                 kind = "dynamic" if name in REFLECTIVE_METHODS else "unresolved"
-                unresolved.add((method["id"], kind, call_text or name, node_line(node)))
+                unresolved.add((method["id"], kind, call_text or name, node_line(node), ()))
 
         elif node.type == "object_creation_expression":
             names = type_names(source_bytes, node.child_by_field_name("type"))
@@ -568,21 +649,34 @@ def collect_calls(
                         for dispatch_target in dispatch_targets:
                             for target in body_targets:
                                 edges.add((dispatch_target, target, node_line(child), f"new {owner_type}"))
-                            for kind, name, line in body_unresolved:
-                                unresolved.add((dispatch_target, kind, name, line))
+                            for kind, name, line, targets in body_unresolved:
+                                unresolved.add((dispatch_target, kind, name, line, targets))
                     elif child.type in {"field_declaration", "constant_declaration", "static_initializer", "block"}:
-                        for kind, name, line in deferred_nodes(source_bytes, child):
-                            unresolved.add((method["id"], kind, name, line))
+                        for kind, name, line, targets in deferred_nodes(source_bytes, child):
+                            unresolved.add((method["id"], kind, name, line, targets))
                 if not dispatch_targets:
                     unresolved.add(
-                        (method["id"], "anonymous_class", f"new {owner_type}", node_line(node))
+                        (method["id"], "anonymous_class", f"new {owner_type}", node_line(node), ())
                     )
             elif owner_type and not targets:
                 unresolved.add(
-                    (method["id"], "unresolved", f"new {owner_type}", node_line(node))
+                    (method["id"], "unresolved", f"new {owner_type}", node_line(node), ())
                 )
         elif node.type == "lambda_expression":
             owner_type = assigned_target_type(source_bytes, node, method["bindings"])
+            if not owner_type:
+                owner_type = invocation_parameter_type(
+                    source_bytes,
+                    node,
+                    method["bindings"],
+                    method["owner"],
+                    methods_by_owner,
+                    method_details,
+                    implementations,
+                    ancestors,
+                    type_names_by_simple,
+                    interface_names,
+                )
             dispatch_targets = functional_method_targets(
                 owner_type,
                 methods_by_owner,
@@ -606,12 +700,25 @@ def collect_calls(
                 for dispatch_target in dispatch_targets:
                     for target in body_targets:
                         edges.add((dispatch_target, target, node_line(node), "lambda"))
-                    for kind, name, line in body_unresolved:
-                        unresolved.add((dispatch_target, kind, name, line))
+                    for kind, name, line, targets in body_unresolved:
+                        unresolved.add((dispatch_target, kind, name, line, targets))
             else:
-                unresolved.add((method["id"], "lambda_dispatch", "lambda", node_line(node)))
+                unresolved.add((method["id"], "lambda_dispatch", "lambda", node_line(node), tuple(dispatch_targets)))
         elif node.type == "method_reference":
             owner_type = assigned_target_type(source_bytes, node, method["bindings"])
+            if not owner_type:
+                owner_type = invocation_parameter_type(
+                    source_bytes,
+                    node,
+                    method["bindings"],
+                    method["owner"],
+                    methods_by_owner,
+                    method_details,
+                    implementations,
+                    ancestors,
+                    type_names_by_simple,
+                    interface_names,
+                )
             dispatch_targets = functional_method_targets(
                 owner_type,
                 methods_by_owner,
@@ -635,11 +742,18 @@ def collect_calls(
                     for target in referenced_targets:
                         edges.add((dispatch_target, target, node_line(node), node_text(source_bytes, node).strip()))
             else:
-                unresolved.add((method["id"], "method_reference", node_text(source_bytes, node).strip(), node_line(node)))
+                unresolved.add((method["id"], "method_reference", node_text(source_bytes, node).strip(), node_line(node), tuple(dispatch_targets)))
     return edges, unresolved
 
 
-def collect_initializer_deferred(source_bytes, tree):
+def collect_initializer_deferred(
+    source_bytes,
+    tree,
+    methods_by_owner,
+    method_details,
+    type_names_by_simple,
+    interface_names,
+):
     unresolved = set()
 
     def visit(node, type_stack):
@@ -648,48 +762,154 @@ def collect_initializer_deferred(source_bytes, tree):
             owner = ".".join(type_stack + [local])
             body = node.child_by_field_name("body")
             if body is not None:
-                scan_initializer_members(body, owner)
+                scan_initializer_members(body, owner, class_direct_field_bindings(source_bytes, node))
                 for child in body.named_children:
                     visit(child, type_stack + [local])
             return
         for child in node.named_children:
             visit(child, type_stack)
 
-    def scan_initializer_members(body, owner):
+    def scan_initializer_members(body, owner, class_bindings):
         for child in body.named_children:
             if child.type == "field_declaration":
                 caller = f"{owner}.<clinit>" if has_static_modifier(source_bytes, child) else f"{owner}.<init>"
-                scan_deferred(child, caller)
+                scan_deferred(child, caller, declaration_dispatch_targets(child), {})
             elif child.type == "constant_declaration":
-                scan_deferred(child, f"{owner}.<clinit>")
+                scan_deferred(child, f"{owner}.<clinit>", declaration_dispatch_targets(child), {})
             elif child.type == "static_initializer":
-                scan_deferred(child, f"{owner}.<clinit>")
+                scan_deferred(child, f"{owner}.<clinit>", (), class_bindings)
             elif child.type == "block":
-                scan_deferred(child, f"{owner}.<init>")
+                scan_deferred(child, f"{owner}.<init>", (), class_bindings)
+            elif child.type == "enum_constant":
+                constant_body = next(
+                    (item for item in child.named_children if item.type == "class_body"),
+                    None,
+                )
+                if constant_body is not None:
+                    scan_initializer_members(constant_body, owner, class_bindings)
             elif child.type in {"enum_body_declarations", "class_body_declarations"}:
-                scan_initializer_members(child, owner)
+                scan_initializer_members(child, owner, class_bindings)
 
-    def scan_deferred(subtree, caller):
-        for kind, name, line in deferred_nodes(source_bytes, subtree):
-            unresolved.add((caller, kind, name, line))
+    def declaration_dispatch_targets(node):
+        owner_type = declared_type(source_bytes, node)
+        return tuple(
+            functional_method_targets(
+                owner_type,
+                methods_by_owner,
+                method_details,
+                type_names_by_simple,
+                interface_names,
+            )
+        ) if owner_type else ()
+
+    def scan_deferred(subtree, caller, dispatch_targets=(), bindings=None):
+        for kind, name, line, targets in deferred_nodes(
+            source_bytes,
+            subtree,
+            bindings or {},
+            methods_by_owner,
+            method_details,
+            type_names_by_simple,
+            interface_names,
+        ):
+            unresolved.add((caller, kind, name, line, targets or dispatch_targets))
 
     visit(tree.root_node, [])
     return unresolved
 
 
-def deferred_nodes(source_bytes, subtree):
+def deferred_dispatch_targets(
+    source_bytes,
+    node,
+    bindings,
+    methods_by_owner,
+    method_details,
+    type_names_by_simple,
+    interface_names,
+):
+    owner_type = assigned_target_type(source_bytes, node, bindings)
+    return tuple(
+        functional_method_targets(
+            owner_type,
+            methods_by_owner,
+            method_details,
+            type_names_by_simple,
+            interface_names,
+        )
+    ) if owner_type else ()
+
+
+def deferred_nodes(
+    source_bytes,
+    subtree,
+    bindings=None,
+    methods_by_owner=None,
+    method_details=None,
+    type_names_by_simple=None,
+    interface_names=None,
+):
+    bindings = bindings or {}
+    methods_by_owner = methods_by_owner or {}
+    method_details = method_details or {}
+    type_names_by_simple = type_names_by_simple or {}
+    interface_names = interface_names or set()
     found = set()
     for child in walk(subtree):
         if child is not subtree and nested_in_deferred_body(child, subtree):
             continue
         if child.type == "lambda_expression":
-            found.add(("lambda_dispatch", "lambda", node_line(child)))
+            found.add(
+                (
+                    "lambda_dispatch",
+                    "lambda",
+                    node_line(child),
+                    deferred_dispatch_targets(
+                        source_bytes,
+                        child,
+                        bindings,
+                        methods_by_owner,
+                        method_details,
+                        type_names_by_simple,
+                        interface_names,
+                    ),
+                )
+            )
         elif child.type == "object_creation_expression" and has_anonymous_class_body(child):
             names = type_names(source_bytes, child.child_by_field_name("type"))
             owner_type = names[-1] if names else "<unknown>"
-            found.add(("anonymous_class", f"new {owner_type}", node_line(child)))
+            found.add(
+                (
+                    "anonymous_class",
+                    f"new {owner_type}",
+                    node_line(child),
+                    deferred_dispatch_targets(
+                        source_bytes,
+                        child,
+                        bindings,
+                        methods_by_owner,
+                        method_details,
+                        type_names_by_simple,
+                        interface_names,
+                    ),
+                )
+            )
         elif child.type == "method_reference":
-            found.add(("method_reference", node_text(source_bytes, child).strip(), node_line(child)))
+            found.add(
+                (
+                    "method_reference",
+                    node_text(source_bytes, child).strip(),
+                    node_line(child),
+                    deferred_dispatch_targets(
+                        source_bytes,
+                        child,
+                        bindings,
+                        methods_by_owner,
+                        method_details,
+                        type_names_by_simple,
+                        interface_names,
+                    ),
+                )
+            )
     return found
 
 
@@ -722,7 +942,16 @@ def extract_callgraph(repo):
     edges = set()
     unresolved = set()
     for source_bytes, tree, methods in parsed:
-        unresolved.update(collect_initializer_deferred(source_bytes, tree))
+        unresolved.update(
+            collect_initializer_deferred(
+                source_bytes,
+                tree,
+                methods_by_owner,
+                method_details,
+                type_names_by_simple,
+                interface_names,
+            )
+        )
         for method in methods:
             found_edges, found_unresolved = collect_calls(
                 source_bytes,
@@ -738,9 +967,15 @@ def extract_callgraph(repo):
             unresolved.update(found_unresolved)
 
     unresolved_records = [
-        {"caller": caller, "kind": kind, "name": name, "line": line}
-        for caller, kind, name, line in sorted(
-            unresolved, key=lambda item: (item[0], item[3], item[1], item[2])
+        {
+            "caller": caller,
+            "kind": kind,
+            "name": name,
+            "line": line,
+            "dispatch_targets": list(dispatch_targets),
+        }
+        for caller, kind, name, line, dispatch_targets in sorted(
+            unresolved, key=lambda item: (item[0], item[3], item[1], item[2], item[4])
         )
     ]
     return {

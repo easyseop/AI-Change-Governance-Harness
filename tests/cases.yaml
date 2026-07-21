@@ -2803,6 +2803,46 @@ cases:
       errors_present: false
       deterministic_stdout: true
 
+  - name: java-callgraph-static-modifier-initializers
+    group: adversarial
+    gate: extract-java-callgraph
+    input:
+      repo: tests/fixtures/java-callgraph-static-modifiers/repo
+    expect:
+      exit_code: 0
+      edges: []
+      coverage_unevaluated_with_dispatch:
+        - caller: Flow.<clinit>
+          kind: lambda_dispatch
+          name: lambda
+          dispatch_targets: [Task.exec]
+        - caller: Flow.<clinit>
+          kind: lambda_dispatch
+          name: lambda
+          dispatch_targets: [Task.exec]
+        - caller: Flow.<clinit>
+          kind: lambda_dispatch
+          name: lambda
+          dispatch_targets: [Task.exec]
+      errors_present: false
+      deterministic_stdout: true
+
+  - name: java-callgraph-enum-constant-body-coverage
+    group: adversarial
+    gate: extract-java-callgraph
+    input:
+      repo: tests/fixtures/java-callgraph-enum-constant-body/repo
+    expect:
+      exit_code: 0
+      edges: []
+      coverage_unevaluated_with_dispatch:
+        - caller: Reg.<init>
+          kind: lambda_dispatch
+          name: lambda
+          dispatch_targets: [Task.exec]
+      errors_present: false
+      deterministic_stdout: true
+
   - name: parity-python-callgraph
     group: parity
     gate: extract-callgraph
@@ -3229,15 +3269,21 @@ cases:
     expect:
       verdict: approval_required
       exit_code: 2
-      indirect_impact: []
+      indirect_impact:
+        - sink_id: lambda_argument_sink
+          changed_function: Ledger.settle
+          path: [Flow.sink, Port.run, Ledger.settle]
+          hops: 2
+          reviewer: security-reviewer
+          maturity: enforcing
       shadow_hits: []
-      reviewer_required: [tool_owner]
-      fail_closed_present: true
-      errors_present: true
+      reviewer_required: [security-reviewer]
+      fail_closed_present: false
+      errors_present: false
       coverage_unevaluated:
-        - caller: Flow.wire
-          kind: lambda_dispatch
-          name: lambda
+        - caller: Port.run
+          kind: unresolved
+          name: new Ledger
       deterministic_stdout: true
 
   - name: java-indirect-lambda-default-fail-closed
@@ -3472,9 +3518,6 @@ cases:
         - caller: Reg.<clinit>
           kind: lambda_dispatch
           name: lambda
-        - caller: Reg.sink
-          kind: unresolved
-          name: task.exec
       deterministic_stdout: true
 
   - name: java-indirect-enum-class-field-lambda-control
@@ -3517,9 +3560,6 @@ cases:
         - caller: Cfg.<clinit>
           kind: lambda_dispatch
           name: lambda
-        - caller: Cfg.sink
-          kind: unresolved
-          name: TASK.exec
       deterministic_stdout: true
 
   - name: java-indirect-anonymous-field-lambda-fail-closed
@@ -3607,6 +3647,54 @@ cases:
       fail_closed_present: false
       errors_present: false
       coverage_unevaluated: []
+      deterministic_stdout: true
+
+  - name: java-indirect-deferred-body-method-reference-unresolved
+    group: adversarial
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/java-indirect-deferred-body-method-reference-unresolved
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones-empty.yaml
+      sink_registry: tests/fixtures/java-indirect-deferred-body-method-reference-unresolved/sink-registry.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      indirect_impact: []
+      shadow_hits: []
+      reviewer_required: [tool_owner]
+      fail_closed_present: true
+      errors_present: true
+      coverage_unevaluated:
+        - caller: Task.exec
+          kind: method_reference
+          name: External::run
+      deterministic_stdout: true
+
+  - name: java-indirect-deferred-jdk-noise-pass
+    group: negative-corpus
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/java-indirect-deferred-jdk-noise
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones-empty.yaml
+      sink_registry: tests/fixtures/java-indirect-deferred-jdk-noise/sink-registry.yaml
+    expect:
+      verdict: pass
+      exit_code: 0
+      indirect_impact: []
+      shadow_hits: []
+      reviewer_required: []
+      fail_closed_present: false
+      errors_present: false
+      coverage_unevaluated:
+        - caller: Flow.check
+          kind: unresolved
+          name: rows.size
+        - caller: Flow.wire
+          kind: lambda_dispatch
+          name: lambda
+        - caller: Flow.wire
+          kind: unresolved
+          name: consume
       deterministic_stdout: true
 
   - name: java-indirect-deferred-no-sink-pass
