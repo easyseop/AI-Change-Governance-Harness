@@ -507,7 +507,11 @@
 2. `run.sh` 에 **Java 간접영향층이 기존 간접영향 배선을 통해 작동**(언어중립화 덕에 별도 배선 불필요할 수 있음 — 확인). `--policies`·sink-registry 오버라이드 일관. 정책 부재 fail-safe.
 3. `manifest.yaml`/`README.md` — Java L3(callgraph·sink) 반영·"Java 간접영향 지원" 명기. `language-routing.yaml` `java.layers.callgraph` **stub→supported 승격은 Claude 가**(리뷰 통과 후·D-076 계약).
 4. `kit/selftest.sh` 전량 green + **Java 간접영향 rig-and-revert**(sink 상류 Java 함수 수정→승인요구·fresh 적대입력). 기존 진입점 무회귀.
-**의존**: TASK-037 통과·머지 후 착수.
+5. **(D-085 G-1·G-2·G-3 — TASK-035 재리뷰 신규 발견 · 킷 콘솔/가드 정직성)** 아래 3건을 닫는다. 전부 판정 무영향이라 **출력·테스트 계층만** 손댄다(판정 로직 변경 금지):
+   - **🔴 G-1 `try/except` 가드 고정**: `run.sh` `append_capability_trace` 의 두 가드 중 **`isinstance` 쪽만 픽스처에 고정돼 있고 `try/except` 는 제거해도 진입점 26/26 PASS** 다(D-085 실증). 원인 = 기존 리그 `raise RuntimeError("forced evidence failure")` 가 **YAML dict 로 파싱되는 형태(V1)** 라 `safe_load` 가 예외를 안 던짐. → **예외 메시지에 콜론이 든 리그**(예: `raise RuntimeError("boom: bad value: x")` → `ScannerError`, 형태 V2) **진입점 케이스 1건 추가** + **음성검증**(`try/except` 만 제거 시 그 케이스 단독 FAIL·PyYAML traceback 재출현). 두 형태 모두 **최종 verdict·exit 불변** 단언 포함.
+   - **G-2 게이트 출력 파싱 실패 고지**(카드 실패와의 비대칭 해소): `run_gate` 가 `2>&1` 이라 게이트가 **stderr 를 한 줄이라도 뱉고 정상 exit** 하면 `json.loads` 가 깨져 **2층 블록이 헤더만 남고 완전 무출력**이 된다. → `if result:` 에 **`else` 고지 1줄**(예: `능력 게이트 출력 파싱 불가 — 원문 앞 N줄`) + 회귀 케이스. 판정은 지금도 fail-closed 이므로 **고지만** 추가.
+   - **G-3 shadow 렌더 `level=` 복원**: 현행 `shadow: path::id` 는 게이트 `print_text` 의 `shadow: path::id level=<level>` 대비 등급을 잃는다. → `level=` 복원(1줄) + `maturity: shadow` 픽스처로 고정.
+**의존**: TASK-037 통과·머지 후 착수. **단 AC#5 는 TASK-036/037 과 무관**하므로 먼저 처리해도 된다(권장 — 회귀 픽스처 공백 기간 단축).
 
 ## MVP-3 공통 (Codex)
 - **🔴 파이썬 동등성(parity) = 최우선 합격기준**(형 지시): 각 J-태스크는 Python 대응층과 **동일 성능**을 실증해야 통과. **교차언어 등가 픽스처**(`tests/parity/`·py판+java판 동일 verdict 단언 + 음성검증)가 없으면 미완. 불완전성은 **항상 과탐(approval) 쪽으로 반올림 — 과소탐(놓침) 금지**(놓침 = parity 위반). 정의 = 설계 §1.5.
