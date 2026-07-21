@@ -249,12 +249,12 @@ def check_indirect_impact(
     java_anonymous = [
         item
         for item in java_graph.get("coverage", {}).get("unevaluated", [])
-        if item.get("kind") == "anonymous_class"
+        if item.get("kind") in {"anonymous_class", "lambda_dispatch"}
     ]
     if java_anonymous:
         errors.extend({"gate": "extract-java-callgraph", **item} for item in java_anonymous)
         fail_closed_records.append(
-            fail_closed("extract-java-callgraph reported anonymous class dispatch", str(len(java_anonymous)))
+            fail_closed("extract-java-callgraph reported deferred dispatch", str(len(java_anonymous)))
         )
     for error in sinks.get("errors", []):
         errors.append({"gate": "extract-sinks", **error})

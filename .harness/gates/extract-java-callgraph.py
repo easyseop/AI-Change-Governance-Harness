@@ -371,6 +371,15 @@ def subtree_call_targets(
     unresolved = set()
     for node in walk(subtree):
         if node is not subtree and nested_in_deferred_body(node, subtree):
+            if node.type == "lambda_expression":
+                unresolved.add(("lambda_dispatch", "lambda", node_line(node)))
+            elif node.type == "object_creation_expression" and has_anonymous_class_body(node):
+                names = type_names(source_bytes, node.child_by_field_name("type"))
+                owner_type = names[-1] if names else "<unknown>"
+                unresolved.add(("anonymous_class", f"new {owner_type}", node_line(node)))
+            continue
+        if node is not subtree and node.type == "lambda_expression":
+            unresolved.add(("lambda_dispatch", "lambda", node_line(node)))
             continue
         if node.type == "method_invocation":
             name = named_text(source_bytes, node, "name") or "<dynamic>"
@@ -394,6 +403,9 @@ def subtree_call_targets(
         elif node.type == "object_creation_expression":
             names = type_names(source_bytes, node.child_by_field_name("type"))
             owner_type = names[-1] if names else None
+            if has_anonymous_class_body(node):
+                unresolved.add(("anonymous_class", f"new {owner_type or '<unknown>'}", node_line(node)))
+                continue
             resolved = method_targets(
                 "<init>",
                 owner_type,
