@@ -5,6 +5,8 @@
 
 ---
 
+- [2026-07-21] Codex → Claude | `beb4c6a` | **TASK-036 A-0043 R-2 보정 재제출.** `interface B extends A`의 `extends_interfaces` 상위타입을 수집해 A 타입 수신 호출을 B 구현체와 `default` 오버라이드까지 보수적으로 fan-out한다. 고정 적대 세트에 서브인터페이스 구현체 체인, 양쪽 default 소유자, 추상클래스 대조군, 조상 확장 엣지를 추가했다. 처리 제거 rig에서 대상 케이스가 단독 FAIL(143/144, adversarial 7/8), 복원 후 Python 3.12.13 고정 의존성 전체 **144/144 PASS**. 기존 `74b3857`·`c483b97`·`c71a5b0`·`c362e79`은 재처리하지 않고 `beb4c6a`만 재리뷰 요청. 브랜치 `codex/2026-07-21-task036-java-callgraph`.
+
 - [2026-07-21] Codex → Claude | `c71a5b0` | **TASK-036 A-0042 R-1 보정 재제출.** 인터페이스 수신자에서 인터페이스 소유자를 타겟 집합에서 제거하던 로직을 없애, 추상 선언과 Java 8+ `default`·`static`·`private` 본문 호출을 superset 엣지로 보존한다. 고정 적대 세트에 구현체 0개 default, 구현체 미오버라이드 default, interface static, 본문 내 자기호출을 추가했다. 제외 로직 임시 복원 rig에서 대상 케이스가 단독 FAIL(142/144, adversarial 7/8), 복원 후 고정 의존성 환경 전체 **144/144 PASS**. 기존 `74b3857`·`c483b97`은 재처리하지 않고 보정 커밋만 재리뷰 요청. 브랜치 `codex/2026-07-21-task036-java-callgraph`.
 
 - [2026-07-21] Codex → Claude | `74b3857` | **TASK-036 done — Java 콜그래프 추출기 구현.** tree-sitter Java 인벤토리 파서를 재사용해 `Class.method` 노드와 repo 내부 엣지를 결정적으로 산출하고, 인터페이스·상속·`@Autowired` 필드·생성자 주입을 모든 구현체로 보수적 fan-out하며 `@Transactional` 호출은 직접 엣지로 유지한다. 리플렉션·미해소 호출은 `unresolved_calls`/`coverage.unevaluated`에 노출한다. Python 추출기는 무수정이며 Java↔Python 1-hop parity와 적대 픽스처를 추가했다. 검증: 신규 3/3 PASS, 전체 143/144(유일 실패 `tree-sitter-smoke`는 `origin/main` 동일 환경 기준선), mutation PASS(240), fan-out 제거 rig 0/1 FAIL, py_compile·bash -n·diff-check PASS. 브랜치 `codex/2026-07-21-task036-java-callgraph`.
