@@ -18,6 +18,30 @@ interface StandalonePort {
     }
 }
 
+interface BaseSettlementPort {
+    void settle();
+
+    default void audit() {}
+}
+
+interface SpecializedSettlementPort extends BaseSettlementPort {
+    @Override
+    default void audit() {}
+}
+
+class SettlementPayment implements SpecializedSettlementPort {
+    public void settle() {}
+}
+
+abstract class AbstractSettlementPort {
+    void settle() {}
+}
+
+class ConcreteSettlementPort extends AbstractSettlementPort {
+    @Override
+    void settle() {}
+}
+
 class CardPayment implements PaymentPort {
     public void pay() {}
 }
@@ -59,6 +83,22 @@ class BillingService {
 
     void useStandaloneUtility() {
         StandalonePort.utility();
+    }
+
+    void settleViaBaseInterface(BaseSettlementPort port) {
+        port.settle();
+    }
+
+    void auditViaBaseInterface(BaseSettlementPort port) {
+        port.audit();
+    }
+
+    void settleViaAbstractClass(AbstractSettlementPort port) {
+        port.settle();
+    }
+
+    void settleViaConcreteClass(ConcreteSettlementPort port) {
+        port.settle();
     }
 
     void reflect(Method method, Object target) throws Exception {

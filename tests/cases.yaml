@@ -2722,6 +2722,12 @@ cases:
         - caller: BillingService.auditStandalone
           callee: StandalonePort.audit
           call: standalone.audit
+        - caller: BillingService.auditViaBaseInterface
+          callee: BaseSettlementPort.audit
+          call: port.audit
+        - caller: BillingService.auditViaBaseInterface
+          callee: SpecializedSettlementPort.audit
+          call: port.audit
         - caller: BillingService.billConstructed
           callee: CardPayment.pay
           call: constructed.pay
@@ -2746,6 +2752,24 @@ cases:
         - caller: BillingService.billInjected
           callee: WirePayment.pay
           call: injected.pay
+        - caller: BillingService.settleViaAbstractClass
+          callee: AbstractSettlementPort.settle
+          call: port.settle
+        - caller: BillingService.settleViaAbstractClass
+          callee: ConcreteSettlementPort.settle
+          call: port.settle
+        - caller: BillingService.settleViaBaseInterface
+          callee: BaseSettlementPort.settle
+          call: port.settle
+        - caller: BillingService.settleViaBaseInterface
+          callee: SettlementPayment.settle
+          call: port.settle
+        - caller: BillingService.settleViaConcreteClass
+          callee: AbstractSettlementPort.settle
+          call: port.settle
+        - caller: BillingService.settleViaConcreteClass
+          callee: ConcreteSettlementPort.settle
+          call: port.settle
         - caller: BillingService.useStandaloneUtility
           callee: StandalonePort.utility
           call: StandalonePort.utility

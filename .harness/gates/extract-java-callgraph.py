@@ -89,6 +89,9 @@ def declaration_supertypes(source_bytes, node):
     names = []
     for field in ("superclass", "interfaces"):
         names.extend(type_names(source_bytes, node.child_by_field_name(field)))
+    for child in node.children:
+        if child.type in {"extends_interfaces", "super_interfaces", "superclass"}:
+            names.extend(type_names(source_bytes, child))
     return sorted(set(names))
 
 
