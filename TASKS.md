@@ -426,9 +426,22 @@
 2. **🔴 Spring 어노테이션 카탈로그**(신규 정책 `policies/framework-annotations.yaml`, source/owner 메타 필수 — TASK-016 AC#8 계보): `@PreAuthorize`/`@Secured`/`@RolesAllowed`/`@PostAuthorize`→protected · `@Transactional`→watched · `@GetMapping`/`@PostMapping`/`@RequestMapping`→watched+진입점 · `@Query(nativeQuery=true)`/`@Modifying`→protected · `@Scheduled`/`@EventListener`/`@KafkaListener`→watched. **카탈로그 외부화**(코드 하드코딩 금지)·등급은 정책값.
 3. **🔴 base∪head max**(TASK-009 계보): 어노테이션 *제거* 우회 방지 — 판정은 base·head 양측 주석의 max. `@PreAuthorize` 삭제+본문수정 시 base 지배.
 4. 변경 메서드에 invalid/unresolved 주석·parse_error → 최소 approval(조용한 pass 금지·fail-closed).
-5. **🔴 고정 적대 세트**(상설 회귀): `@Gov` 부착 메서드·Spring 인가/트랜잭션 어노테이션·오버로드·어노테이션 제거 PR 각각 + 음성검증(기대변조→FAIL).
+5. **🔴 고정 적대 세트**(상설 회귀): `@Gov` 부착 메서드·Spring 인가/트랜잭션 어노테이션·오버로드·어노테이션 제거 PR 각각 + 음성검증(기대변조→FAIL). **+ 익명 내부클래스·로컬 클래스**(D-073 O-1 — J1 이 `Outer.run`·`Outer.Local` 같은 **실존하지 않는 이름**을 부여하므로, 이름으로 인가 등급을 귀속시키면 잘못된 함수에 붙는다) **+ 게이트 파일 결손**(D-074 O-4 — co-located 게이트 결손 시 파일단위 격리 + 형제 Python 보존; 이 경로 현재 픽스처 0건 = 미측정).
 6. 결정적 + `--json`. 정직성: 어노테이션은 잡되 **AOP 프록시/DI 간접은 coverage 노출**(§5 — 이 층은 선언 기반이라 런타임 실제 적용 여부는 못 봄).
-7. **🔴 parity 픽스처**(설계 §1.5): 이 층의 Python 대응 위험 케이스(민감함수 직접수정→frozen=blocked/protected=approval · 주석제거 우회→base 지배)와 **동일 verdict** 를 내는 **Java 등가 픽스처를 `tests/parity/` 에 쌍**으로 + 음성검증(한쪽 기대 변조 시 parity FAIL). Spring 카탈로그 신호는 Java 고유 초과분이라 등가 대상 아님 — `@Gov` 대칭 케이스로 parity 단언.
+7. **🔴 parity 픽스처 + 러너 훅**(설계 §1.5 · D-069 O-B — 픽스처만이 아니라 **`run-tests.sh` 가 수집·집계해 `Group parity` 를 출력**하는 것까지가 AC. 두 태스크 연속 README 만 있었다): 이 층의 Python 대응 위험 케이스(민감함수 직접수정→frozen=blocked/protected=approval · 주석제거 우회→base 지배)와 **동일 verdict** 를 내는 **Java 등가 픽스처를 `tests/parity/` 에 쌍**으로 + 음성검증(한쪽 기대 변조 시 parity FAIL). Spring 카탈로그 신호는 Java 고유 초과분이라 등가 대상 아님 — `@Gov` 대칭 케이스로 parity 단언.
+8. **🔴 정책 계약·불변식**(Q-0005·A-0032·**D-075** — 정책 파일은 Claude 작성 완료, 수정 금지):
+   (a) 스키마 = `annotations` **리스트**(형제 `sensitive-capabilities.yaml` 동형) · 항목 = `{name, level, entrypoint, reason, reviewer, fqns?, when?, source, owner}` · **중복 `name` = 검증오류**.
+   (b) **🔴 매칭은 어노테이션 이름의 마지막 점-세그먼트 기준** — `@PreAuthorize` 와 FQN 인라인 `@org.springframework...PreAuthorize` 를 **둘 다** 잡을 것(원문 토큰 비교 시 **과소탐**). `fqns` 는 감사용이며 매칭에 쓰지 않는다.
+   (c) **인자 조건 `when`**(`@Query(nativeQuery=true)` 만 신호, JPQL `@Query` 는 무신호) · 값이 결정적으로 **미해소면 추정 금지·매칭 취급**(`defaults.unresolved_argument: match` — 과탐 반올림).
+   (d) **🔴 이 카탈로그는 `frozen` 을 만들 수 없다**(추론 신호 = 2·3층 자동차단 금지 · D-004). 정책에 frozen 오면 **검증오류 + protected clamp**. ↔ `@Gov(level=frozen)` 은 명시 선언이라 blocked 가능 ⇒ 게이트는 **declared vs inferred 출처를 구분해 보존**(뭉쳐 max 만 취하면 카탈로그가 frozen 을 만드는 경로가 열림).
+   (e) **`entrypoint` 는 판정 무영향** — verdict 는 `level` 에서만. 카드 메타데이터 + 후속 L3 진입점 시드로만 사용(등급 드리프트 금지).
+   (f) **정책 부재 fail-closed**: 명시됐는데 부재 → `approval_required` + 사유(**차단 금지**). **`kit/run.sh` 에 `$POL/framework-annotations.yaml` 절대경로 배선 + preflight 필수정책 루프 추가**(TASK-029 **R-4** 재발 방지 — 동일 패턴 3회차 금지) + 해당 회귀 픽스처.
+9. **🔴 Java `stub → supported` 전환 조건**(D-074 O-5 승격 — 이걸 못 지키면 `stub` 유지가 정직):
+   (a) `language-routing.yaml` 에 **층별 `layers:`**(`inventory`/`gov_level`/`capabilities`/`callgraph`) 도입 — J2 시점 java = inventory·gov_level 만 supported, **capabilities 는 stub**(J3 미착수). python 도 동형 부여. dev+kit 동시.
+   (b) 소비자는 `layers.<layer>` 를 읽고 **`supported` 정확일치만 available**(`partial`·미지값은 available 아님 = fail-safe). 현행 `route["status"] == "supported"` 단일 비교(`language-router.py:117·120·125`)를 교체.
+   (c) 카드 coverage 를 **층별로 서술** — 언어 단위 이분법으로는 "인벤토리는 했고 능력은 안 했다"를 표현할 수 없다.
+   (d) **🔴 가용성은 정책이 아니라 실측**: `parse_error`(파서/문법 부재 등) 파일은 정책 status 와 무관하게 **카드 미분석 목록에 노출**. 미구현 시 `supported` 플립은 **열화됐는데 정상이라 말하는 허위 카드**가 된다.
+   (e) 회귀 픽스처(**현재 0건 = 미측정**): 파서 부재 강제 + 정책 supported → 미분석 노출·`exit 0` / 층별 문구가 capabilities 미분석 명시 / 각각 **음성검증 단독 FAIL**.
 **의존**: TASK-030 통과 후.
 
 ### TASK-032 ☐ Java 능력 카탈로그 + 신규능력 감지  (Codex)  *(MVP-3 · J3)*

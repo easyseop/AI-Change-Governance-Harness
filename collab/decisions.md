@@ -1146,3 +1146,75 @@ scope-creep·over-reach 없음.
   J2 AC 에 ①`parse_error` 파일의 카드 coverage 노출 ②Java 심층분석 가용여부 진단 명시.
 
 상세 = `collab/answers/A-0031.md`
+
+---
+
+## D-075 (2026-07-20) TASK-031 J2 프레임워크 어노테이션 정책 — **Q-0005 답변 · 정책 작성**(리뷰 아님)
+
+**대상**: `codex/2026-07-20-task031-java-gov-annotations` (`4dc0b7c`). **미머지 codex 브랜치는 이 1건뿐**이었고,
+내용은 **구현이 아니라 협업 질문 문서 1개**(`collab/questions/Q-0005.md`, 20줄 추가)였다.
+⇒ 리뷰 통과/보정요청이 아니라 **정책 답변**이 정확한 처리다. 비민감(협업 큐 문서) ⇒ D-007 로 `main` 머지.
+
+**분류 확인**: `git branch -r --no-merged origin/main` = 1건. handoff-log 최신 줄은 TASK-030
+**리뷰 통과·머지 완료**(D-074)라 "보정 차례" 브랜치 없음. 작업트리에 TASK-031 구현 WIP(미커밋
+`extract-java-gov-annotations.py`·`tests/fixtures/java-gov/`·`tests/parity/*`)가 보이나 **제출물이 아니므로
+리뷰 대상 아님** — 건드리지 않았다.
+
+**Codex 판단이 정확했다**: 정책값을 하드코딩하지 않고 멈춰서 물은 것이 옳다. AC#2 는 "카탈로그 외부화·
+하드코딩 금지"이고 `policies/*` 는 Claude 소유(CLAUDE.md §1). 임의 결정했다면 `over-reach` 보정요청감이었다.
+
+**작성물**: `policies/framework-annotations.yaml` (18항목 · `policy_version: 0.1-mvp3-j2`).
+검증 — 추가 상태 `tests/run-tests.sh` **110/111**, 미추가 baseline 과 **완전 동일**(유일 FAIL
+`tree-sitter-smoke` 는 이 환경 `tree_sitter` 미설치 = D-074 확정 선재 환경 FAIL) ⇒ **inert 임을 실측 확인**.
+
+**스키마 확정 — Codex 제안(`annotations.<SimpleName> = {level, entrypoint, source, owner}`) 대비 4곳 수정**:
+- **①🔴 마지막 점-세그먼트 매칭**: Java 는 `@PreAuthorize` 와 FQN 인라인
+  `@org.springframework...PreAuthorize` 를 **둘 다 허용**. 원문 토큰 비교면 FQN 표기를 **놓친다 = 과소탐 =
+  MVP-3 공통 "놓침 금지" 위반**. `fqns` 는 감사·문서용이며 매칭에 쓰지 않는다.
+- **②🔴 인자 조건 `when` 필요**: AC#2 의 `@Query(nativeQuery=true)` 는 조건부인데 제안 계약엔 인자를 볼
+  자리가 없다 → 전부 protected(신호 소멸) 또는 전부 무시(원시 SQL **놓침**) 양자택일이 된다.
+  `defaults.unresolved_argument: match` — 상수참조 등 미해소 시 **추정 금지 + 매칭 취급**(과탐 반올림).
+- **③ map → list**: 형제 `sensitive-capabilities.yaml` 과 동형이고 **중복 `name` 을 검증오류로 포착**
+  (map 이면 중복 키가 조용히 덮여 등급이 소리 없이 바뀐다).
+- **④ `reason`·`reviewer` 필수**: 없으면 카드가 사람에게 위험을 설명 못하고(§2C) 승인 라우팅 대상이 안 정해진다.
+
+**등급 확정**: 인가 6종(`@PreAuthorize`·`@PostAuthorize`·`@Secured`·`@RolesAllowed`·`@PermitAll`·`@DenyAll`)
+= protected/security-reviewer · `@Query(nativeQuery=true)`·`@Modifying` = protected/dba-reviewer ·
+`@Transactional` = watched/dba-reviewer · HTTP 매핑 6종 = watched+entrypoint/api-owner ·
+`@Scheduled`·`@EventListener`·`@KafkaListener` = watched+entrypoint/platform-reviewer.
+`source` 는 형제 정책의 `builtin:`/`org:` 에 **`framework:` 추가**(프레임워크 공식 의미론이 근거인 항목이 다수).
+**AC 초과 3종**(전부 과탐 방향·정책 소유자 판단): `@PermitAll`·`@DenyAll`(인가 **해제/차단** 선언 = 인가 약화의
+가장 직접 신호 — 형제 4종만 넣으면 구멍) · `@Put/Patch/DeleteMapping`(DELETE 진입점 제외는 정당화 불가).
+
+**🔴 불변식 3개(구현 필수)**:
+1. **이 카탈로그 level 은 protected|watched 뿐 — frozen 금지**. 프레임워크 어노테이션은 **추론 신호(2·3층)**
+   이고 2·3층은 자동 차단 금지(CLAUDE.md §4·D-004). `@Transactional` 붙인 사람이 동결을 선언한 적 없다.
+   frozen 오면 **검증오류 + protected clamp**(조용한 무시 금지). ↔ `@Gov(level=frozen)` 은 **저자 명시 선언**
+   = 1층 등가라 blocked 가능(AC#1 · Python parity) ⇒ 게이트는 **declared vs inferred 출처를 끝까지 구분 보존**
+   해야 한다. 뭉쳐서 max 만 취하면 프레임워크 카탈로그가 frozen 을 만들 경로가 열린다.
+2. **`entrypoint` 는 판정 무영향** — verdict 는 `level` 에서만. entrypoint 는 카드 메타데이터 + 후속 L3
+   진입점 시드. 이걸로 등급을 올리면 정책 외부화가 무력화된다(등급 드리프트).
+3. **정책 부재/불량 fail-closed**: 명시됐는데 부재 → `approval_required` + 사유(차단 금지, 2·3층 상한).
+   **`kit/run.sh` 에 `$POL/framework-annotations.yaml` 절대경로 배선 + preflight 필수정책 루프 추가**를
+   **AC 가드로 요구** — TASK-029 **R-4** 가 정확히 이 누락으로 킷 사용자 전원 상시차단을 만들었다. 3회차 금지.
+
+**🔴 Java `stub → supported` — 단순 플립 불승인(조건부 승인)**: `status` 는 언어당 스칼라 1개인데
+`language-router.py:117` 이 이를 `deep_analysis: available` 로 그대로 번역한다. J2 시점 사실은
+inventory ✅ / gov_level ✅ / **capabilities ❌(J3 미착수)** / callgraph ❌ 이므로, `supported` 로 올리면
+카드가 **하지도 않은 Java 능력분석을 보증**한다 — `Runtime.exec` 신규 도입 Java PR 이 무신호 통과하는데
+카드는 "available" 이라 말하는 **조용한 통과 + 허위 카드**(D-074 O-5 가 예고한 실패). 요구:
+①`layers:` 층별 스키마 도입(java/python 동형, dev+kit) ②소비자는 `layers.<layer>` 를 읽고 **`supported`
+정확일치만 available**(`partial`·미지값 = fail-safe 아님) ③카드 coverage 를 **층별**로 서술
+④**🔴 가용성은 정책이 아니라 실측** — `parse_error` 파일은 정책 status 와 무관하게 카드 미분석 목록에
+반드시 노출(**status 플립의 하드 전제**) ⑤회귀 픽스처(현재 이 경로 **0건 = 미측정**) + 음성검증 단독 FAIL.
+
+**킷**: `sync-from-dev.sh:32` 가 `policies/*.yaml` 통째 복사 ⇒ 신규 정책은 sync 로 자동 반입.
+단 manifest 종수·README 갱신 + **dev↔kit md5 동일성(D-068) 재확인**은 TASK-031 브랜치에서 Codex 가 수행.
+Claude 는 킷 매니페스트 무접촉(킷 도구 = Codex 소유).
+
+**TASKS.md AC 반영**: TASK-031 에 **AC#8(정책 계약·불변식)** · **AC#9(layers + 실측 가용성 = supported 전제)** 신설,
+AC#5 에 익명 내부클래스·로컬 클래스 고정 적대 픽스처 명시(D-073 O-1), AC#7 에 러너 훅 명시(D-069 O-B),
+O-4(게이트 파일 결손 픽스처) 편입.
+
+**머지 판정(D-007)**: codex 브랜치(질문 문서) **비민감 ⇒ `main` 머지**. 정책·답변·AC 기록도 `main` 머지.
+상세 = `collab/answers/A-0032.md`
