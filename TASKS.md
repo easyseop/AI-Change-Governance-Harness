@@ -505,7 +505,7 @@
 **의존**: TASK-036 통과 후. → **통과 시 Java L3 완결 = Java↔Python parity 회복.**
 **완료 기록**: AC#1~#6 전부 충족(A-0047 §1). AC#6 은 **메서드/생성자 본문 범위에서** 폐쇄 — 익명·람다·인자전달·`default` 인터페이스·중첩(익명-in-람다·람다-in-람다·익명-in-익명) 전부 `pass`→`approval_required`. **범위 한계(초기화 컨텍스트·`::`)는 TASK-039 로 이월**. 정책 `java.layers.callgraph` = `stub` → **`partial`**(`supported` 아님 — A-0047 §7).
 
-### TASK-039 ☐ Java L3 커버리지 구멍 폐쇄 + 승격 정밀화 (deferred dispatch 3종)  (Codex)  *(MVP-3 · X · Java L3-c)*
+### TASK-039 ☑ Java L3 커버리지 구멍 폐쇄 + 승격 정밀화 (deferred dispatch 3종)  (Codex)  *(MVP-3 · X · Java L3-c)*
 **배경**: TASK-037 통과·머지(D-091) 후 A-0047 이 fresh 적대입력으로 확인한 **선재 구멍 2건 + 소음 1건**. 전부 **판정 계층**이므로 킷 스냅샷(TASK-038)보다 **먼저** 처리하는 것을 권장한다(구멍이 배포 킷에 실린 뒤 고치면 노출 구간이 길어진다).
 **수용기준**:
 1. **🔴 (A-0047 O-9) 메서드 본문 *밖*의 dispatch 무표식 폐쇄**: `collect_calls` 는 `method_declaration`·`constructor_declaration` 본문만 순회한다 ⇒ **필드 이니셜라이저·static/instance 이니셜라이저 블록**의 호출은 **엣지도 `coverage` 기록도 없다**. 실증(보정 전·후 동일 = 선재): `Task task = () -> new Vault().transfer();` · `Task task = new Task(){ public void exec(){ new Vault().transfer(); } };` · `static { task = () -> …; }` 3형태 모두 sink 도달 변경인데 **`pass`(exit 0)·`coverage` 빔**(생성자에 같은 코드를 두면 정상 탐지 = 원인이 순회 범위임을 증명).
@@ -532,7 +532,32 @@
 9. **(A-0048 O-12) rig 미고정 원소 3개 픽스처 고정**: **E-C** instance 초기화 블록(`class Flow { Task t; { t = () -> …; } }`) · **E-D** 초기화 컨텍스트의 `::`(필드/`static` 초기화) · **E-F** deferred body 안의 `::` — 현재 제거해도 **169/169 무변화**. A-0047 의 O-11 과 달리 **E-C 는 verdict 를 실제로 뒤집으므로**(fresh 입력에서 `pass`→`approval_required`) 정직성 전용이 아니다. 각각 제거 시 **단독 FAIL** 이 되도록 픽스처를 붙인다.
 
 **의존**: TASK-037 머지 후(완료). **TASK-038 보다 먼저 권장.** 통과 시 `java.layers.callgraph` `partial`→`supported` 승격 재검토(Claude·D-076).
+
+**✅ 보정 재제출(`ed2d221`·`1a3f0d0`) 재리뷰 결과 = 통과·머지 (A-0049 · D-093) — TASK-039 종결, 재제출 불필요.** AC#1~#8 충족. **AC#9 는 E-C·E-D 만 고정, E-F 미고정 → O-17 로 TASK-040 이월.** AC#3 은 문언 충족이나 실 repo 소음이 재확대(O-14 실측) → TASK-040 AC#1.
+**정책**: `java.layers.callgraph` **`partial` 유지** — `supported` 승격은 **TASK-040 AC#1(O-14) + O-19 폐쇄 후** 재검토(D-076).
+
 **비차단 이월**: O-13(`nodes[].bodyless` 신규 출력 스키마 — 직접 단언 케이스 0, **TASK-038 킷 sync 시 노드 스키마 동반 필수**) · O-14(승격이 여전히 repo 전역 all-or-nothing — R-1 보정으로 판별식이 넓어지면 소음 재확대 가능, 차기 과제) · O-15(`Vault::new` 는 해소 대신 fail-closed = 안전한 방향, 결함 아님) · O-16(§1 잔티: `direct_field_bindings`→모듈레벨 승격이 호출부 1곳·신규 소비자 0 인 순수 리팩터).
+
+### TASK-040 ☐ Java L3 승격 정밀화 2차 + 잔여 정직성 갭 (Codex)  *(MVP-3 · X · Java L3-d)*
+**배경**: TASK-039 통과·머지(D-093) 후 A-0049 가 fresh 적대입력으로 확인한 **소음 재확대 1건 + 회귀보호 공백 1건 + 정직성 갭 2건**. 전부 **판정/정직성 계층**이라 **킷 스냅샷(TASK-038)보다 AC#1 을 먼저 처리 권고**.
+**수용기준**:
+1. **🟠 (A-0049 O-14) 승격 판별식의 소음 재확대 폐쇄**: `kind: unresolved` 는 **JDK 호출을 포함한 모든 미해소 호출**에 붙으므로(`extract-java-callgraph.py:525`), 현행 `sink_dead_ends` 는 사실상 **"sink 전방폐쇄가 외부 호출을 하나라도 한다"** 로 완화됐다. 실 Java repo 에선 거의 항상 성립 ⇒ **거의 모든 PR 이 `approval_required`** = TASK-039 AC#3 이 지목한 **경보 피로로 3층 무력화**가 재발한다.
+   - **실증(A-0049 §3 · 변경 대상은 sink 와 무관한 파일)**: **N4**(sink 폐쇄에 `rows.size()` JDK 호출 1개) → `approval_required` ↔ **N5**(그 호출만 제거) → `pass`. `main`(무조건 전역 승격)은 둘 다 `approval_required` ⇒ **현행이 `main` 보다 나쁘지는 않다**(그래서 비차단이었다).
+   - **원인**: 막다른 길 쪽만 sink 관련성을 보고 **`java_deferred` 는 여전히 repo 전역 all-or-nothing**.
+   - **방향(미실증 — 검증 후 확정할 것)**: deferred coverage 항목에 **dispatch 대상**(예: `Port.run`)을 기록하고 **그 대상이 `sink_dead_ends` 에 있을 때만** 승격.
+   - **🔴 리뷰어가 이미 배제한 오답 — `caller` 축은 틀렸다**: 스크래치 프로토타입("deferred 의 `caller` 가 sink 폐쇄 안일 때만 승격")은 N4 를 `pass` 로 고치고 R-1·AC#8·대조군을 전부 유지했으나 **`java-indirect-lambda-argument-fail-closed` 가 단독 FAIL**(179/180) — 람다 **생성 지점**(`Flow.wire`)이 폐쇄 밖이고 **invoke 지점**(`Flow.sink`)만 안에 있기 때문. 같은 함정을 반복하지 말 것.
+   - **🔴 착수 전 필수 fresh 검증 7축**(리뷰어 지시 결함 3회 재발 방지 — 탐지축·소음축을 **같은 세트로 동시** 실측): ① repo 인터페이스 직접대입 ② repo 인터페이스 **인자전달**(위 픽스처 모양) ③ **JDK 인터페이스**(`Runnable`·`Consumer`·`ExecutorService`) ④ **`::`** (repo 내/외 각각) ⑤ **초기화 컨텍스트**(`<clinit>`/`<init>` 합성 caller — 그래프 노드가 아니라 폐쇄에 절대 안 들어온다) ⑥ 소음(무관 sink · sink 0개 · **폐쇄에 JDK 호출 있는 무관 변경 = N4**) ⑦ 다중 sink · `hops` 경계.
+   - **🔴 불변식(회귀로 고정)**: TASK-039 신규 11케이스 전량 `approval_required` 유지 · 소음 `pass` 2케이스 유지 · **N4 를 `pass` 단언 케이스로 신설** · Python 골든패스 불변 · 음성검증(정밀화 제거 시 N4 단독 FAIL).
+2. **🟠 (A-0049 O-17) AC#9 E-F 미고정 원소 폐쇄**: `subtree_call_targets` 의 `method_reference` **미해소 fallback**(`extract-java-callgraph.py:482`)은 제거해도 **스위트 180/180 무변화**다. 신규 픽스처 `java-indirect-deferred-body-method-reference` 는 `coverage_unevaluated: []` 를 단언하는 **해소 경로** 케이스라 해소 분기만 고정한다.
+   - **이 원소는 verdict 를 실제로 뒤집는다(실증)**: 해소 가능한 람다 dispatch 본문 안에 repo 밖 `::`(`task = () -> { Task inner = Ext::run; inner.exec(); };`)를 두면 `approval_required` ↔ 분기 제거 시 **`pass`**.
+   - **픽스처 1건**(미해소 `::` in deferred body) + `coverage_unevaluated` **원소 단언** + 음성검증(단독 FAIL). A-0041 G-1 완성.
+3. **🟡 (A-0049 O-18) `has_static_modifier` 다중 수식어 오판**: `any(node_text(child).strip() == "static" for child in node.children)` 가 `field_declaration` 직속 자식 `modifiers` **노드 전체 텍스트**와 완전일치 비교한다 ⇒ 수식어가 하나(`static`)일 때만 맞고 **`static final`(상수 표준형)·`private static`·어노테이션 동반**(`@Deprecated … static`)이면 False → caller 가 `<clinit>` 아닌 **`<init>` 으로 오표기**.
+   - **판정 무영향**(초기화 레코드의 `kind` 는 `unresolved` 가 아니라 `java_bodyless` 에 안 들어가고, 합성 id 는 그래프 노드도 아니다) = **조용한 `pass` 없음**. 그러나 ① TASK-039 인계기록의 "static field/constant caller를 `<clinit>`로 표기했다" 가 **`static final` 에서 사실이 아니고** ② 감사카드가 **클래스 로드 시점** 코드를 **인스턴스 생성 시점**으로 표시해 사람 리뷰어를 오도한다.
+   - **수정 1줄**(`modifiers` 텍스트를 토큰 분해해 `"static"` 포함 여부로 판정) + `static final`·`private static`·어노테이션 동반 픽스처 + 음성검증.
+4. **🟡 (A-0049 O-19) enum 상수 본문 coverage 무표식**: `enum Reg { A { Task t = () -> …; } ; }` 는 여전히 **coverage 빔**(`scan_initializer_members` 가 `enum_constant` 의 `class_body` 를 안 봄). AC#8 컨테이너 축의 마지막 잔여. 구조적 논증상 verdict 누락은 재현되지 않았으나(실 도달 경로는 `bodyless`/`unresolved` 로 회수) **정직성(coverage 표식) 결손**이므로 닫는다. 픽스처 1건.
+5. **무회귀**: `tests/run-tests.sh` 전량 · `mutation-check.sh` · Python 골든패스 불변 · 결정론. **정책·킷 무접촉**(킷 반영은 TASK-038).
+**의존**: TASK-039 통과·머지(D-093) ⇒ 착수 가능. **AC#1 은 TASK-038 보다 먼저 권고** — 킷은 배포·실사용 최전선이라 소음째 스냅샷하면 경보 피로가 실사용자에게 그대로 간다. 순서를 바꾼다면 TASK-038 이 README·`manifest.yaml` 에 **이 소음 특성을 명시**해야 한다.
+**통과 시**: `java.layers.callgraph` `partial`→`supported` 승격 재검토(Claude·D-076 — AC#1+AC#4 폐쇄가 조건).
 
 ### TASK-038 ☐ 킷에 Java L3 + 잔손질 반영 (MVP-3 킷 스냅샷 갱신)  (Codex)  *(MVP-3 · X · 킷)*
 **배경**: TASK-035·036·037 로 dev 가 Java 전 계층(J1~J3 + L3) 완비되면 킷을 그 상태로 올린다(형 지시 "자바까지 하고 킷 업데이트"). TASK-026/028 킷 스냅샷 선례.
@@ -549,7 +574,7 @@
    - `run_gate "check-indirect-impact" …` 에 **`--language-routing "$POL/language-routing.yaml"` 명시 전달** — 다른 정책 인자(`$ZONES`·`$SINKS`)와 동일하게 `--policies` 오버라이드를 따르도록.
    - **진입점 케이스 2건**: ① 대상 repo 에 `policies/language-routing.yaml`(`adapters: {}`)을 심어도 **판정 무영향**(sink 상류 변경이 그대로 승인요구) ② `--policies` 로 준 디렉터리의 라우팅 정책이 실제로 쓰임. **음성검증**: 명시 전달을 제거하면 ①이 단독 FAIL.
    - 게이트 자체의 fail-closed(D-089 R-3 보정)는 **TASK-037 재제출에서 닫는다** — 이 AC 는 킷 배선만 책임진다(중복 방어).
-**의존**: TASK-037 통과·머지 완료(D-091) ⇒ 착수 가능. **단 AC#5 는 TASK-036/037 과 무관**하므로 먼저 처리해도 된다(권장 — 회귀 픽스처 공백 기간 단축). **🔴 순서 권고**: 판정 구멍(TASK-039 AC#1·#2)과 소음(AC#3)을 **먼저** 닫고 킷에 실을 것 — 킷은 배포·실사용 최전선이라 구멍째 스냅샷하면 노출 구간이 길어진다.
+**의존**: TASK-037 통과·머지 완료(D-091) ⇒ 착수 가능. **단 AC#5 는 TASK-036/037 과 무관**하므로 먼저 처리해도 된다(권장 — 회귀 픽스처 공백 기간 단축). **🔴 순서 권고(D-093 갱신)**: TASK-039 가 판정 구멍(AC#1·#2)을 닫고 머지됐으므로 **sync 차단 사유는 해소**. 다만 **TASK-040 AC#1(소음 정밀화)을 먼저** 처리할 것을 권고한다 — 현 상태 그대로 스냅샷하면 실 Java repo 의 거의 모든 PR 이 `approval_required` 라 **경보 피로로 3층이 무력화**된다(A-0049 §3 N4/N5 실증). 순서를 바꾼다면 AC#3 의 README·`manifest.yaml` 에 **이 소음 특성**(sink 전방폐쇄가 외부 호출을 하나라도 하면 지연 dispatch 가 승인요구로 승격)을 함께 명시할 것. **AC#3 의 `partial` 표기는 D-093 에서도 유지** — `supported` 승격은 TASK-040 후.
 
 ## MVP-3 공통 (Codex)
 - **🔴 파이썬 동등성(parity) = 최우선 합격기준**(형 지시): 각 J-태스크는 Python 대응층과 **동일 성능**을 실증해야 통과. **교차언어 등가 픽스처**(`tests/parity/`·py판+java판 동일 verdict 단언 + 음성검증)가 없으면 미완. 불완전성은 **항상 과탐(approval) 쪽으로 반올림 — 과소탐(놓침) 금지**(놓침 = parity 위반). 정의 = 설계 §1.5.

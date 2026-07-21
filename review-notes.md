@@ -2087,3 +2087,20 @@ parity 는 "정상 경로 등가"만이 아니라 **"실패 경로 등가"까지
 - **보정 AC**: **#7** 막다른 길 = `bodyless` **or** `unresolved` + sink 자신 포함 + JDK 3형태·`::` 픽스처 + **소음 `pass` 2케이스 유지 회귀 고정** · **#8** enum/인터페이스 상수(+익명 본문 람다) 순회 확장 + **enum/class 쌍 픽스처** · **#9** E-C·E-D·E-F 픽스처.
 - **정책** `java.layers.callgraph` **`partial` 유지**(승격은 AC#7~#9 후). **킷 TASK-038 계속 대기** — 지금 sync 하면 R-1 회귀를 배포 킷에 싣는다.
 - 머지: **코드 보류**, 리뷰 기록만 `main`(D-007). 민감 변경 없음 ⇒ H-XXXX 불필요.
+
+## TASK-039 A-0048 보정 재제출 재리뷰 (2026-07-22) — **통과 · 머지** (A-0049 · D-093)
+- 대상 `codex/2026-07-21-task039-java-l3-coverage` 보정커밋 `ed2d221`·`1a3f0d0` / 기준선 `origin/main` `662d972`. `e54a30f`·`b2d7cd8` 는 A-0048 처리완료(멱등). **미머지 codex 브랜치는 이 1개뿐.**
+- **R-1 종결**: 막다른 길 = `bodyless` **∪ `kind: unresolved` 보유 함수** + 전방폐쇄에 **sink 자신 포함**. fresh 4형태(`Runnable` 람다 인자전달·`Runnable` 익명·`ExecutorService.submit`·외부 `::`)가 **`pass`(0) → `approval_required`(2)** 복구. `fail_closed` 에 `dead_ends=<함수>` 노출 = 카드 정직성↑.
+- **누락 없음의 구조적 논증**: 지연 dispatch 가 실제 호출되려면 (a) repo 인터페이스 추상 메서드=`bodyless` (b) 외부 타입 호출=`unresolved` (c) 프레임워크 콜백 등록=(b) 셋 중 하나 ⇒ **전부 판별식 안**. 깨려고 만든 fresh 8형태에서 반례 없음.
+- **R-2 종결**: enum 본문·인터페이스 상수·익명 본문 필드 순회 확장. **enum 판 ↔ class 판 coverage 원소가 문자열 단위로 동일** = A-0048 의 컨테이너 비대칭 해소. `record`·중첩 static 클래스·**if 블록 안 local class** 도 기록.
+- **대조군 불변**: 직접대입 람다 실탐지 `[Flow.sink, Task.exec, Vault.transfer]` 3자 동일 · **Python 골든패스 16케이스 목록 `main` 과 문자 단위 동일** ⇒ 과잉 반려 아님.
+- **통과 확인**: `main` 161/161 → 브랜치 **180/180**(adversarial 19→36·negative 3→5·default/metamorphic/parity 불변) · mutation **PASS(311)** — **신고와 정확히 일치(과장 없음)** · 결정론 md5 3회 · 전 입력 exit 0/2 뿐(자동차단 0) · `cases.yaml` **순수 추가**(기대값 약화 0).
+- **rig 10종**: 9종 단독/소수 FAIL = load-bearing. **RIG-9(미해소 `::` fallback)만 180/180 무변화 → O-17** — 신규 픽스처가 `::` **해소** 경로만 단언해서. 그 원소는 **verdict 를 실제로 뒤집는다**(fresh 실증) ⇒ 회귀보호 공백, 차기 AC.
+- **🟠 O-14 실측(비차단)**: `kind: unresolved` 가 **JDK 호출 전부**에 붙어(`:525`) 판별식이 "폐쇄가 외부 호출을 하나라도 하면 승격" 으로 완화. **N4**(폐쇄에 `rows.size()` 1개, 변경은 무관 파일) 브랜치 **승인요구** ↔ **N5**(그 호출만 제거) **`pass`**. **비차단 근거**: 방향이 과탐(§2B 필수질문 **아니오**)이고 **`main` 보다 나쁘지 않으며**(main 은 N4·N5 둘 다 승인요구) AC#3 문언 실증 케이스는 여전히 `pass`.
+- **🔴 자기정정(3회 연속)**: 이 확장은 **A-0048 §"방향" 의 내 지시**(8줄 프로토타입까지 첨부)이고 그때 **소음 축을 검증하지 않았다**. Codex 는 지시대로 구현 — §1 위반 아님. ⇒ **앞으로 판별식 지시는 탐지축·소음축을 같은 fresh 세트로 동시 실측한 뒤에만 확정.**
+- **내가 짠다면(TASK-040 AC#1 · 실패모드 동봉)**: `java_deferred` 쪽도 sink 관련성을 요구. 단 **caller 축은 틀렸다** — 프로토타입이 N4 는 고쳤으나 `java-indirect-lambda-argument-fail-closed` 단독 FAIL(람다 **생성 지점**이 폐쇄 밖). **옳은 축은 dispatch 대상**(coverage 에 `Port.run` 같은 대상 기록 → `sink_dead_ends` 교집합). **미실증이므로 착수 전 7축 fresh 검증 필수**(A-0049 §3).
+- **§1 통과**: 게이트 2·`cases.yaml`·픽스처 11세트·handoff·summaries **뿐**. `kit/`·`policies/`·`docs/`·Claude 소유 **무접촉** ⇒ **킷 심층리뷰 해당 없음**. 무관 리팩터 0. 브랜치 미동기화 재제출 4회째(충돌은 Claude 가 양측 보존으로 해소).
+- **차기 AC(TASK-040 신설)**: O-14(소음 정밀화) · O-17(E-F 픽스처) · O-18(`has_static_modifier` 가 `modifiers` 전체 텍스트를 `"static"` 과 완전일치 비교 ⇒ `static final`/`private static`/어노테이션 동반 시 `<clinit>`→`<init>` 오표기 · **판정 무영향·감사 정직성만** · 수정 1줄) · O-19(enum 상수 본문 coverage 무표식).
+- **정책**: `java.layers.callgraph` **`partial` 유지** — `supported` 는 O-19·O-14·O-3 탓에 과대주장(under-claim 원칙). 승격 조건을 TASK-040 AC#1 + O-19 폐쇄로 명문화(D-076).
+- **킷**: R-1 차단 사유 해소 ⇒ TASK-038 착수 가능. 단 **TASK-040 AC#1 먼저 권고** — 현 상태 스냅샷은 실 Java repo 거의 모든 PR 이 승인요구 = **경보 피로로 3층 무력화**. 순서 변경 시 README·manifest 에 소음 특성 명시.
+- 머지: **비민감**(게이트 로직+테스트 · 정산/인증/암호화/DB/infra 무해당 · 선례 D-088·D-091) ⇒ Claude 가 `main` 머지. H-XXXX 불필요.
