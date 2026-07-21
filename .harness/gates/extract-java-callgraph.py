@@ -142,9 +142,10 @@ def has_anonymous_class_body(node):
 
 def has_static_modifier(source_bytes, node):
     return any(
-        "static" in re.findall(r"[A-Za-z_][A-Za-z0-9_]*", node_text(source_bytes, child))
+        node_text(source_bytes, modifier).strip() == "static"
         for child in node.children
         if child.type == "modifiers"
+        for modifier in child.children
     )
 
 
@@ -665,6 +666,7 @@ def collect_calls(
                 )
         elif node.type == "lambda_expression":
             owner_type = assigned_target_type(source_bytes, node, method["bindings"])
+            owner_from_invocation = False
             if not owner_type:
                 owner_type = invocation_parameter_type(
                     source_bytes,
@@ -678,6 +680,7 @@ def collect_calls(
                     type_names_by_simple,
                     interface_names,
                 )
+                owner_from_invocation = owner_type is not None
             dispatch_targets = functional_method_targets(
                 owner_type,
                 methods_by_owner,
@@ -703,10 +706,21 @@ def collect_calls(
                         edges.add((dispatch_target, target, node_line(node), "lambda"))
                     for kind, name, line, targets in body_unresolved:
                         unresolved.add((dispatch_target, kind, name, line, targets))
+                if owner_from_invocation:
+                    unresolved.add(
+                        (
+                            method["id"],
+                            "lambda_dispatch",
+                            "lambda",
+                            node_line(node),
+                            tuple(dispatch_targets),
+                        )
+                    )
             else:
                 unresolved.add((method["id"], "lambda_dispatch", "lambda", node_line(node), tuple(dispatch_targets)))
         elif node.type == "method_reference":
             owner_type = assigned_target_type(source_bytes, node, method["bindings"])
+            owner_from_invocation = False
             if not owner_type:
                 owner_type = invocation_parameter_type(
                     source_bytes,
@@ -720,6 +734,7 @@ def collect_calls(
                     type_names_by_simple,
                     interface_names,
                 )
+                owner_from_invocation = owner_type is not None
             dispatch_targets = functional_method_targets(
                 owner_type,
                 methods_by_owner,
@@ -742,6 +757,16 @@ def collect_calls(
                 for dispatch_target in dispatch_targets:
                     for target in referenced_targets:
                         edges.add((dispatch_target, target, node_line(node), node_text(source_bytes, node).strip()))
+                if owner_from_invocation:
+                    unresolved.add(
+                        (
+                            method["id"],
+                            "method_reference",
+                            node_text(source_bytes, node).strip(),
+                            node_line(node),
+                            tuple(dispatch_targets),
+                        )
+                    )
             else:
                 unresolved.add((method["id"], "method_reference", node_text(source_bytes, node).strip(), node_line(node), tuple(dispatch_targets)))
     return edges, unresolved

@@ -2843,6 +2843,22 @@ cases:
       errors_present: false
       deterministic_stdout: true
 
+  - name: java-callgraph-static-modifier-annotation-token
+    group: adversarial
+    gate: extract-java-callgraph
+    input:
+      repo: tests/fixtures/java-callgraph-static-modifier-annotation-token/repo
+    expect:
+      exit_code: 0
+      edges: []
+      coverage_unevaluated_with_dispatch:
+        - caller: Flow.<init>
+          kind: lambda_dispatch
+          name: lambda
+          dispatch_targets: [Task.exec]
+      errors_present: false
+      deterministic_stdout: true
+
   - name: java-callgraph-enum-constant-body-coverage
     group: adversarial
     gate: extract-java-callgraph
@@ -3293,10 +3309,13 @@ cases:
           reviewer: security-reviewer
           maturity: enforcing
       shadow_hits: []
-      reviewer_required: [security-reviewer]
-      fail_closed_present: false
-      errors_present: false
+      reviewer_required: [security-reviewer, tool_owner]
+      fail_closed_present: true
+      errors_present: true
       coverage_unevaluated:
+        - caller: Flow.wire
+          kind: lambda_dispatch
+          name: lambda
         - caller: Port.run
           kind: unresolved
           name: new Ledger
@@ -3869,6 +3888,156 @@ cases:
       fixture_dir: tests/fixtures/java-indirect-dispatch-target-intersection-pass
       sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones-empty.yaml
       sink_registry: tests/fixtures/java-indirect-dispatch-target-intersection-pass/sink-registry.yaml
+    expect:
+      verdict: pass
+      exit_code: 0
+      indirect_impact: []
+      shadow_hits: []
+      reviewer_required: []
+      fail_closed_present: false
+      errors_present: false
+      coverage_unevaluated_with_dispatch:
+        - caller: Flow.<init>
+          kind: lambda_dispatch
+          name: lambda
+          dispatch_targets: [Other.go]
+      deterministic_stdout: true
+
+  - name: java-indirect-opaque-list-dispatch-fail-closed
+    group: adversarial
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/java-indirect-opaque-list-dispatch
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones-empty.yaml
+      sink_registry: tests/fixtures/java-indirect-opaque-list-dispatch/sink-registry.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      indirect_impact: []
+      shadow_hits: []
+      reviewer_required: [tool_owner]
+      fail_closed_present: true
+      errors_present: true
+      coverage_unevaluated:
+        - caller: Flow.<init>
+          kind: lambda_dispatch
+          name: lambda
+        - caller: Flow.sink
+          kind: unresolved
+          name: tasks.get
+      deterministic_stdout: true
+
+  - name: java-indirect-opaque-getter-dispatch-fail-closed
+    group: adversarial
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/java-indirect-opaque-getter-dispatch
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones-empty.yaml
+      sink_registry: tests/fixtures/java-indirect-opaque-getter-dispatch/sink-registry.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      indirect_impact: []
+      shadow_hits: []
+      reviewer_required: [tool_owner]
+      fail_closed_present: true
+      errors_present: true
+      coverage_unevaluated:
+        - caller: Flow.<init>
+          kind: lambda_dispatch
+          name: lambda
+        - caller: Flow.sink
+          kind: unresolved
+          name: get
+      deterministic_stdout: true
+
+  - name: java-indirect-opaque-hop-boundary-fail-closed
+    group: adversarial
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/java-indirect-opaque-hop-boundary
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones-empty.yaml
+      sink_registry: tests/fixtures/java-indirect-opaque-hop-boundary/sink-registry.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      indirect_impact: []
+      shadow_hits: []
+      reviewer_required: [tool_owner]
+      fail_closed_present: true
+      errors_present: true
+      coverage_unevaluated:
+        - caller: Flow.<init>
+          kind: lambda_dispatch
+          name: lambda
+        - caller: Flow.mid
+          kind: unresolved
+          name: tasks.get
+      deterministic_stdout: true
+
+  - name: java-indirect-registry-lookup-lambda-fail-closed
+    group: adversarial
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/java-indirect-registry-lookup-lambda
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones-empty.yaml
+      sink_registry: tests/fixtures/java-indirect-registry-lookup-lambda/sink-registry.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      indirect_impact:
+        - sink_id: registry_lookup_lambda_sink
+          changed_function: Vault.transfer
+          path: [Flow.sink, Task.exec, Vault.transfer]
+          hops: 2
+          reviewer: security-reviewer
+          maturity: enforcing
+          inferred: true
+      shadow_hits: []
+      reviewer_required: [security-reviewer, tool_owner]
+      fail_closed_present: true
+      errors_present: true
+      coverage_unevaluated:
+        - caller: Flow.sink
+          kind: unresolved
+          name: reg.find
+        - caller: Flow.wire
+          kind: lambda_dispatch
+          name: lambda
+        - caller: Task.exec
+          kind: unresolved
+          name: new Vault
+      deterministic_stdout: true
+
+  - name: java-indirect-dispatch-parameter-control-pass
+    group: negative-corpus
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/java-indirect-dispatch-parameter-control
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones-empty.yaml
+      sink_registry: tests/fixtures/java-indirect-dispatch-parameter-control/sink-registry.yaml
+    expect:
+      verdict: pass
+      exit_code: 0
+      indirect_impact: []
+      shadow_hits: []
+      reviewer_required: []
+      fail_closed_present: false
+      errors_present: false
+      coverage_unevaluated_with_dispatch:
+        - caller: Flow.<init>
+          kind: lambda_dispatch
+          name: lambda
+          dispatch_targets: [Other.go]
+      deterministic_stdout: true
+
+  - name: java-indirect-dispatch-local-control-pass
+    group: negative-corpus
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/java-indirect-dispatch-local-control
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones-empty.yaml
+      sink_registry: tests/fixtures/java-indirect-dispatch-local-control/sink-registry.yaml
     expect:
       verdict: pass
       exit_code: 0

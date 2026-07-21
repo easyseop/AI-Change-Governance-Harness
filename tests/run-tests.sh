@@ -1114,8 +1114,9 @@ def validate_extract_callgraph(case, result, exit_code):
 
 
 def impact_summary(records):
-    return [
-        {
+    summary = []
+    for record in records:
+        item = {
             "sink_id": record.get("sink_id"),
             "changed_function": record.get("changed_function"),
             "path": record.get("path"),
@@ -1123,8 +1124,10 @@ def impact_summary(records):
             "reviewer": record.get("reviewer"),
             "maturity": record.get("maturity"),
         }
-        for record in records
-    ]
+        if record.get("inferred"):
+            item["inferred"] = True
+        summary.append(item)
+    return summary
 
 
 def validate_indirect_impact(case, result, exit_code):
