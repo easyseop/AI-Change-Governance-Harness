@@ -63,7 +63,7 @@ adapters:
     layers:
       inventory: supported     # TASK-030 (J1)
       gov_level: supported     # TASK-031 (J2) — @Gov + framework-annotations.yaml
-      capabilities: stub       # TASK-032 (J3) — not started
+      capabilities: supported  # TASK-032 (J3)
       callgraph: stub          # L3 — not started
     parser: tree-sitter
     parser_package: tree-sitter
