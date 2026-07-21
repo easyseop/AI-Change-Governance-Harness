@@ -1961,3 +1961,14 @@ parity 는 "정상 경로 등가"만이 아니라 **"실패 경로 등가"까지
 - **하류**: `language-routing` 소비처 = `generate-change-evidence.language_coverage()` 하나. `check-new-capabilities` 는 라우팅 미참조 ⇒ 승격 blast radius = 카드 문구 1줄. `deep_analysis` 는 전 층 supported 요구 → java 는 여전히 `not_yet_available`(과대주장 없음).
 - **비차단 → 차기 AC**: O-1 진입점 grep 접두 부분일치 · O-2 capabilities 실패의 카드 trace 부재(D-076 대칭) · O-3 `kit/manifest.yaml` J3 미반영(선재) · O-4 정책 주석 스테일.
 - **머지**: 비민감(분석 층 선언 갱신 + 기대값 동기화 · dogfood 에서 `check-policy-change` PASS) → Claude 가 `main` 합동 머지(D-039 선례 동일 범주).
+
+## TASK-035 J 라인 잔손질 7건 리뷰 — 2026-07-21 · **보정요청 · merge 보류** (A-0040 · D-084)
+- 대상: `codex/2026-07-21-task035-java-j-line-cleanup` — `b677220`(구현)·`fe4008f`(handoff).
+- **기준선 대조(회귀 0)**: `main` dev 138/139·킷 cases 138/139·진입점 22/22 ↔ 브랜치 dev **140/141**·킷 cases **140/141**·진입점 **24/24**·mutation PASS(237). 실패집합 양쪽 동일(`tree-sitter-smoke` = 이 머신 Python 3.9.6 pin 부재). dev↔kit 게이트 `cmp` 전량 일치.
+- **AC#1(최고 위험) fresh 실증**: Java 포함 repo + Python-only PR + Java 정책 부재 → `main` **exit 2 과차단** ↔ 브랜치 **exit 0 PASS**. 같은 repo `.java` PR → **exit 2 fail-closed**. `.java` 삭제만·`.java`→`.txt` rename → 둘 다 exit 2(안전). `run.sh`(rename 검출 on)↔게이트(`--no-renames`) 의미차는 양방향 fail-closed 로 흡수.
+- **rig-and-revert 6/6 load-bearing**(지연로드·preflight·무정보바인딩·override coverage·정확일치 grep·trace 주입 각각 되돌리면 대응 케이스 단독 FAIL).
+- **🔴 R-1 2층 운영자 화면 정보 손실**: `--json` 이 게이트 사람용 렌더러를 **대체**. `main` `protected: app/net.py::outbound_network` ↔ 브랜치 `"id": "outbound_network"`(경로·등급 소실). `watched` 로 바꿔도 출력 동일 ⇒ **protected/watched/shadow 구별 불가**. 파일 8개 케이스에선 `sort_keys=True`+`head -8` 이 **`"verdict":` 줄을 절단** ⇒ 승인요구 사실도 안 보임. exit/verdict 는 무손상(rc=2) — **2층은 카드 밖이라 콘솔이 유일한 증거창**.
+- **🔴 R-2 카드 비-YAML 시 `append_capability_trace` 크래시**: `yaml.safe_load` 무방비. `generate-change-evidence` 예외 → 카드 자리에 traceback 텍스트 → `ParserError` 미포착 ⇒ 킷 콘솔에 **PyYAML traceback ~25줄** + **AC#5 가 약속한 trace 노트 소실**. `run_gate` traceback 감지기는 게이트 출력만 봐서 집계도 안 됨. (블록스타일 절단 카드는 유효 YAML → 정상 동작 확인.)
+- **§2B**: 두 건 다 탐지 구멍은 아니나(판정 무손상), 통제 모델이 "민감→사람 라우팅"이고 2층 증거창이 콘솔뿐이라 승인 실효를 깎음 ⇒ 비차단 금지·보정요청. **§1 over-reach**: AC#5 는 "카드에 trace"였지 "2층 렌더러 교체"가 아님.
+- **AC#7 = Claude 완료**: Codex 가 `policies/` 소유권 지켜 Q-0008 로 요청 = 정확. Claude 가 dev·kit 동시 주석 수정(드리프트 0), `status: stub` 값은 유지(D-076 하한).
+- **비차단 → 차기 AC**: O-1 AC#3 `coverage` 키 소비자 0건(카드 미도달·D-080 "경미") · O-2 `sorted(set())` 이 `not_checked` 순서 파괴 · O-3 `HAS_JAVA_CHANGE` 가 git 종료코드 삼킴 · O-4(선재) 3점 range → BLOCKED, `main` 동일.
