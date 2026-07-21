@@ -519,7 +519,20 @@
 4. **(A-0047 O-11) 중첩 기록 회귀 픽스처 공백 메우기**: `subtree_call_targets` 의 **중첩본문 내** 람다/익명 기록 2원소는 제거해도 **161/161 이 그대로다**(A-0047 §3 rig E2·E3). 기능은 실재하나(깊이 3 fresh 입력의 `coverage` 에 실제로 찍힘) **픽스처가 없다** ⇒ 익명-in-람다-in-람다 · 익명-in-익명-in-익명 를 픽스처로 고정하고 **`coverage_unevaluated` 원소를 단언**해 A-0041 G-1 "원소 단위 load-bearing" 을 완성한다.
 5. **(A-0047 O-7) 케이스 개명**: `java-indirect-anonymous-fail-closed` 는 기대값이 **실 indirect impact** 로 바뀌었는데 이름이 fail-closed 라 리뷰어를 오도한다.
 6. **무회귀**: `tests/run-tests.sh` 전량 · `mutation-check.sh` · Python 골든패스 불변. 정책·킷 무접촉(킷 반영은 TASK-038).
+
+**🔴 1차 제출(`e54a30f`) 리뷰 결과 = 보정요청 (A-0048 · D-092).** AC#2·#4·#5·#6·O-8 및 AC#1 의 초기화 3형태는 **충족(재작업 불필요)**. 아래 AC#7~#9 를 추가로 만족시켜 **보정 커밋만** 재제출한다(신규 태스크 아님).
+
+7. **🔴 (A-0048 R-1) 승격 판별식이 JDK/외부 함수형 인터페이스에서 fail-closed 를 통째로 끄는 회귀 폐쇄**: 현행은 "막다른 길" 을 **`nodes[].bodyless`(= repo 안에 선언된 메서드)** 로만 정의한다 ⇒ dispatch 대상이 `Runnable`·`Callable`·`Consumer`·`ExecutorService` 같은 **repo 밖 타입**이면 노드가 없어 `sink_dead_ends` 가 비고, `java_deferred` 가 아무리 많아도 **승격이 발동하지 않는다**. 실증(`main`↔브랜치 fresh 대조, 3형태가 `approval_required`(2)→**`pass`(0)**): ① `schedule(() -> new Vault().transfer())` + `void schedule(Runnable r){ r.run(); }` ② 같은 자리 **익명 `new Runnable(){…}`** ③ `pool.submit(() -> …)`. 실 Java repo 의 함수형 인터페이스는 압도적으로 JDK 쪽이라 **L3 fail-closed 대부분이 꺼진다**.
+   - **방향**: 막다른 길 = sink 전방폐쇄(N홉, **sink 함수 자신 포함**) 안에 ① `bodyless` 노드 **또는 ② `kind: unresolved` coverage 를 가진 함수**(게이트가 이미 기록 중). **8줄 프로토타입 실증**: 회귀 3형태 전부 복구 + `rows.forEach(v::transfer)` 잔존 구멍까지 폐쇄, 대조군(실탐지·Python 골든패스) 불변, **스위트 169/169 그대로**.
+   - **상설 회귀 픽스처 4건 신설**(`approval_required` 단언): JDK `Runnable` 람다 인자전달 · JDK `Runnable` 익명 · `ExecutorService.submit(() -> …)` · 외부 인터페이스 대상 `::`.
+   - **🔴 불변식(회귀로 고정)**: 소음 `pass` 2케이스(`java-indirect-deferred-no-sink-pass`·`java-indirect-deferred-unrelated-sink-pass`)는 **`pass` 유지**, 기존 익명/람다/초기화 픽스처는 **전부 `approval_required` 유지**, Python 골든패스 불변. **음성검증**: 확장분 제거 시 신규 4건이 단독 FAIL.
+   - **자기정정 고지**: 이 결함의 근본원인은 **A-0047 §4.2 의 Claude 지시**(판별식을 `bodyless` 단독으로 못박고 fresh 세트에서 "repo 밖 심볼" 축을 누락)이다. **Codex 의 §1 위반이 아니다.**
+8. **🔴 (A-0048 R-2) AC#1 이 `class_body` 직속 자식에서만 닫힌 것 보완**: `collect_initializer_deferred` 순회가 타입 `body` 직속 named_children 만 보므로 **enum 멤버(`enum_body_declarations` 아래)·인터페이스 상수(`constant_declaration`)·익명클래스 본문 필드**는 여전히 **엣지도 coverage 도 없이 조용한 `pass`**. **원인 격리 실증**: `enum Reg { A; static Task task = () -> new Vault().transfer(); }` = `pass`·coverage 빔 vs **바이트 단위 동일한 `class Reg` 판** = `approval_required`. 익명 본문 람다는 `subtree_call_targets` 미해소 분기에 `lambda_expression` 갈래가 없는 것이 원인 — 같은 자리에서 함께 닫기 권장.
+   - **픽스처**: enum 판과 **동일 코드의 class 판**을 **쌍으로** 넣어 같은 verdict 임을 단언(컨테이너별 비대칭 재발 시 즉시 FAIL) + 인터페이스 상수 1건.
+9. **(A-0048 O-12) rig 미고정 원소 3개 픽스처 고정**: **E-C** instance 초기화 블록(`class Flow { Task t; { t = () -> …; } }`) · **E-D** 초기화 컨텍스트의 `::`(필드/`static` 초기화) · **E-F** deferred body 안의 `::` — 현재 제거해도 **169/169 무변화**. A-0047 의 O-11 과 달리 **E-C 는 verdict 를 실제로 뒤집으므로**(fresh 입력에서 `pass`→`approval_required`) 정직성 전용이 아니다. 각각 제거 시 **단독 FAIL** 이 되도록 픽스처를 붙인다.
+
 **의존**: TASK-037 머지 후(완료). **TASK-038 보다 먼저 권장.** 통과 시 `java.layers.callgraph` `partial`→`supported` 승격 재검토(Claude·D-076).
+**비차단 이월**: O-13(`nodes[].bodyless` 신규 출력 스키마 — 직접 단언 케이스 0, **TASK-038 킷 sync 시 노드 스키마 동반 필수**) · O-14(승격이 여전히 repo 전역 all-or-nothing — R-1 보정으로 판별식이 넓어지면 소음 재확대 가능, 차기 과제) · O-15(`Vault::new` 는 해소 대신 fail-closed = 안전한 방향, 결함 아님) · O-16(§1 잔티: `direct_field_bindings`→모듈레벨 승격이 호출부 1곳·신규 소비자 0 인 순수 리팩터).
 
 ### TASK-038 ☐ 킷에 Java L3 + 잔손질 반영 (MVP-3 킷 스냅샷 갱신)  (Codex)  *(MVP-3 · X · 킷)*
 **배경**: TASK-035·036·037 로 dev 가 Java 전 계층(J1~J3 + L3) 완비되면 킷을 그 상태로 올린다(형 지시 "자바까지 하고 킷 업데이트"). TASK-026/028 킷 스냅샷 선례.

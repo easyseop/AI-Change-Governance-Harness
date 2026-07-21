@@ -2073,3 +2073,17 @@ parity 는 "정상 경로 등가"만이 아니라 **"실패 경로 등가"까지
 - **내가 짠다면(O-10)**: sink 전방폐쇄(N홉) 안에 **본문 없는 추상/인터페이스 메서드 = 막다른 길**이 있을 때만 미해소 dispatch 승격 — fresh 세트에서 실구멍 6형태 승격 유지·소음 2형태만 `pass` 로 정확히 분리.
 - **정책**: `java.layers.callgraph` `stub` → **`partial`**(`supported` 는 O-9·O-6 탓에 과대주장 = false card). 어댑터 활성화는 확장자 기준이라 판정은 정상 작동, 카드엔 한계 계속 노출(161/161 무회귀). `supported` 는 TASK-039 후 재검토.
 - 머지: **비민감**(하네스 게이트 코드 · 정산/인증/암호화/DB/infra 무해당 · 선례 D-088) ⇒ Claude 가 `main` 머지(`3527edb`). H-XXXX 불필요.
+
+## TASK-039 리뷰 (2026-07-22) — 보정요청 (A-0048 · D-092)
+- 대상 `codex/2026-07-21-task039-java-l3-coverage` `e54a30f`·`b2d7cd8` / 기준선 `origin/main` `b56c62a`. **브랜치가 최신 main 기반 — 3회 연속 지적한 미동기화 해소 ✅**
+- **닫힘**: AC#2(`::` 실 엣지) · AC#4(**E2·E3 이제 단독 FAIL ⇒ O-11 종결**) · AC#5(개명) · O-8(추상만 계수) · AC#1 의 필드/static/instance 초기화 3형태 · AC#6 무회귀.
+- **🔴 R-1(차단·회귀)**: 승격 판별식이 막다른 길을 **`nodes[].bodyless`(repo 선언 메서드)** 로만 봐서, dispatch 대상이 **JDK/외부 함수형 인터페이스**면 `sink_dead_ends` 가 비어 **fail-closed 자체가 안 켜진다**. fresh 3형태(`Runnable` 람다·`Runnable` 익명·`ExecutorService.submit`)가 **`approval_required`(2) → `pass`(0)**. coverage 엔 찍히고 **판정만 조용히 통과** = AC#3 의 🔴 불변식("과소탐 금지")·MVP-3 공통 정면 위반 ⇒ §2B 예 ⇒ 비차단 금지.
+- **🔴 자기정정**: 이 판별식은 **A-0047 §4.2 의 내 지시**이고, 내가 검증한 fresh 세트에 **repo 밖 심볼 축이 빠져** 있었다. Codex 는 지시대로 구현 — §1 위반 아님. A-0047 O-10 에 이어 **2회 연속 같은 유형의 지시 결함** ⇒ 앞으로 판별식 지시 시 **"repo 밖 심볼" 축 fresh 세트 필수**.
+- **내가 짠다면(8줄 실증)**: 막다른 길 = `bodyless` **또는 `kind: unresolved` coverage 보유 함수**(게이트가 이미 기록 중), 전방폐쇄에 **sink 자신 포함** ⇒ 회귀 3형태 복구 + `::` 잔존 구멍까지 폐쇄, **대조군 불변**, **169/169 유지**(소음 `pass` 2케이스 그대로) ⇒ 소음제거와 과소탐금지는 양립.
+- **🔴 R-2(차단·AC#1 미완)**: 초기화 순회가 타입 `body` 직속만 봐서 **enum·인터페이스 상수·익명 본문 필드**는 여전히 조용한 `pass`. **대조군이 원인을 못박음** — 동일 코드가 `enum Reg` 면 `pass`·coverage 빔, `class Reg` 면 `approval_required`.
+- **통과 확인**: 169/169·mutation 289 **신고와 정확히 일치(과장 없음)** · 결정론 md5 3회 · 전 입력 exit 0/2 뿐(자동차단 0) · Python 골든패스 불변. **rig 8종 load-bearing / 3종 미고정**(E-C 는 verdict 를 뒤집는데 미고정 → O-12).
+- **환경 자기정정**: 첫 124/169 는 내가 감싼 `timeout`(Homebrew x86_64)이 트리를 Rosetta 로 내려 arm64 `tree_sitter` 를 깨뜨린 **계측 아티팩트**(`main` 동일 재현). 감점 없음.
+- **§1 통과**: 게이트 2·`cases.yaml`·픽스처 8세트·handoff·summaries **뿐**. `kit/`·정책·문서·Claude 소유 **diff 0 바이트**(⇒ 킷 심층리뷰 해당 없음). 잔티 O-16(`direct_field_bindings` 모듈레벨 승격 = 호출부 1곳·소비자 0인 순수 리팩터).
+- **보정 AC**: **#7** 막다른 길 = `bodyless` **or** `unresolved` + sink 자신 포함 + JDK 3형태·`::` 픽스처 + **소음 `pass` 2케이스 유지 회귀 고정** · **#8** enum/인터페이스 상수(+익명 본문 람다) 순회 확장 + **enum/class 쌍 픽스처** · **#9** E-C·E-D·E-F 픽스처.
+- **정책** `java.layers.callgraph` **`partial` 유지**(승격은 AC#7~#9 후). **킷 TASK-038 계속 대기** — 지금 sync 하면 R-1 회귀를 배포 킷에 싣는다.
+- 머지: **코드 보류**, 리뷰 기록만 `main`(D-007). 민감 변경 없음 ⇒ H-XXXX 불필요.
