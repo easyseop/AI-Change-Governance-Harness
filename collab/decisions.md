@@ -1618,3 +1618,37 @@ O-3 `HAS_JAVA_CHANGE` 가 git 종료코드 삼킴 · O-4(선재) 3점 range → 
 **민감도·머지**: 정산·인증/인가·암호화·DB migration·infra 무해당. dogfood 결과 메타층 `check-policy-change` **PASS**,
 카드 `frozen_touched`·`protected_touched` 없음 · `reviewer_required: [dev-reviewer]` ⇒ **비민감**.
 변경 성격 = 킷 콘솔 출력 + 방어 가드 + 테스트. ⇒ **Claude 가 `main` 머지**(구현자≠머지자). 선례 D-074·D-078·D-080·D-082.
+
+## D-086 TASK-036 Java 콜그래프 리뷰 — **보정요청 · merge 보류** (A-0042) — 2026-07-21
+
+대상 `codex/2026-07-21-task036-java-callgraph` (`74b3857` 구현 · `c483b97` handoff).
+
+**🔴 R-1 (반려 사유) — AC#2 superset 계약 위반**: `method_targets()` 의
+`owners.difference_update(interface_names)` 가 수신자가 인터페이스면 **인터페이스 자신을 타깃에서 무조건 제외**한다.
+Java 8+ 인터페이스는 본문 있는 메서드(`default`·`static`·`private`)를 직접 소유하므로,
+**그 본문으로 가는 실제 엣지가 통째로 소실**된다. fresh 적대입력 4종 중 **구현체가 오버라이드한 경우만 동작**하고
+①`default`(구현 0개) ②인터페이스 `static` ③인터페이스 본문 내 무수식 자기호출 은 전부 `unresolved` 로 흘러간다.
+구조 동형인 **추상클래스 대조군은 정상 동작** ⇒ 설계 의도상 버그.
+
+**§2B 필수질문 = 예(직접 구멍)**: `check-indirect-impact` 를 실제 import 해 실증 —
+sink `AuditPort.settle` 역도달성이 1/2/3홉 모두 **NONE**, 실제 2홉 경로가 보이지 않아 변경함수가 미탐지.
+**`coverage.unevaluated` 는 구제 못 함** — 254–256 에서 통과 출력될 뿐 `fail_closed_records`·verdict 에 무기여이고,
+fail-closed 트리거는 `callgraph["errors"]` 뿐(197–199). ⇒ 엣지가 빠지면 그냥 `verdict: pass` = **탐지 구멍**.
+따라서 비차단 관찰 금지 → **보정요청**.
+
+**픽스처가 결함을 고정**: 위 제외 로직을 제거하면 `java-callgraph-conservative` 가 FAIL(143→142) —
+기대 엣지 집합에 `PaymentPort.pay` 가 없어 현재 테스트가 오동작을 정답으로 못박음. 보정 시 기대값도 수정 필요.
+
+**통과 확인(실증)**: 결정론 md5 2회 동일 · 오버로드 합집합 병합 · **노드 line 이 어노테이션 첫 줄**(데코레이터-라인범위
+상설 관심사 충족) · 파싱실패 → `errors` → 하류 fail-closed 승격 · 빈 repo 무크래시 · IR#4 키·정렬 Python 추출기와 일치 ·
+스위트 브랜치 **143/144** ↔ `main` **140/141**(회귀 0, 유일 실패 `tree-sitter-smoke` 는 `main` 동일 = 환경) ·
+**rig-and-revert**: 팬아웃 `owners.update(implementations…)` 제거 → 대상 케이스 단독 FAIL ⇒ load-bearing.
+
+**§1 보수성**: `extract-callgraph.py` **무개조**(의존조건 준수) · `policies/`·`kit/`·Claude 소유 무접촉 ·
+무관 리팩터 0 · dogfood `check-policy-change` PASS ⇒ scope-creep·over-reach 없음.
+
+**비차단 관찰(A-0042 §3)**: O-1 `owners = set()` 무효 코드(제거해도 무변화) · O-2 조상확장 무보호(제거해도 143/144) ·
+O-3 픽스처의 `@Autowired`/`@Transactional` **무기능**(삭제해도 PASS — 구현은 순수 타입 기반, handoff 서술이 과대) ·
+O-4 익명 내부클래스 유령 노드 · O-5 파서 파일마다 재생성 · O-6 제네릭 `[-1]` 자의적 선택 · O-7 parity 픽스처가 1홉 최소치.
+
+**D-007 처리**: 코드 브랜치 **머지 보류**, 리뷰 기록만 `main` 머지. 재제출은 **보정 커밋만** 재리뷰(멱등성).
