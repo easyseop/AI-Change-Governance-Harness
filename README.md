@@ -78,7 +78,8 @@ python3 -m pip install -r kit/requirements.txt
   `HEAD~1..HEAD`(직전 커밋). 이 범위의 diff 를 게이트가 판정한다.
 - **감사카드(`change-evidence.yaml`)** = 사람 리뷰어가 30초 안에 위험을 파악하도록,
   무엇이 바뀌었고 어느 층에 걸렸고 누가 승인해야 하는지 + **"이 판정이 본 것 / 보지 않는 것"**(coverage)을 담는다.
-- 상세 운영 설명: `kit/README.md`.
+- **다른 저장소에 도입/반영하려면 → `docs/kit-onboarding.md`** (단계별 도입 + 규칙 설정법).
+- 상세 운영·게이트 레퍼런스: `kit/README.md`.
 
 ## 저장소 구조
 
