@@ -4106,6 +4106,81 @@ cases:
       errors_present: true
       deterministic_stdout: true
 
+  - name: java-indirect-deferred-no-type-fail-closed
+    group: adversarial
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/java-indirect-deferred-no-type
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones-empty.yaml
+      sink_registry: tests/fixtures/java-indirect-deferred-no-type/sink-registry.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      reviewer_required: [tool_owner]
+      fail_closed_present: true
+      errors_present: true
+      deterministic_stdout: true
+
+  - name: java-indirect-deferred-no-type-jdk-fail-closed
+    group: adversarial
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/java-indirect-deferred-no-type-jdk
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones-empty.yaml
+      sink_registry: tests/fixtures/java-indirect-deferred-no-type-jdk/sink-registry.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      reviewer_required: [tool_owner]
+      fail_closed_present: true
+      errors_present: true
+      deterministic_stdout: true
+
+  - name: java-indirect-deferred-no-type-two-hop-fail-closed
+    group: adversarial
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/java-indirect-deferred-no-type-two-hop
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones-empty.yaml
+      sink_registry: tests/fixtures/java-indirect-deferred-no-type-two-hop/sink-registry.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      reviewer_required: [tool_owner]
+      fail_closed_present: true
+      errors_present: true
+      deterministic_stdout: true
+
+  - name: java-indirect-subinterface-dispatch-fail-closed
+    group: adversarial
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/java-indirect-subinterface-dispatch
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones-empty.yaml
+      sink_registry: tests/fixtures/java-indirect-subinterface-dispatch/sink-registry.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      reviewer_required: [tool_owner]
+      fail_closed_present: true
+      errors_present: true
+      deterministic_stdout: true
+
+  - name: java-indirect-subinterface-dispatch-jdk-fail-closed
+    group: adversarial
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/java-indirect-subinterface-dispatch-jdk
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones-empty.yaml
+      sink_registry: tests/fixtures/java-indirect-subinterface-dispatch-jdk/sink-registry.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      reviewer_required: [tool_owner]
+      fail_closed_present: true
+      errors_present: true
+      deterministic_stdout: true
+
   - name: java-indirect-observed-path-not-inferred
     group: adversarial
     gate: check-indirect-impact

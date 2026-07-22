@@ -1019,6 +1019,12 @@ def extract_callgraph(repo):
         all_methods.extend(methods)
 
     type_names_by_simple, implementations, ancestors = type_relationships(all_types)
+    type_supers = {}
+    for item in all_types:
+        simple = simple_name(item["name"])
+        type_supers.setdefault(simple, set()).update(
+            simple_name(parent) for parent in item.get("supers", [])
+        )
     interface_names = {
         item["name"] for item in all_types if item["kind"] == "interface_declaration"
     }
@@ -1088,6 +1094,9 @@ def extract_callgraph(repo):
         "gate": "extract-java-callgraph",
         "repo": repo,
         "lang": "java",
+        "type_supers": {
+            name: sorted(parents) for name, parents in sorted(type_supers.items())
+        },
         "nodes": [
             {
                 "id": item["id"],

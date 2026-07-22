@@ -182,6 +182,29 @@ def deferred_receiver_types(java_deferred, java_unresolved):
     return receiver_types
 
 
+def expand_type_supertypes(type_names, type_supers):
+    expanded = set(type_names)
+    pending = list(type_names)
+    while pending:
+        current = pending.pop()
+        for parent in type_supers.get(current, []):
+            if parent not in expanded:
+                expanded.add(parent)
+                pending.append(parent)
+    return expanded
+
+
+def record_has_type_evidence(item, unresolved_by_caller):
+    if item.get("dispatch_targets") or item.get("receiver_type"):
+        return True
+    if item.get("kind") == "anonymous_class" and item.get("name", "").startswith("new "):
+        return True
+    return any(
+        unresolved.get("receiver_type")
+        for unresolved in unresolved_by_caller.get(item.get("caller"), [])
+    )
+
+
 def sink_relevant_deferred_records(
     java_deferred,
     sink_dead_ends,
@@ -189,6 +212,7 @@ def sink_relevant_deferred_records(
     opaque_receiver_types,
     deferred_types,
     opaque_untyped_dispatch,
+    unresolved_by_caller,
 ):
     relevant = []
     for item in java_deferred:
@@ -199,6 +223,7 @@ def sink_relevant_deferred_records(
             type_match
             or synthetic_initializer
             or opaque_untyped_dispatch
+            or not record_has_type_evidence(item, unresolved_by_caller)
         ):
             relevant.append(item)
             continue
@@ -380,6 +405,9 @@ def check_indirect_impact(
         for item in java_graph.get("coverage", {}).get("unevaluated", [])
         if item.get("kind") == "unresolved"
     ]
+    unresolved_by_caller = {}
+    for item in java_unresolved:
+        unresolved_by_caller.setdefault(item.get("caller"), []).append(item)
     sink_dead_ends = sink_reachable_bodyless_functions(
         sinks.get("sinks", []), adjacency, java_bodyless
     )
@@ -395,7 +423,10 @@ def check_indirect_impact(
         item.get("caller") in opaque_sink_dead_ends and not item.get("receiver_type")
         for item in java_unresolved
     )
-    deferred_types = deferred_receiver_types(java_deferred, java_unresolved)
+    deferred_types = expand_type_supertypes(
+        deferred_receiver_types(java_deferred, java_unresolved),
+        java_graph.get("type_supers", {}),
+    )
     inferred_edges = set()
     if opaque_sink_dead_ends:
         lambda_bodyless = sorted(function for function in java_bodyless if adjacency.get(function))
@@ -413,6 +444,7 @@ def check_indirect_impact(
         opaque_receiver_types,
         deferred_types,
         opaque_untyped_dispatch,
+        unresolved_by_caller,
     )
     if relevant_java_deferred:
         errors.extend({"gate": "extract-java-callgraph", **item} for item in relevant_java_deferred)
