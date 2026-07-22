@@ -1767,3 +1767,59 @@ O-3 `@Autowired`/`@Transactional` 서술 과대 · O-5~O-7 무변화. **신규 O
 **D-085 에 적은 "카드 protected_touched 없음" 은 틀렸다**(TASK-035 도 같은 zone 을 건드렸다).
 현행 해석 = repo 내부에선 Claude 적대적 리뷰 + 구현자≠머지자가 그 역할을 하고 D-007 의 "민감"은
 CLAUDE.md §3 **도메인 목록**을 뜻한다 — 다만 명문화된 적이 없어 **H-0001** 로 형 확인 요청(**머지 보류 사유 아님**).
+
+---
+
+## D-089 — TASK-037 (Java sink + 간접영향 언어중립화) **보정요청** · 코드 머지 보류
+
+**대상**: `codex/2026-07-21-task037-java-indirect-impact` — `c670753`(구현) · `67c3422`(인계) · `origin/main`=`d2c21cc` 대비.
+**판정**: **보정요청**. 코드 브랜치 **머지 보류**, 리뷰 기록만 `main` 머지(D-007).
+
+**잘 된 것**: AC#1(Java sink 3출처 = frozen zone·`@Gov(sink=true)`·registry, 그리고 `@Gov`(sink 없음)·`protected` 는 sink 아님 = 음성조건까지)
+· AC#4(홉 1/2 경계가 정책값 · shadow → `shadow_hits`+`pass`, registry 재등록 시 enforcing 승격) · 분석실패 fail-closed(문법 깨진 `.java` → 양 게이트 `parse_error`)
+· 중첩클래스/생성자 id 정합(`Outer.<init>`·`Outer.Inner.deep` 이 inventory·콜그래프·registry 3자 일치) · 결정론(md5 3회 동일) · 성능(실diff 1.4s)
+· 픽스처 회귀 0(**143/144 → 151/152**) · mutation **PASS(255)** · §1 보수성 통과(`policies/`·`kit/`·`docs/` 무접촉, 무관 리팩터 0).
+**rig 6종** 중 A·B·C·D·F 는 단독 FAIL = 신규 가드 load-bearing.
+
+**🔴 R-1 (AC#6 미충족) — 람다 dispatch 가 익명클래스와 동일 구조인데 조용히 `pass`.**
+`wire()` 한 줄만 다른 fresh 입력 A/B: `new Port(){...}` → `approval_required`(exit 2) / `() -> new Ledger().settle()` → **`pass`(exit 0)·`fail_closed` 없음·`coverage` 무표식**.
+둘 다 런타임엔 `Flow.sink → port.run() → Ledger.settle` 로 실제 도달하고 바뀐 함수는 enforcing sink 1~2홉 안이다 ⇒ **누락 방향**,
+AC#6 이 명문으로 금지한 **"조용한 `pass`"** 이자 MVP-3 공통 "놓침 = parity 위반".
+픽스처의 `lambdaWire()` 줄은 **장식**임을 실증(**RIG-G**: 익명만 빼고 람다만 남기면 해당 케이스 **단독 FAIL** 하고 게이트가 `pass`).
+인계기록의 "람다는 엣지 보존 확인" 은 **정의부 엣지**일 뿐 dispatch 도달성이 아니어서 **긍정 오인을 유도하는 서술** — AC#6 이 요구한 "명시" 아님.
+
+**🔴 R-3 (fail-open · `main` 대비 회귀) — 라우팅 정책이 어댑터를 못 내면 3층이 통째로 꺼진다.**
+`active_languages` 가 비면 콜그래프도 sink 도 만들지 않고 `pass`/exit 0. **정책 파일이 없으면** 예외 → fail-closed(정상)인데
+**있는데 퇴화하면**(`{}` 또는 `extensions` 드리프트) **`fail_closed`·`coverage` 공히 빈 채 조용히 통과** — 최악의 비대칭.
+그 상태에서도 `changed_functions` 는 그대로 출력된다 = **바뀐 걸 알면서** 도달성 분석을 건너뛰고 clean pass 를 선언한다.
+**부분 드리프트가 더 위험**: `.py` 만 라우팅에서 빠지면 verdict 는 `approval_required`(java 발견) 그대로라 겉보기 정상인데 **Python 발견과 `py-reviewer` 라우팅만 소실** — 사람이 알아챌 방법이 없다.
+**자기무력화 경로**: 킷 `run.sh` 는 `cd "$REPO"` 후 `--repo .` 로 부르는데 새 `--language-routing` 기본값이 **CWD 상대**라 **분석 대상 repo 안**을 가리킨다.
+대상 repo 가 `policies/language-routing.yaml` 에 `adapters: {}` 를 심으면 정산 sink 1홉 상류 변경이 **`pass`**.
+동일 repo·동일 인자로 **`main` 게이트는 `approval_required`+`money`(settlement-reviewer)** 를 낸다 ⇒ **명백한 회귀**.
+AC#3 "분석실패 → fail-closed" 와 설계 "unsupported 는 coverage 정직 노출·조용한 통과 금지" 위반.
+
+**🟠 R-2 — 다국어 repo 에서 거짓 `unresolved_registry_function` → `fail_closed` 상시 점등.**
+함수 수집만 언어 게이팅하고 registry 검증은 전역이라, `.java` 만 바꾸면 Python sink 가·`.py` 만 바꾸면 Java sink 가 "해소 불가" 로 찍힌다(둘 다 바꾸면 사라짐 = 거짓 증명).
+방향은 안전(과대)하나 **멀쩡한 registry 를 깨졌다고 감사출력에 적고**, MVP-3 표적인 다국어 repo 에서 **모든 단일언어 커밋이 상시 fail_closed** 라
+진짜 분석실패를 알리는 마지막 채널의 신호가 죽는다 — R-1·R-3 같은 사고를 덮는다.
+
+**§2B 적용**: 세 건 모두 비차단 판정 전 필수질문("거버넌스 목적에 직접 구멍을 내나?")에 **예** 다.
+R-1·R-3 은 실제 sink 도달 변경을 `exit 0` 으로 통과시키고, R-2 는 fail-closed 채널을 무력화한다 ⇒ **비차단 금지 · 보정요청**.
+이는 A-0044 에서 O-4 를 "TASK-037 이 소비하는 순간 실구멍" 이라며 AC#6 으로 고정한 판단의 **일관된 연장**이다.
+
+**비차단 이월**: O-1 익명 fail-closed 가 repo 전역이라 무관 변경도 상시 `approval_required`(dogfood 에서도 점등) — R-1 을 **AC#6(a) 노선(익명·람다 본문을 인터페이스 구현체로 등록)** 으로 닫으면 동시 해소되므로 (a) 권장
+· O-2 신규 parity 6케이스가 `group: parity` 밖이라 `TEST_CASE_GROUP=parity` 가 MVP-3 핵심기준을 하나도 안 돌린다(그룹이 `main`·브랜치 공히 9/9 불변)
+· O-3 Java id 패키지 비한정(`a.pkg1.Flow`↔`a.pkg2.Flow` 붕괴) — 과대=안전이나 감사필드로 패키지 식별 불가 + Python(`app.flow.helper`) 대비 parity 비대칭
+· O-4 map 경로 java 분기가 load-bearing 아님(RIG-E 무변화 — classify 경로가 단독 공급).
+
+**정책 상태**: `language-routing.yaml` `java.layers.callgraph` **`stub` 유지** — TASK-037 이 통과해야 소비자가 생긴다.
+승격은 D-076 계약대로 **통과 후 Claude 가**(킷 반영은 TASK-038 AC#3).
+
+**TASKS.md 반영**: **TASK-038 AC#6 신설** — 킷 `run.sh` 가 `--language-routing "$POL/language-routing.yaml"` 을 명시 전달하고,
+대상 repo 가 동명 파일을 심어도 무영향임을 진입점 케이스로 고정(R-3 §3.4 대응).
+
+**환경 고지**: 유일 실패 `tree-sitter-smoke` 는 이 머신 tree-sitter 0.23.2(pin 0.26.0 은 Python 3.9 휠 부재) 환경건으로 **`main` 동일** — 브랜치 귀속 아님.
+킷 selftest 도 `main`·브랜치 **동일하게 140/141 + 같은 사유** (킷 무접촉 확인).
+
+**머지**: 코드 브랜치 **보류**. 리뷰 기록(`A-0045`·본 항목·`review-notes.md`·`TASKS.md`·handoff·summaries)만 `main` 머지 — 다음 세션·Codex 가 보도록(D-007).
+상세 `collab/answers/A-0045.md`.

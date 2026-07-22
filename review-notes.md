@@ -2027,3 +2027,16 @@ parity 는 "정상 경로 등가"만이 아니라 **"실패 경로 등가"까지
 - **정책**: `language-routing.yaml` `java.layers.callgraph` **`stub` 유지** — 소비자 0명(`check-indirect-impact` 아직 `.py` 하드코딩). 승격은 TASK-037 통과 후·TASK-038 AC#3(D-076 계약).
 - **§1 보수성**: 게이트 1·`cases.yaml`·픽스처 1·handoff·summaries **뿐** · Python 추출기 4종 **바이트 무변경** · `policies/`·`kit/` 무접촉 · 무관 리팩터 0.
 - **머지**: 도메인 민감(정산·인증/인가·암호화·DB·infra) **무해당** + dogfood `check-policy-change` PASS ⇒ **비민감** → Claude 가 `main` 머지(D-007). **정직 고지·사실 정정**: 자기보호 zone(`.harness/**`·`tests/*` — D-028) 때문에 감사카드는 `approval_required`/`security-reviewer` 를 낸다. **D-085 의 "카드 protected_touched 없음" 은 틀렸다.** 현행 해석(리뷰+구현자≠머지자가 그 역할)을 **H-0001** 로 형에게 확인 요청(머지 보류 사유 아님).
+
+## TASK-037 리뷰 (Java sink + 간접영향 언어중립화) — **보정요청** · A-0045 · D-089
+
+- 대상 `codex/2026-07-21-task037-java-indirect-impact` (`c670753`·`67c3422`), `origin/main`=`d2c21cc` 대비. 미머지 codex 브랜치는 이 1개뿐.
+- **R-1 (🔴 AC#6 미충족)**: 람다 dispatch 가 익명클래스와 **같은 구조인데 조용히 `pass`**. `wire()` 한 줄만 다른 fresh A/B — 익명 `approval_required`(2) ↔ 람다 **`pass`(0)·fail_closed 없음**. 둘 다 실제로 `Flow.sink→port.run()→Ledger.settle` 도달. 픽스처의 `lambdaWire()` 는 **장식**(RIG-G: 익명만 빼면 그 케이스 단독 FAIL·게이트 `pass`). 인계기록의 "람다 엣지 보존" 은 **정의부** 엣지일 뿐 dispatch 도달성이 아님.
+- **R-3 (🔴 fail-open · `main` 회귀)**: 라우팅 정책이 어댑터를 못 내면(`{}`·`extensions` 드리프트) 콜그래프·sink 를 아예 안 만들고 `pass`/exit 0 — `fail_closed`·`coverage` 공히 빔. 파일 **부재**는 fail-closed 인데 **퇴화**는 통과 = 비대칭. 부분 드리프트는 verdict 가 `approval_required` 로 유지된 채 **Python 발견·`py-reviewer` 라우팅만 소실**(무증상). 킷 `run.sh` 가 `cd "$REPO"` + `--repo .` 라 새 기본값이 **대상 repo 안**을 가리켜 **대상 repo 자기무력화** 가능 — 동일 입력에 `main` 게이트는 `approval_required`+`money`(settlement-reviewer), 이 브랜치는 `pass`.
+- **R-2 (🟠)**: 함수 수집만 언어 게이팅·registry 검증은 전역 ⇒ 다국어 repo 의 단일언어 커밋마다 **거짓 `unresolved_registry_function`** → `fail_closed` 상시 점등. 방향은 안전하나 멀쩡한 registry 를 깨졌다고 적고, 진짜 분석실패 채널을 덮는다.
+- **통과 확인(실증)**: AC#1 3출처 + 음성조건 · AC#4 홉경계/shadow 승격 · malformed `.java` fail-closed · 중첩/생성자 id 3자 정합 · 결정론 md5 3회 · 실diff 1.4s · `kind` 이름변경 하류 소비자 0 · dev **151/152**(`main` 143/144, 신규 실패 0) · mutation **PASS(255)** · 킷 무접촉(selftest `main` 동일).
+- **rig 6종**: A(익명 감지)·B(fail-closed 승격)·C(java @Gov sink)·D(java id 분기)·F(java 그래프 병합) **단독 FAIL = load-bearing** / **E(map 의 java 분기) 무변화** = 死분기(classify 가 단독 공급, O-4) / **G**(픽스처에서 익명 제거) = R-1 근거.
+- **비차단**: O-1 익명 fail-closed 가 repo 전역이라 무관 변경도 상시 승인요구(dogfood 점등) — R-1 을 AC#6**(a)** 노선으로 닫으면 동시 해소 ⇒ (a) 권장 · O-2 신규 parity 6케이스가 `group: parity` 밖(그룹 9/9 불변) · O-3 Java id 패키지 비한정(과대=안전이나 감사필드 식별불가·Python 대비 비대칭) · O-4 위.
+- **차기 AC**: **TASK-038 AC#6** 신설 — 킷 `run.sh` 가 `--language-routing "$POL/language-routing.yaml"` 명시 전달 + 대상 repo 동명 파일 무영향을 진입점 케이스로 고정.
+- **정책**: `java.layers.callgraph` **`stub` 유지**(소비자 = 이 태스크, 아직 미통과). 승격은 통과 후 Claude(D-076·TASK-038 AC#3).
+- 머지: **코드 보류**. 리뷰 기록만 `main`.
