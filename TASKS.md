@@ -599,10 +599,26 @@
    - **수정(리뷰어가 5형태로 실측)**: `modifiers` 자식 중 **텍스트가 정확히 `static` 인 키워드 노드** 존재 여부로 판정 — 어노테이션 문자열=False · `static final`=True · `private static`=True · `@Deprecated private static`=True · 수식어 없음=False **전부 정답**.
    - 픽스처 1건(위 입력 → `Flow.<init>` 단언) + 기존 `java-callgraph-static-modifiers`·`…-instance-token` 유지 + 음성검증 단독 FAIL. 판정 무영향(정직성)이나 AC#8 과 동종·동급.
 
-**비차단 관찰(감점만 · 차기)**: **O-21** `java-indirect-lambda-argument-fail-closed` 이름/내용 불일치(이제 fail-closed 아니라 실 엣지 탐지 — 개명 권고, 그리고 **이 시나리오의 fail-closed 경로 회귀보호가 사라졌다**) · **O-22** `fail_closed` detail 이 `dead_ends=` 에는 **전체** 막다른 길을, 개수는 **relevant 만** 실어 카드에서 어긋난다(1줄) · **O-23** enum 상수 본문 caller 가 `Reg.<init>` 로 기록되나 실제로는 클래스 초기화 시점이고 익명 하위타입이 `Reg` 로 뭉개진다 · **O-13·O-3·O-15·O-16 이월**.
+**🔴 보정 재제출(`7daee0c`·`661225f`) 재리뷰 결과 = 보정요청 (A-0052 · D-096) — 코드 브랜치 머지 계속 보류. 새 태스크 아님, 보정 커밋만 재제출.**
+**✅ 닫힌 것(재작업 불필요)**: **AC#9**(불투명 막다른 길 분리 + 교집합보다 앞선 보수 승격 — **RIG-1 → 183/199, 15건 FAIL** · fresh G1·G2·H1 + 신규 **G1b**(`Map.get(k).handle()`)·**G1c**(배열) 전부 `main` 과 동일 복구 · 대조군 G3·G4 불변 · **F6 `pass` 유지**) · **AC#10 기능분**(`owner_from_invocation` 으로 인자전달 람다/`::` 레코드 유지 + 불투명→람다 `bodyless` 보수 인접 — **RIG-2 단독 FAIL · RIG-3 2건 FAIL** · fresh **G6 복구**, 신규 **G6c**(익명 클래스)·**P3**(지역변수 람다)는 **`main` 보다 강화** · **O-21 부수 해소**) · **AC#11**(fresh 5형태 전량 정답, `main` 은 3형태 오답 = 순수 개선 · RIG-5 단독 FAIL) · **무회귀**(198/199 · `comm` 차집합 0 · mutation 345 · 결정론 · 성능 120×120 실측 0.2s · **fresh 25입력 과소탐 회귀 0**) · **§1 보수성**(킷·정책·docs·Claude 소유 **0 바이트**).
+**🔵 리뷰어 자기정정 없음(6회 만에)** — A-0051 의 (a)·(b) 방향과 7입력 표가 그대로 재현됐다. **반려 사유는 놓침이 아니라 "놓침을 막는 코드가 무방비" + "감사카드가 사실을 왜곡"** 이며, 둘 다 **1줄/1픽스처** 규모다.
 
-**의존**: TASK-039 통과·머지(D-093) ⇒ 착수 가능. **🔴 AC#6·#9·#10 은 TASK-038 보다 반드시 먼저** — D-093 의 "먼저 권고" 는 유효하되 **근거가 소음 → 놓침으로 바뀌었다**. 지금 sync 하면 R-1 놓침을 배포 킷에 그대로 싣는다(현행 킷은 Java L3 부재 = 구멍이 아니라 미탑재). TASK-038 이 README·`manifest.yaml` 에 **O-14 소음 특성을 명시**해야 하는 요구는 그대로 유효하다(O-14 는 닫히지 않은 채 남으므로).
-**통과 시**: `java.layers.callgraph` `partial`→`supported` 승격 재검토(Claude·D-076 — **AC#9+AC#10** 폐쇄가 조건. A-0051 R-3·R-4 로 승격 근거가 다시 후퇴했으므로 AC#6+AC#7 만으로는 불충분).
+12. **🔴 (A-0052 R-5 · 차단 · 회귀보호 0) `method_reference` 인자전달 갈래를 픽스처로 고정**: 추출기에 **쌍둥이 블록 2개**(람다 / `::`)가 추가됐는데 **람다 쪽만** 픽스처가 고정한다. **RIG-4 실증** — `method_reference` 갈래의 `if owner_from_invocation: unresolved.add(...)` **9줄만** 제거해도 **198/199, FAIL 0건**(스위트 완전 무발견).
+    - **fresh 실증(뚫린다)**: `hops: 1` 로 보수 인접을 굶기면 이 레코드가 **유일 방어선**이다 — `class Registry { void put(String k, Task t){…} Task find(String k){return null;} }` + `Flow.wire(){ reg.put("pay", vault::transfer); }` + `Flow.mid(String k){ reg.find(k).exec(); }` + `Flow.sink(String k){ mid(k); }` → `main` `approval_required`(2) · 브랜치 `approval_required`(2) · **RIG-4 `pass`(0)·`fail_closed: []`·레코드 증발**.
+    - **픽스처 1건 신설**(위 형태 · `verdict: approval_required`·`exit_code: 2`·`coverage_unevaluated` 에 `Flow.wire|method_reference|vault::transfer` 단언). **음성검증: 그 9줄만 제거하면 이 케이스 단독 FAIL.** (`hops: 4` 로 두면 보수 인접이 덮어버려 단독 단언이 안 된다 — **반드시 `hops: 1`.**)
+    - **A-0051 R-2 와 완전 동종**(그때는 교집합 축이 184/184 무변화라 차단했다). 코드는 옳으나 다음 편집 한 번에 조용히 되돌아간다 ⇒ §2B 상설 회귀 픽스처 원칙.
+13. **🔴 (A-0052 R-6 · 차단 · 감사카드 정직성) `inferred: true` 가 완전히 관측된 경로에도 찍힌다**: AC#10 은 *"보수 추정으로 추가된 홉은 **실제 관측 호출과 구분 표시**"* 를 요구했는데, `inferred_edges.add((caller, callee))` 가 `if callee not in adjacency[caller]:` 블록 **밖**이라 **이미 관측된 엣지도 추정으로 등록**된다.
+    - **fresh 실증(P6)**: `Flow { Registry reg; Task direct; wire(){ reg.put("pay", () -> new Vault().transfer()); } sink(){ direct.exec(); reg.find("x").exec(); } }` → 추출기 `edges` 가 `Flow.sink→Task.exec`(`direct.exec`)·`Task.exec→Vault.transfer`(lambda) 를 **둘 다 실제 호출로** 기록하는데 카드는 `inferred: true`. **추정 홉 0개인 완전 관측 경로를 추정으로 표시** = AC#10 이 금지한 방향의 **거울상**. 실제 관측된 민감 경로를 리뷰어가 후순위로 밀 근거를 준다(§2C).
+    - **수정 = 1줄**: `inferred_edges.add(...)` 를 `if` 블록 **안으로** 이동. **리뷰어 실측**: P6 표식 소멸 · 스위트 **198/199 유지** · `java-indirect-registry-lookup-lambda` 의 **진짜 `inferred: true` 는 보존**.
+    - **표식 정확성도 회귀보호 0** — 올바른 구현과 버그 구현이 **둘 다 198/199** ⇒ 스위트가 표식의 *존재* 만 고정하고 *정확성* 은 고정하지 않는다. **P6 형태 픽스처 신설**(`indirect_impact` 에 `inferred` 키 **부재** 단언) + **음성검증 단독 FAIL**.
+14. **🟡 (A-0052 O-25 · O-22 동반) `fail_closed` detail 의 `dead_ends=` 가 빈 문자열**: 불투명 caller 를 `sink_dead_ends` 에서 분리했는데 detail 문자열은 그대로 `sink_dead_ends` 만 출력한다 ⇒ **이번 보정이 겨냥한 모든 시나리오에서 카드가 `dead_ends=` 로 끝난다**(G1·H1·G6 — `main` 은 `dead_ends=Flow.sink`/`Flow.mid` 를 보여줬다). 판정 무영향이나 **`main` 대비 카드 정보 회귀**.
+    - `opaque_sink_dead_ends` 를 합쳐 출력 + **O-22**(개수는 relevant, 집합은 전체인 불일치)도 같은 1줄에서 함께 정리.
+    - **`grep dead_ends tests/` = 0건** ⇒ detail 을 단언하는 케이스가 아예 없다. **detail 단언 케이스 1건 신설.**
+
+**비차단 관찰(감점만 · 차기)**: **~~O-21~~ 해소**(AC#10 이 fail-closed 경로를 되살려 `java-indirect-lambda-argument-fail-closed` 의 이름·내용이 다시 일치 — 기대값도 `fail_closed_present: true` 로 정정됨) · **O-22**(`fail_closed` detail 의 개수는 relevant, 집합은 전체인 불일치 — **O-25 와 함께 AC#14 에서 처리**) · **O-25**(→ AC#14) · **O-23** enum 상수 본문 caller 가 `Reg.<init>` 로 기록되나 실제로는 클래스 초기화 시점이고 익명 하위타입이 `Reg` 로 뭉개진다 · **O-13·O-3·O-15·O-16 이월**.
+
+**의존**: TASK-039 통과·머지(D-093) ⇒ 착수 가능. **🔴 AC#12·#13 은 TASK-038 보다 먼저** — D-096 기준 sync 차단 근거는 A-0051 의 *"놓침을 배포 킷에 싣는다"* 에서 **"보호 없는 탐지를 싣는다"** 로 완화됐다(과소탐 회귀는 AC#9·#10 으로 닫혔다). 다만 AC#12·#13 이 **1줄/1픽스처** 규모라 **먼저 닫고 sync 하는 편이 명백히 싸다.** TASK-038 이 README·`manifest.yaml` 에 **O-14 소음 특성을 명시**해야 하는 요구는 그대로 유효하다(O-14 는 닫히지 않은 채 남으므로).
+**통과 시**: `java.layers.callgraph` `partial`→`supported` 승격 재검토(Claude·D-076 — **AC#9+AC#10 폐쇄 + AC#12(회귀보호) 폐쇄**가 조건. D-096: 탐지는 회복됐으나 **보호 없는 탐지는 승격 근거가 못 된다**).
 
 ### TASK-038 ☐ 킷에 Java L3 + 잔손질 반영 (MVP-3 킷 스냅샷 갱신)  (Codex)  *(MVP-3 · X · 킷)*
 **배경**: TASK-035·036·037 로 dev 가 Java 전 계층(J1~J3 + L3) 완비되면 킷을 그 상태로 올린다(형 지시 "자바까지 하고 킷 업데이트"). TASK-026/028 킷 스냅샷 선례.
