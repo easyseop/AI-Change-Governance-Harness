@@ -3747,6 +3747,51 @@ cases:
           receiver_type: Flow
       deterministic_stdout: true
 
+  - name: java-indirect-untyped-obtain-with-jdk-fail-closed
+    group: adversarial
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/java-indirect-untyped-obtain-jdk
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones-empty.yaml
+      sink_registry: tests/fixtures/java-indirect-untyped-obtain-jdk/sink-registry.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      reviewer_required: [tool_owner]
+      fail_closed_present: true
+      errors_present: true
+      deterministic_stdout: true
+
+  - name: java-indirect-untyped-submit-with-jdk-fail-closed
+    group: adversarial
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/java-indirect-untyped-submit-jdk
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones-empty.yaml
+      sink_registry: tests/fixtures/java-indirect-untyped-submit-jdk/sink-registry.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      reviewer_required: [tool_owner]
+      fail_closed_present: true
+      errors_present: true
+      deterministic_stdout: true
+
+  - name: java-indirect-untyped-field-with-jdk-fail-closed
+    group: adversarial
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/java-indirect-untyped-field-jdk
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones-empty.yaml
+      sink_registry: tests/fixtures/java-indirect-untyped-field-jdk/sink-registry.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      reviewer_required: [tool_owner]
+      fail_closed_present: true
+      errors_present: true
+      deterministic_stdout: true
+
   - name: java-indirect-jdk-runnable-field-lambda-fail-closed
     group: adversarial
     gate: check-indirect-impact
@@ -4046,6 +4091,21 @@ cases:
           name: vault::transfer
       deterministic_stdout: true
 
+  - name: java-indirect-registry-resolve-method-reference-hop-boundary
+    group: adversarial
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/java-indirect-registry-resolve-method-reference
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones-empty.yaml
+      sink_registry: tests/fixtures/java-indirect-registry-resolve-method-reference/sink-registry.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      reviewer_required: [tool_owner]
+      fail_closed_present: true
+      errors_present: true
+      deterministic_stdout: true
+
   - name: java-indirect-observed-path-not-inferred
     group: adversarial
     gate: check-indirect-impact
@@ -4081,6 +4141,23 @@ cases:
       exit_code: 2
       indirect_impact: []
       shadow_hits: []
+      reviewer_required: [tool_owner]
+      fail_closed_present: true
+      fail_closed_details:
+        - 1 deferred dispatch; dead_ends=Flow.sink
+      errors_present: true
+      deterministic_stdout: true
+
+  - name: java-indirect-opaque-dispatch-target-dead-end-detail
+    group: adversarial
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/java-indirect-opaque-dispatch-target-detail
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones-empty.yaml
+      sink_registry: tests/fixtures/java-indirect-opaque-dispatch-target-detail/sink-registry.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
       reviewer_required: [tool_owner]
       fail_closed_present: true
       fail_closed_details:

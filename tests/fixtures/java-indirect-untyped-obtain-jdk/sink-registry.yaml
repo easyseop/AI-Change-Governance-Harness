@@ -1,0 +1,3 @@
+defaults: {maturity: enforcing, hops: 4}
+sinks:
+  - {id: untyped_obtain_jdk_sink, function: Flow.sink, reason: untyped dispatch beside JDK call must fail closed, owner: security-reviewer}

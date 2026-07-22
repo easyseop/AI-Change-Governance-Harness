@@ -311,6 +311,24 @@ def receiver_type(source_bytes, object_node, bindings, current_owner):
     return None
 
 
+def precise_receiver_type(source_bytes, object_node, bindings, current_owner):
+    """Return the immediate receiver's declared type, or None when uncertain."""
+    if object_node is None:
+        return simple_name(current_owner)
+    if object_node.type == "object_creation_expression":
+        return receiver_type(source_bytes, object_node, bindings, current_owner)
+    text = node_text(source_bytes, object_node).strip()
+    if object_node.type == "this":
+        return simple_name(current_owner)
+    if object_node.type == "identifier":
+        if text in bindings:
+            return bindings[text]
+        return simple_name(text) if text[:1].isupper() else None
+    if object_node.type == "field_access" and text.startswith("this."):
+        return bindings.get(text.split(".", 2)[1])
+    return None
+
+
 def method_targets(
     method_name,
     owner_type,
@@ -606,8 +624,18 @@ def collect_calls(
                     edges.add((method["id"], target, node_line(node), call_text))
             else:
                 kind = "dynamic" if name in REFLECTIVE_METHODS else "unresolved"
+                recorded_receiver_type = precise_receiver_type(
+                    source_bytes, object_node, method["bindings"], method["owner"]
+                )
                 unresolved.add(
-                    (method["id"], kind, call_text or name, node_line(node), (), owner_type)
+                    (
+                        method["id"],
+                        kind,
+                        call_text or name,
+                        node_line(node),
+                        (),
+                        recorded_receiver_type,
+                    )
                 )
 
         elif node.type == "object_creation_expression":
@@ -1027,9 +1055,15 @@ def extract_callgraph(repo):
             edges.update(found_edges)
             unresolved.update(found_unresolved)
 
+    deduplicated = {}
+    for item in unresolved:
+        key = item[:5]
+        if key not in deduplicated or len(item) <= 5 or not item[5]:
+            deduplicated[key] = item
+
     unresolved_records = []
     for item in sorted(
-        unresolved,
+        deduplicated.values(),
         key=lambda value: (
             value[0],
             value[3],

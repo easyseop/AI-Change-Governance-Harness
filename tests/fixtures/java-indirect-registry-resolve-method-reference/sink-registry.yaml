@@ -1,0 +1,3 @@
+defaults: {maturity: enforcing, hops: 1}
+sinks:
+  - {id: resolve_method_reference_sink, function: Flow.sink, reason: opaque dispatch must not depend on method naming, owner: security-reviewer}

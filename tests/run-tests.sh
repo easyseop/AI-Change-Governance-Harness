@@ -1177,6 +1177,10 @@ def validate_indirect_impact(case, result, exit_code):
             [item.get("detail") for item in result.get("fail_closed", [])],
             expect["fail_closed_details"],
         )
+    for record in result.get("fail_closed", []):
+        detail = record.get("detail", "")
+        if "deferred dispatch" in detail and detail.endswith("dead_ends="):
+            errors.append("fail_closed detail: deferred dispatch has empty dead_ends")
     if "errors_present" in expect:
         assert_equal(errors, "errors_present", bool(result.get("errors")), expect["errors_present"])
     if "coverage_unevaluated" in expect:

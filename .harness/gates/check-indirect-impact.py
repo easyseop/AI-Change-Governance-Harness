@@ -188,7 +188,7 @@ def sink_relevant_deferred_records(
     opaque_sink_dead_ends,
     opaque_receiver_types,
     deferred_types,
-    opaque_dispatch_names,
+    opaque_untyped_dispatch,
 ):
     relevant = []
     for item in java_deferred:
@@ -198,8 +198,7 @@ def sink_relevant_deferred_records(
         if opaque_sink_dead_ends and (
             type_match
             or synthetic_initializer
-            or not opaque_receiver_types
-            or opaque_dispatch_names
+            or opaque_untyped_dispatch
         ):
             relevant.append(item)
             continue
@@ -392,12 +391,10 @@ def check_indirect_impact(
         for item in java_unresolved
         if item.get("caller") in opaque_sink_dead_ends and item.get("receiver_type")
     }
-    opaque_dispatch_names = {
-        item.get("name", "").rsplit(".", 1)[-1]
+    opaque_untyped_dispatch = any(
+        item.get("caller") in opaque_sink_dead_ends and not item.get("receiver_type")
         for item in java_unresolved
-        if item.get("caller") in opaque_sink_dead_ends
-        and item.get("name", "").rsplit(".", 1)[-1] in {"find", "get", "lookup"}
-    }
+    )
     deferred_types = deferred_receiver_types(java_deferred, java_unresolved)
     inferred_edges = set()
     if opaque_sink_dead_ends:
@@ -415,7 +412,7 @@ def check_indirect_impact(
         opaque_sink_dead_ends,
         opaque_receiver_types,
         deferred_types,
-        opaque_dispatch_names,
+        opaque_untyped_dispatch,
     )
     if relevant_java_deferred:
         errors.extend({"gate": "extract-java-callgraph", **item} for item in relevant_java_deferred)
@@ -429,10 +426,8 @@ def check_indirect_impact(
             for dead_end in sink_dead_ends.union(opaque_sink_dead_ends)
             if (
                 (dispatch_targets and dead_end in dispatch_targets)
-                or (
-                    dead_end in opaque_sink_dead_ends
-                    and (opaque_dispatch_names or not dispatch_targets)
-                )
+                or dead_end in opaque_sink_dead_ends
+                or not dispatch_targets
             )
         }
         fail_closed_records.append(
