@@ -1,0 +1,3 @@
+defaults: {maturity: enforcing, hops: 3}
+sinks:
+  - {id: relevant_detail_sink, function: Flow.sink, reason: report only record-relevant dead ends, owner: security-reviewer}

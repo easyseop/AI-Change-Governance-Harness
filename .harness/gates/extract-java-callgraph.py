@@ -606,7 +606,9 @@ def collect_calls(
                     edges.add((method["id"], target, node_line(node), call_text))
             else:
                 kind = "dynamic" if name in REFLECTIVE_METHODS else "unresolved"
-                unresolved.add((method["id"], kind, call_text or name, node_line(node), ()))
+                unresolved.add(
+                    (method["id"], kind, call_text or name, node_line(node), (), owner_type)
+                )
 
         elif node.type == "object_creation_expression":
             names = type_names(source_bytes, node.child_by_field_name("type"))
@@ -714,10 +716,20 @@ def collect_calls(
                             "lambda",
                             node_line(node),
                             tuple(dispatch_targets),
+                            owner_type,
                         )
                     )
             else:
-                unresolved.add((method["id"], "lambda_dispatch", "lambda", node_line(node), tuple(dispatch_targets)))
+                unresolved.add(
+                    (
+                        method["id"],
+                        "lambda_dispatch",
+                        "lambda",
+                        node_line(node),
+                        tuple(dispatch_targets),
+                        owner_type,
+                    )
+                )
         elif node.type == "method_reference":
             owner_type = assigned_target_type(source_bytes, node, method["bindings"])
             owner_from_invocation = False
@@ -765,10 +777,20 @@ def collect_calls(
                             node_text(source_bytes, node).strip(),
                             node_line(node),
                             tuple(dispatch_targets),
+                            owner_type,
                         )
                     )
             else:
-                unresolved.add((method["id"], "method_reference", node_text(source_bytes, node).strip(), node_line(node), tuple(dispatch_targets)))
+                unresolved.add(
+                    (
+                        method["id"],
+                        "method_reference",
+                        node_text(source_bytes, node).strip(),
+                        node_line(node),
+                        tuple(dispatch_targets),
+                        owner_type,
+                    )
+                )
     return edges, unresolved
 
 
@@ -795,10 +817,17 @@ def collect_initializer_deferred(
         for child in node.named_children:
             visit(child, type_stack)
 
-    def scan_initializer_members(body, owner, class_bindings):
+    def scan_initializer_members(body, owner, class_bindings, initializer_suffix=None):
         for child in body.named_children:
             if child.type == "field_declaration":
-                caller = f"{owner}.<clinit>" if has_static_modifier(source_bytes, child) else f"{owner}.<init>"
+                if initializer_suffix:
+                    caller = f"{owner}.{initializer_suffix}"
+                else:
+                    caller = (
+                        f"{owner}.<clinit>"
+                        if has_static_modifier(source_bytes, child)
+                        else f"{owner}.<init>"
+                    )
                 scan_deferred(child, caller, declaration_dispatch_targets(child), {})
             elif child.type == "constant_declaration":
                 scan_deferred(child, f"{owner}.<clinit>", declaration_dispatch_targets(child), {})
@@ -812,7 +841,13 @@ def collect_initializer_deferred(
                     None,
                 )
                 if constant_body is not None:
-                    scan_initializer_members(constant_body, owner, class_bindings)
+                    constant_name = declaration_name(source_bytes, child)
+                    scan_initializer_members(
+                        constant_body,
+                        f"{owner}.{constant_name}",
+                        class_bindings,
+                        "<clinit>",
+                    )
             elif child.type in {"enum_body_declarations", "class_body_declarations"}:
                 scan_initializer_members(child, owner, class_bindings)
 
@@ -992,18 +1027,29 @@ def extract_callgraph(repo):
             edges.update(found_edges)
             unresolved.update(found_unresolved)
 
-    unresolved_records = [
-        {
+    unresolved_records = []
+    for item in sorted(
+        unresolved,
+        key=lambda value: (
+            value[0],
+            value[3],
+            value[1],
+            value[2],
+            value[4],
+            value[5] if len(value) > 5 and value[5] else "",
+        ),
+    ):
+        caller, kind, name, line, dispatch_targets = item[:5]
+        record = {
             "caller": caller,
             "kind": kind,
             "name": name,
             "line": line,
             "dispatch_targets": list(dispatch_targets),
         }
-        for caller, kind, name, line, dispatch_targets in sorted(
-            unresolved, key=lambda item: (item[0], item[3], item[1], item[2], item[4])
-        )
-    ]
+        if len(item) > 5 and item[5]:
+            record["receiver_type"] = item[5]
+        unresolved_records.append(record)
     return {
         "gate": "extract-java-callgraph",
         "repo": repo,

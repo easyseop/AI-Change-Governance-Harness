@@ -2868,7 +2868,7 @@ cases:
       exit_code: 0
       edges: []
       coverage_unevaluated_with_dispatch:
-        - caller: Reg.<init>
+        - caller: Reg.A.<clinit>
           kind: lambda_dispatch
           name: lambda
           dispatch_targets: [Task.exec]
@@ -3705,23 +3705,23 @@ cases:
           name: External::run
       deterministic_stdout: true
 
-  # Unknown dispatch targets remain conservative when a sink closure contains any
-  # unresolved/bodyless dead end; this keeps fail-closed behavior over N4 noise.
-  - name: java-indirect-deferred-jdk-noise-fail-closed
-    group: adversarial
+  # An ordinary JDK call whose declared receiver type does not match the deferred
+  # context is coverage-only; it must not turn an unrelated change into an alert.
+  - name: java-indirect-deferred-jdk-noise-pass
+    group: negative-corpus
     gate: check-indirect-impact
     input:
       fixture_dir: tests/fixtures/java-indirect-deferred-jdk-noise
       sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones-empty.yaml
       sink_registry: tests/fixtures/java-indirect-deferred-jdk-noise/sink-registry.yaml
     expect:
-      verdict: approval_required
-      exit_code: 2
+      verdict: pass
+      exit_code: 0
       indirect_impact: []
       shadow_hits: []
-      reviewer_required: [tool_owner]
-      fail_closed_present: true
-      errors_present: true
+      reviewer_required: []
+      fail_closed_present: false
+      errors_present: false
       coverage_unevaluated:
         - caller: Flow.check
           kind: unresolved
@@ -3732,6 +3732,19 @@ cases:
         - caller: Flow.wire
           kind: unresolved
           name: consume
+      coverage_unevaluated_with_receiver:
+        - caller: Flow.check
+          kind: unresolved
+          name: rows.size
+          receiver_type: String
+        - caller: Flow.wire
+          kind: lambda_dispatch
+          name: lambda
+          receiver_type: null
+        - caller: Flow.wire
+          kind: unresolved
+          name: consume
+          receiver_type: Flow
       deterministic_stdout: true
 
   - name: java-indirect-jdk-runnable-field-lambda-fail-closed
@@ -4072,6 +4085,23 @@ cases:
       fail_closed_present: true
       fail_closed_details:
         - 1 deferred dispatch; dead_ends=Flow.sink
+      errors_present: true
+      deterministic_stdout: true
+
+  - name: java-indirect-relevant-dead-end-detail
+    group: adversarial
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/java-indirect-relevant-dead-end-detail
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones-empty.yaml
+      sink_registry: tests/fixtures/java-indirect-relevant-dead-end-detail/sink-registry.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      reviewer_required: [tool_owner]
+      fail_closed_present: true
+      fail_closed_details:
+        - 1 deferred dispatch; dead_ends=Job.run
       errors_present: true
       deterministic_stdout: true
 

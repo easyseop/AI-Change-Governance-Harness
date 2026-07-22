@@ -1103,6 +1103,22 @@ def validate_extract_callgraph(case, result, exit_code):
             actual,
             expect["coverage_unevaluated_with_dispatch"],
         )
+    if "coverage_unevaluated_with_receiver" in expect:
+        actual = [
+            {
+                "caller": item.get("caller"),
+                "kind": item.get("kind"),
+                "name": item.get("name"),
+                "receiver_type": item.get("receiver_type"),
+            }
+            for item in result.get("coverage", {}).get("unevaluated", [])
+        ]
+        assert_equal(
+            errors,
+            "coverage_unevaluated_with_receiver",
+            actual,
+            expect["coverage_unevaluated_with_receiver"],
+        )
     if "errors_present" in expect:
         assert_equal(errors, "errors_present", bool(result.get("errors")), expect["errors_present"])
     if expect.get("deterministic_stdout"):
@@ -1188,6 +1204,22 @@ def validate_indirect_impact(case, result, exit_code):
             "coverage.unevaluated_with_dispatch",
             actual,
             expect["coverage_unevaluated_with_dispatch"],
+        )
+    if "coverage_unevaluated_with_receiver" in expect:
+        actual = [
+            {
+                "caller": item.get("caller"),
+                "kind": item.get("kind"),
+                "name": item.get("name"),
+                "receiver_type": item.get("receiver_type"),
+            }
+            for item in result.get("coverage", {}).get("unevaluated", [])
+        ]
+        assert_equal(
+            errors,
+            "coverage.unevaluated_with_receiver",
+            actual,
+            expect["coverage_unevaluated_with_receiver"],
         )
     if expect.get("deterministic_stdout"):
         first = run_command(case_command(case)).stdout

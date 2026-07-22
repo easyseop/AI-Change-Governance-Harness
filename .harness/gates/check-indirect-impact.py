@@ -155,11 +155,52 @@ def sink_reachable_bodyless_functions(sinks, adjacency, bodyless_functions):
     return reachable_functions_from_sinks(sinks, adjacency).intersection(bodyless_functions)
 
 
-def sink_relevant_deferred_records(java_deferred, sink_dead_ends, opaque_sink_dead_ends):
+def deferred_receiver_types(java_deferred, java_unresolved):
+    callers = {item.get("caller") for item in java_deferred if item.get("caller")}
+    receiver_types = {
+        target.rsplit(".", 1)[0]
+        for item in java_deferred
+        for target in item.get("dispatch_targets") or []
+        if "." in target
+    }
+    receiver_types.update(
+        item.get("receiver_type")
+        for item in java_deferred
+        if item.get("receiver_type")
+    )
+    receiver_types.update(
+        item.get("name", "").removeprefix("new ")
+        for item in java_deferred
+        if item.get("kind") == "anonymous_class"
+        and item.get("name", "").startswith("new ")
+    )
+    receiver_types.update(
+        item.get("receiver_type")
+        for item in java_unresolved
+        if item.get("caller") in callers and item.get("receiver_type")
+    )
+    return receiver_types
+
+
+def sink_relevant_deferred_records(
+    java_deferred,
+    sink_dead_ends,
+    opaque_sink_dead_ends,
+    opaque_receiver_types,
+    deferred_types,
+    opaque_dispatch_names,
+):
     relevant = []
     for item in java_deferred:
         dispatch_targets = set(item.get("dispatch_targets") or [])
-        if opaque_sink_dead_ends:
+        type_match = bool(opaque_receiver_types.intersection(deferred_types))
+        synthetic_initializer = item.get("caller", "").endswith((".<init>", ".<clinit>"))
+        if opaque_sink_dead_ends and (
+            type_match
+            or synthetic_initializer
+            or not opaque_receiver_types
+            or opaque_dispatch_names
+        ):
             relevant.append(item)
             continue
         if dispatch_targets and dispatch_targets.intersection(sink_dead_ends):
@@ -335,12 +376,29 @@ def check_indirect_impact(
         for item in java_graph.get("coverage", {}).get("unevaluated", [])
         if item.get("kind") == "unresolved" and item.get("caller")
     }
+    java_unresolved = [
+        item
+        for item in java_graph.get("coverage", {}).get("unevaluated", [])
+        if item.get("kind") == "unresolved"
+    ]
     sink_dead_ends = sink_reachable_bodyless_functions(
         sinks.get("sinks", []), adjacency, java_bodyless
     )
     opaque_sink_dead_ends = reachable_functions_from_sinks(
         sinks.get("sinks", []), adjacency
     ).intersection(java_opaque_dead_ends)
+    opaque_receiver_types = {
+        item.get("receiver_type")
+        for item in java_unresolved
+        if item.get("caller") in opaque_sink_dead_ends and item.get("receiver_type")
+    }
+    opaque_dispatch_names = {
+        item.get("name", "").rsplit(".", 1)[-1]
+        for item in java_unresolved
+        if item.get("caller") in opaque_sink_dead_ends
+        and item.get("name", "").rsplit(".", 1)[-1] in {"find", "get", "lookup"}
+    }
+    deferred_types = deferred_receiver_types(java_deferred, java_unresolved)
     inferred_edges = set()
     if opaque_sink_dead_ends:
         lambda_bodyless = sorted(function for function in java_bodyless if adjacency.get(function))
@@ -352,11 +410,31 @@ def check_indirect_impact(
                     adjacency[caller].sort()
                     inferred_edges.add((caller, callee))
     relevant_java_deferred = sink_relevant_deferred_records(
-        java_deferred, sink_dead_ends, opaque_sink_dead_ends
+        java_deferred,
+        sink_dead_ends,
+        opaque_sink_dead_ends,
+        opaque_receiver_types,
+        deferred_types,
+        opaque_dispatch_names,
     )
     if relevant_java_deferred:
         errors.extend({"gate": "extract-java-callgraph", **item} for item in relevant_java_deferred)
-        relevant_dead_ends = sink_dead_ends.union(opaque_sink_dead_ends)
+        dispatch_targets = {
+            target
+            for item in relevant_java_deferred
+            for target in item.get("dispatch_targets") or []
+        }
+        relevant_dead_ends = {
+            dead_end
+            for dead_end in sink_dead_ends.union(opaque_sink_dead_ends)
+            if (
+                (dispatch_targets and dead_end in dispatch_targets)
+                or (
+                    dead_end in opaque_sink_dead_ends
+                    and (opaque_dispatch_names or not dispatch_targets)
+                )
+            )
+        }
         fail_closed_records.append(
             fail_closed(
                 "extract-java-callgraph reported sink-relevant deferred dispatch",
