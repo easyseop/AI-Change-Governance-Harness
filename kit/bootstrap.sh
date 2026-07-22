@@ -14,7 +14,7 @@ KIT="$(cd "$(dirname "$0")" && pwd)"
 G="$KIT/gates"
 CAPS="$KIT/policies/sensitive-capabilities.yaml"
 
-MODE="${1:?사용: ./bootstrap.sh {zones|functions} <repo> ...}"; shift
+MODE="${1:?사용: ./bootstrap.sh zones|functions <repo> ...}"; shift
 case "$MODE" in
   zones)     exec python3 "$G/bootstrap-sensitive-zones.py" "$@" ;;
   functions) exec python3 "$G/bootstrap-sensitive-functions.py" "$1" "$CAPS" "${@:2}" ;;
