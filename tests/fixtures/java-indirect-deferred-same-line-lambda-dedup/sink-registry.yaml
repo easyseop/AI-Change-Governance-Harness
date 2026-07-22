@@ -1,0 +1,3 @@
+defaults: {maturity: enforcing, hops: 5}
+sinks:
+  - {id: deferred_same_line_lambda_dedup_sink, function: Flow.sink, reason: conservative same-line lambda deduplication, owner: security-reviewer}

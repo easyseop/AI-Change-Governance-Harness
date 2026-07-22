@@ -1,0 +1,3 @@
+defaults: {maturity: enforcing, hops: 5}
+sinks:
+  - {id: deferred_assignment_jdk_wrapper_sink, function: Flow.sink, reason: JDK wrapper around deferred assignment, owner: security-reviewer}

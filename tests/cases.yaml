@@ -4196,6 +4196,66 @@ cases:
       errors_present: true
       deterministic_stdout: true
 
+  - name: java-indirect-deferred-assignment-inrepo-wrapper-fail-closed
+    group: adversarial
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/java-indirect-deferred-assignment-inrepo-wrapper
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones-empty.yaml
+      sink_registry: tests/fixtures/java-indirect-deferred-assignment-inrepo-wrapper/sink-registry.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      reviewer_required: [tool_owner]
+      fail_closed_present: true
+      errors_present: true
+      deterministic_stdout: true
+
+  - name: java-indirect-deferred-assignment-jdk-wrapper-fail-closed
+    group: adversarial
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/java-indirect-deferred-assignment-jdk-wrapper
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones-empty.yaml
+      sink_registry: tests/fixtures/java-indirect-deferred-assignment-jdk-wrapper/sink-registry.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      reviewer_required: [tool_owner]
+      fail_closed_present: true
+      errors_present: true
+      deterministic_stdout: true
+
+  - name: java-indirect-deferred-assignment-nested-jdk-fail-closed
+    group: adversarial
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/java-indirect-deferred-assignment-nested-jdk
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones-empty.yaml
+      sink_registry: tests/fixtures/java-indirect-deferred-assignment-nested-jdk/sink-registry.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      reviewer_required: [tool_owner]
+      fail_closed_present: true
+      errors_present: true
+      deterministic_stdout: true
+
+  - name: java-indirect-deferred-same-line-lambda-dedup-fail-closed
+    group: adversarial
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/java-indirect-deferred-same-line-lambda-dedup
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones-empty.yaml
+      sink_registry: tests/fixtures/java-indirect-deferred-same-line-lambda-dedup/sink-registry.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      reviewer_required: [tool_owner]
+      fail_closed_present: true
+      errors_present: true
+      deterministic_stdout: true
+
   - name: java-indirect-deferred-no-type-wire-stringbuilder-fail-closed
     group: adversarial
     gate: check-indirect-impact

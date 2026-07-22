@@ -1,0 +1,3 @@
+defaults: {maturity: enforcing, hops: 5}
+sinks:
+  - {id: deferred_assignment_inrepo_wrapper_sink, function: Flow.sink, reason: in-repo wrapper around deferred assignment, owner: security-reviewer}
