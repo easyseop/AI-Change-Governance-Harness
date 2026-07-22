@@ -311,7 +311,7 @@
 
 **의존·순서**: 022 → 023 → 024 → 025 (각 통과·머지 후 다음 착수, 기존 배치 규율).
 
-### TASK-026 ☐ 킷에 MVP-2 반영 — 역도달성 게이트 배선 (`kit/run.sh` 확장)  (Codex)  *(MVP-2 킷 스냅샷)*
+### TASK-026 ☑ 킷에 MVP-2 반영 — 역도달성 게이트 배선 (`kit/run.sh` 확장)  (Codex)  *(MVP-2 킷 스냅샷)*  — **통과·머지완료(D-058, 2026-07-16 · 킷 v0.2-mvp2)**
 > 🔴 **철저 개발 요구(형 지시)**: 킷은 배포·실사용의 최전선이라 **빠진 부분 없이 세부까지** 개발할 것. 각 AC 를 체크리스트로 자가검증하고, "될 것 같다"가 아니라 **fresh 적대입력으로 실제 돌려 확인**(§2B). 특히 (a) 새 게이트의 내부 의존(`extract-sinks`·`extract-callgraph` co-located) 이 킷에서 실제 해소되는지, (b) `check-indirect-impact` 가 **HAS_RANGE·정책 부재·sink-registry 오버라이드** 전 경로에서 올바로 배선됐는지, (c) 최종 verdict 조립에 간접영향층이 실제 반영돼 **누락 0** 인지를 한 줄씩 확인. 인계 전 `kit/selftest.sh`(러너+진입점 적대) 전량 green + 간접영향 rig-and-revert 필수.
 **배경**: MVP-2(TASK-022~025) 완결로 dev 게이트가 16종(신규 `extract-sinks`·`extract-callgraph`·`check-indirect-impact`)인데 배포 킷은 MVP-1.5 스냅샷(13종)에 머물러 있다. 형 계획("MVP 달성마다 킷 반영")대로 킷을 MVP-2 상태로 올린다. **★단순 sync 아님**: 새 `check-indirect-impact` 는 **판정 게이트**(exit 0=pass / 2=approval_required, "indirect sink impact")라 `run.sh` 에 **명시 배선**돼야 실제 작동한다. `run.sh` verdict 조립은 D-050 이후 **Codex 저자 파일**이라 이 확장도 Codex 몫(Claude 가 하면 상호견제 위반·분류기 차단 — 세션 중 2회 실증).
 **수용기준**:
@@ -468,7 +468,7 @@
 > **현행 코드 사실(2026-07-21 확인)**: `check-indirect-impact.py`·`extract-callgraph.py`·`extract-sinks.py` 는 **아직 `.py` 하드코딩**(언어중립 아님). `language-router` 는 `callgraph` 층을 알지만 `java.layers.callgraph=stub`. → X = **Java 콜그래프/sink 추출기 신설 + 간접영향 게이트 언어중립화**.
 > **불변 원칙**: 차단 절대 금지·승인요구 상한(MVP-2 L3 동일). Python 골든패스(간접영향 기존 픽스처) **무회귀 최우선**.
 
-### TASK-035 ☐ MVP-3 J 라인 잔손질 — 열린 관찰 7건 폐쇄  (Codex)  *(D-080·D-082 O-건 소진)*
+### TASK-035 ☑ MVP-3 J 라인 잔손질 — 열린 관찰 7건 폐쇄  (Codex)  *(D-080·D-082 O-건 소진)*  — **통과·머지완료(A-0040→A-0041·D-085, 2026-07-21)**
 **목적**: W1(프론트)로 같은 결함을 복제하기 전에, J 라인이 남긴 관찰 7건을 닫는다(소규모·Codex 1회전 목표).
 **수용기준**:
 1. **🔴 (D-080 O-1·위험 최대) 언어 카탈로그 지연 로드(lazy load)**: 변경에 `.java` 가 **하나도 없으면** Java 정책/카탈로그를 **로드하지 않는다** — 현재는 무조건 선로드라 **Java 정책 부재 시 순수 Python PR 이 exit 2 오작동**(D-079 실패모드 dev 경로 재진입). 검증: `.py` 만 바뀐 PR + Java 정책 부재 → **pass/exit 0**(회귀 픽스처 + 음성검증). 킷 preflight 도 동일 원칙 재확인.
