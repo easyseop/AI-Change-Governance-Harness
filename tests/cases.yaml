@@ -3044,6 +3044,150 @@ cases:
       fail_closed_present: false
       errors_present: false
 
+  - name: java-sink-registration
+    group: adversarial
+    gate: extract-sinks
+    input:
+      repo: tests/fixtures/java-sinks/repo
+      sensitive_zones: tests/fixtures/java-sinks/sensitive-zones.yaml
+      sink_registry: tests/fixtures/java-sinks/sink-registry.yaml
+    expect:
+      exit_code: 0
+      sinks:
+        - id: frozen:FrozenLedger.settle
+          function: FrozenLedger.settle
+          source: frozen_zone
+          maturity: enforcing
+          hops: 1
+          owner: settlement-reviewer
+        - id: gov:Reports.download
+          function: Reports.download
+          source: gov_annotation
+          maturity: shadow
+          hops: 1
+          owner: security-reviewer
+        - id: java_registry
+          function: Reports.registryTarget
+          source: sink_registry
+          maturity: enforcing
+          hops: 2
+          owner: platform-reviewer
+      errors_present: false
+      deterministic_stdout: true
+
+  - name: parity-java-indirect-direct
+    group: adversarial
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/parity/java-indirect-direct
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones-empty.yaml
+      sink_registry: tests/fixtures/parity/java-indirect-direct/sink-registry.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      indirect_impact:
+        - sink_id: parity_sink
+          changed_function: Flow.helper
+          path: [Flow.sink, Flow.helper]
+          hops: 1
+          reviewer: parity-reviewer
+          maturity: enforcing
+      shadow_hits: []
+      reviewer_required: [parity-reviewer]
+      fail_closed_present: false
+      errors_present: false
+
+  - name: parity-python-indirect-direct
+    group: adversarial
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/parity/python-indirect-direct
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones-empty.yaml
+      sink_registry: tests/fixtures/parity/python-indirect-direct/sink-registry.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      indirect_impact:
+        - sink_id: parity_sink
+          changed_function: app.flow.helper
+          path: [app.flow.sink, app.flow.helper]
+          hops: 1
+          reviewer: parity-reviewer
+          maturity: enforcing
+      shadow_hits: []
+      reviewer_required: [parity-reviewer]
+      fail_closed_present: false
+      errors_present: false
+
+  - name: parity-java-indirect-unrelated
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/parity/java-indirect-unrelated
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones-empty.yaml
+      sink_registry: tests/fixtures/parity/java-indirect-unrelated/sink-registry.yaml
+    expect: &indirect_parity_pass
+      verdict: pass
+      exit_code: 0
+      indirect_impact: []
+      shadow_hits: []
+      reviewer_required: []
+      fail_closed_present: false
+      errors_present: false
+
+  - name: parity-python-indirect-unrelated
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/parity/python-indirect-unrelated
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones-empty.yaml
+      sink_registry: tests/fixtures/parity/python-indirect-unrelated/sink-registry.yaml
+    expect: *indirect_parity_pass
+
+  - name: parity-java-indirect-hop-boundary
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/parity/java-indirect-boundary
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones-empty.yaml
+      sink_registry: tests/fixtures/parity/java-indirect-boundary/sink-registry.yaml
+    expect: *indirect_parity_pass
+
+  - name: parity-python-indirect-hop-boundary
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/parity/python-indirect-boundary
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones-empty.yaml
+      sink_registry: tests/fixtures/parity/python-indirect-boundary/sink-registry.yaml
+    expect: *indirect_parity_pass
+
+  - name: java-indirect-anonymous-fail-closed
+    group: adversarial
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/java-indirect-anonymous
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones-empty.yaml
+      sink_registry: tests/fixtures/java-indirect-anonymous/sink-registry.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      indirect_impact: []
+      shadow_hits: []
+      reviewer_required: [tool_owner]
+      fail_closed_present: true
+      errors_present: true
+      coverage_unevaluated:
+        - caller: Flow.lambdaWire
+          kind: unresolved
+          name: new Ledger
+        - caller: Flow.run
+          kind: unresolved
+          name: new Ledger
+        - caller: Flow.wire
+          kind: anonymous_class
+          name: new Port
+        - caller: Flow.wire
+          kind: unresolved
+          name: new Ledger
+      deterministic_stdout: true
+
   - name: metamorphic-import-alias
     group: metamorphic
     gate: extract-python-capabilities

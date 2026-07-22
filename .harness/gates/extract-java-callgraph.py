@@ -348,7 +348,15 @@ def collect_calls(
             ) if owner_type else []
             for target in targets:
                 edges.add((method["id"], target, node_line(node), f"new {owner_type}"))
-            if owner_type and not targets:
+            anonymous_body = next(
+                (child for child in node.named_children if child.type == "class_body"),
+                None,
+            )
+            if anonymous_body is not None:
+                unresolved.add(
+                    (method["id"], "anonymous_class", f"new {owner_type}", node_line(node))
+                )
+            elif owner_type and not targets:
                 unresolved.add(
                     (method["id"], "unresolved", f"new {owner_type}", node_line(node))
                 )

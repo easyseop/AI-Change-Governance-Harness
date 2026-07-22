@@ -340,6 +340,8 @@ def case_command(case):
             f"{ROOT_DIR}/{data.get('sensitive_zones', 'policies/sensitive-zones.yaml')}",
             "--sink-registry",
             f"{ROOT_DIR}/{data['sink_registry']}",
+            "--language-routing",
+            f"{ROOT_DIR}/{data.get('language_routing', 'policies/language-routing.yaml')}",
             "--json",
         ]
 

@@ -27,6 +27,8 @@ def load_gate_module(filename, module_name):
 
 
 gov_gate = load_gate_module("extract-gov-annotations.py", "extract_gov_annotations_gate")
+java_inventory_gate = load_gate_module("extract-java-inventory.py", "extract_java_inventory_gate")
+function_gov_gate = load_gate_module("check-function-gov-level.py", "function_gov_level_gate")
 
 
 def normalize_path(path):
@@ -98,6 +100,15 @@ def iter_python_files(repo):
         dirnames[:] = sorted(name for name in dirnames if name != ".git")
         for filename in sorted(filenames):
             if filename.endswith(".py"):
+                absolute = Path(root) / filename
+                yield normalize_path(os.path.relpath(absolute, repo)), absolute
+
+
+def iter_java_files(repo):
+    for root, dirnames, filenames in os.walk(repo):
+        dirnames[:] = sorted(name for name in dirnames if name != ".git")
+        for filename in sorted(filenames):
+            if filename.endswith(".java"):
                 absolute = Path(root) / filename
                 yield normalize_path(os.path.relpath(absolute, repo)), absolute
 
@@ -179,6 +190,38 @@ def collect_repo_functions(repo):
     return functions, source_by_path, errors
 
 
+def collect_java_functions(repo):
+    functions = []
+    source_by_path = {}
+    errors = []
+    for relative_path, absolute_path in iter_java_files(repo):
+        try:
+            source = absolute_path.read_text(encoding="utf-8")
+            result = java_inventory_gate.extract_inventory(source, relative_path)
+            if result.get("parse_error"):
+                errors.append(
+                    {"error": "parse_error", "path": relative_path, "message": result["parse_error"]}
+                )
+                continue
+            source_by_path[relative_path] = source
+            for item in result.get("items", []):
+                if item.get("type") not in {"method", "constructor"}:
+                    continue
+                functions.append(
+                    {
+                        "path": relative_path,
+                        "name": item["name"],
+                        "function": item["name"],
+                        "line": item.get("start_line"),
+                        "type": item.get("type"),
+                        "annotations": item.get("annotations", []),
+                    }
+                )
+        except (OSError, UnicodeDecodeError, ImportError) as error:
+            errors.append({"error": "unreadable", "path": relative_path, "message": str(error)})
+    return functions, source_by_path, errors
+
+
 def sink_record(sink_id, function, source, path, name, line, reason, owner, maturity, hops):
     return {
         "id": sink_id,
@@ -225,6 +268,62 @@ def gov_sinks(source_by_path):
                         "errors": annotation.get("errors"),
                     }
                 )
+    return sinks, errors
+
+
+def java_gov_sinks(source_by_path):
+    sinks = []
+    errors = []
+    for path in sorted(source_by_path):
+        try:
+            nodes = function_gov_gate.java_annotation_nodes(source_by_path[path])
+        except (SyntaxError, ImportError, OSError) as error:
+            errors.append({"error": "java_gov_parse_error", "path": path, "message": str(error)})
+            continue
+        for node in nodes:
+            if node.get("type") not in {"method", "constructor"}:
+                continue
+            for annotation in node.get("annotations", []):
+                if function_gov_gate.simple_annotation_name(annotation.get("name")) != "Gov":
+                    continue
+                args, duplicates, positional = function_gov_gate.parse_java_annotation_args(
+                    annotation.get("text", "")
+                )
+                sink_values = [function_gov_gate.bool_literal_value(value) for value in args.get("sink", [])]
+                if "true" not in sink_values:
+                    continue
+                function = node["name"]
+                reasons = [function_gov_gate.string_literal_value(value) for value in args.get("reason", [])]
+                owners = [function_gov_gate.string_literal_value(value) for value in args.get("owner", [])]
+                sinks.append(
+                    sink_record(
+                        f"gov:{function}",
+                        function,
+                        "gov_annotation",
+                        path,
+                        node["name"],
+                        node.get("def_line"),
+                        next((value for value in reasons if value), None),
+                        next((value for value in owners if value), None),
+                        DEFAULT_MATURITY,
+                        DEFAULT_HOPS,
+                    )
+                )
+                annotation_errors = []
+                if positional:
+                    annotation_errors.append("positional")
+                if "sink" in duplicates:
+                    annotation_errors.append("duplicate_sink")
+                if any(value is None for value in sink_values):
+                    annotation_errors.append("unresolved_sink")
+                if annotation_errors:
+                    errors.append(
+                        {
+                            "error": "gov_annotation_error",
+                            "function": function,
+                            "errors": sorted(annotation_errors),
+                        }
+                    )
     return sinks, errors
 
 
@@ -341,16 +440,28 @@ def unique_sorted_sinks(sinks):
     return [unique[key] for key in sorted(unique)]
 
 
-def extract_sinks(repo, sensitive_zones, sink_registry):
+def extract_sinks(repo, sensitive_zones, sink_registry, languages=None):
     repo = os.path.abspath(repo)
-    functions, source_by_path, errors = collect_repo_functions(repo)
+    active = set(languages or {"python", "java"})
+    if "python" in active:
+        functions, source_by_path, errors = collect_repo_functions(repo)
+    else:
+        functions, source_by_path, errors = [], {}, []
+    if "java" in active:
+        java_functions, java_source_by_path, java_errors = collect_java_functions(repo)
+    else:
+        java_functions, java_source_by_path, java_errors = [], {}, []
+    functions.extend(java_functions)
+    errors.extend(java_errors)
     functions_by_name = {function["function"]: function for function in functions}
     policy = load_sensitive_zones(sensitive_zones)
 
     gov_records, gov_errors = gov_sinks(source_by_path)
+    java_gov_records, java_gov_errors = java_gov_sinks(java_source_by_path)
     registry_records, registry_errors = registry_sinks(sink_registry, functions_by_name)
-    sinks = gov_records + frozen_sinks(functions, policy) + registry_records
+    sinks = gov_records + java_gov_records + frozen_sinks(functions, policy) + registry_records
     errors.extend(gov_errors)
+    errors.extend(java_gov_errors)
     errors.extend(registry_errors)
 
     return {
@@ -375,7 +486,7 @@ def print_text(result):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Extract deterministic MVP-2 sink registrations from a Python repo."
+        description="Extract deterministic sink registrations from supported source languages."
     )
     parser.add_argument("repo", nargs="?", default=".", help="repository root to scan")
     parser.add_argument(
