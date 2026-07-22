@@ -5,6 +5,57 @@
 
 ---
 
+## TASK-041 A-0054 보정 재제출 재리뷰 (D-099) — 🔴 **보정요청** · 코드 브랜치 머지 계속 보류 (AC#5~#10 폐쇄 / R-4 신규 차단)
+
+**대상**: `codex/2026-07-22-task041-java-l3-noise` 델타 `52e59d4`(fix) + `1bb7972`(docs). **멱등성(D-098)**: `1f0c60b`·`0ed3c07` 재처리 금지. 실측은 격리 worktree 2개(`main`=8cfb9e2 ↔ 브랜치=1bb7972), fresh 입력은 전부 `tests/fixtures/` **밖**에서 생성해 게이트를 직접 호출(rigged 차단).
+
+### 델타 한 줄씩
+- **`extract-java-callgraph.py` `precise_receiver_type()` 신설(+18줄)** — `object_node is None`/`this` → 자기 owner · `object_creation_expression` → 기존 헬퍼 위임 · `identifier` → 바인딩 조회, 없으면 **대문자만** 정적수신자로 · `field_access` 이면서 `this.` 접두면 두 번째 토큰 바인딩 · **그 외 전부 `None`**. `receiver_type()` 은 **한 글자도 안 건드렸다** = A-0054 (a) 문언 준수(엣지 탐색의 넓힘 근거를 좁히면 엣지를 잃는다).
+- **`collect_calls()` unresolved 기록의 6번째 필드를 `owner_type` → `recorded_receiver_type` 으로 교체(+10줄)** — 이게 `coverage.unevaluated[].receiver_type` 의 출처가 된다.
+- **`extract_callgraph()` 말미 dedupe(+6줄)** — `item[:5]` 키, `not item[5]` 이면 **덮어쓴다** ⇒ 같은 5필드에 미상/유형 두 레코드가 생기면 **미상 쪽이 항상 이긴다**(보수 방향). set 순회 순서와 무관하게 수렴하는 구조 — 논리로도, `PYTHONHASHSEED` 4종 실측으로도 확인.
+- **`check-indirect-impact.py`**: `opaque_dispatch_names`(이름 화이트리스트) **통째 삭제** → `opaque_untyped_dispatch = any(caller ∈ 불투명폐쇄 and not receiver_type)` **존재 판정**으로 교체(전칭 `not opaque_receiver_types` 제거). `relevant_dead_ends` 조건에서 `opaque_dispatch_names` 의존을 걷어내고 `or dead_end in opaque_sink_dead_ends or not dispatch_targets` 로 단순화.
+- **`run-tests.sh` +4줄** — `detail` 이 `"deferred dispatch"` 를 담고 `dead_ends=` 로 **끝나면 FAIL** = 빈 dead-end 전역 불변식.
+- **`cases.yaml` +77줄(삭제 0)** · 픽스처 5세트(P4·P6·P7·P13·P15) · handoff·summaries.
+
+### 실증 (rig-and-revert 음성검증 — 전부 load-bearing)
+- **RIG-A** 존재→전칭 원복 ⇒ **P4·P6·P7 3건 단독 FAIL**. A-0054 가 지적한 **O-27(이 분기를 고정하는 케이스가 203 중 0개)** 이 정확히 폐쇄됐다.
+- **RIG-B** `precise_receiver_type` → `receiver_type` ⇒ **203/208, 4건 FAIL**(P7 + 레지스트리 3건).
+- **RIG-C** `relevant_dead_ends` 원복 ⇒ **193/208, 14건 FAIL** — 신설 불변식이 실제로 문다.
+- **RIG-D** dedupe 제거 ⇒ **205/208, 2건 FAIL**.
+- **AC#6 이름 비의존 확인**: 상수·계산·인자 **잔재 0**(`grep`), `find`→`resolve` 로 개명한 P15 픽스처가 RIG-A/RIG-B 양쪽에서 FAIL ⇒ 탐지가 이름이 아니라 **타입 미상 존재**에 걸려 있음이 실증됨.
+- **결정론 심화**: `PYTHONHASHSEED` 0/1/999/12345 로 추출기 md5 동일. 전 픽스처를 계측해 "같은 5필드 키 · 서로 다른 truthy 타입" 충돌 **0건**. 인위적 충돌(동일 라인 2중 for-each 섀도잉)을 만들어도 생존 레코드가 **미상 쪽**.
+
+### 🔴 R-4 — 차단 사유 (fresh 실증)
+존재 판정이 꺼지면 승격은 오로지 `type_match = opaque_receiver_types ∩ deferred_types` 에 달린다. 이건 **양쪽에서 독립적·불완전하게 추정된 타입 이름의 문자열 동등비교**인데, **근거가 없거나 어긋나면 "무관" 으로 단정**하고 레코드를 버린다 — 무흔적.
+- **Q20**(`Dispatcher.fire(){ task.run(); }` + `wire(){ d.task = () -> new Vault().transfer(); }` + `sink(){ d.fire(); }`) — **JDK 호출 0줄**인데 `main` 2 → 브랜치 **0**. deferred 레코드의 타입 근거가 **0**(`deferred_types=∅`). ⇒ **R-1 의 잔여가 아니라 별개 갈래.**
+- **Q12**(Q20+`rows.size()`) · **Q18**(2단 위임) 동일.
+- **Q11b/Q11**(`interface Task extends Runnable`, `Task` 로 등록 → `Runnable` 로 dispatch) — 타입이 **양쪽 다 정확한데** 상속관계 미모델링으로 불일치 ⇒ 드롭.
+- **대조군 11형태 전부 생존**(Q1 `this.holder.task.run()` · Q2 레지스트리 · Q4 getter→지역변수 · Q5 · Q6 직접 · Q7 캐스트 · Q8 배열 · Q10 대문자 지역변수 · Q13 컬렉션 · Q15 정적혼재 · Q17 세터주입) **+ 소음 폐쇄 생존**(N4·Q9 `pass`) ⇒ 탐지가 통째로 죽은 게 아니라 **위임/서브인터페이스 관용구만 정확히 뚫린다.**
+
+**§2B 필수질문 = 예.** `A.field = () -> …` 후 위임 발사는 리스너/핸들러/디스패처의 **가장 흔한 Java 관용구**이고, 민감 sink 로 가는 실재 경로가 신호 없이 사라진다 ⇒ 비차단 금지.
+
+**⚠️ 리뷰어 자기정정 7회째** — R-4 는 `1f0c60b` 시점부터 있었고(`0ed3c07` 워크트리에서 직접 재현), A-0054 에서 내가 **all/any 축만 rig 하고 놓쳤다**. Codex 귀책 아님. 브랜치가 아직 `main` 에 없으므로 지금 막는다(A-0051 R-3·R-4 선례).
+
+### 내가 짠다면 — 워크트리 프로토타입으로 실측
+**(a)** `record_has_type_evidence()` = `dispatch_targets` ∨ `receiver_type` ∨ `anonymous_class "new X"` ∨ **같은 caller 의 unresolved 가 타입을 갖는지**. 근거 0 이면 **보수 승격**. R-1 을 불투명 호출 쪽에서 전칭→존재로 고친 것의 **거울상**이다. 마지막 갈래가 **N4 를 지키는 판별자**: N4 는 `Flow.wire` 에 `consume`(`receiver_type: Flow`) 이 있어 근거 있음 → `pass` 유지 / Q20 은 `Flow.wire` 에 unresolved 가 **하나도 없어** 근거 0 → 승격. **정확히 갈린다.**
+**(b)** 추출기가 **이미 계산하는** `declaration_supertypes()` 를 JSON(`type_supers`)에 실어 `deferred_types` 를 **전이 폐포**로 확장.
+**측정표(원복 확인)**: (a) 단독 → Q20·Q12·Q18 복구, Q11 계열 미복구. **(a)+(b) → 5형태 전부 `main` 과 동일 복구 · N4·Q9 `pass` 유지 · 대조군 11형태 불변 · 스위트 207/208 유지(회귀 0)** ⇒ 소음↔탐지 트레이드오프가 아니라 **순수 개선**.
+
+### 하류 영향
+① **TASK-038(킷 sync)** 이 이 게이트를 그대로 스냅샷한다 ⇒ 지금 머지하면 **R-4 를 배포 킷에 싣는다**. 현행 킷은 Java L3 **미탑재**(= 구멍이 아니라 미탑재)이므로 **머지 전 sync 금지**를 유지·강화한다. ② **`java.layers.callgraph` `partial`→`supported`** 승격의 마지막 관문이 TASK-041 인데, 위임 관용구가 뚫린 채 `supported` 는 **under-claim 정면 위반**.
+
+### 무회귀·보수적 개발(§1)
+브랜치 **207/208** ↔ `main` **201/202**(유일 FAIL `tree-sitter-smoke` = 파서 미설치 · **양쪽 동일**) · 케이스 차집합 추가 7/제거 1(개명, D-098 수용분) · mutation PASS · `py_compile`·`diff --check` PASS · **parity 15/15** · `default` 120/121 `main` 동일(**Python 골든패스 무접촉**) · 전 입력 exit **0/2 뿐**. 3-dot 에 `kit/`·`policies/`·`docs/`·`templates/`·`AGENTS.md`·`TASKS.md`·Claude 소유 **0 바이트**. 무관 리팩터·기대값 약화 **0**. 커밋 §3 5절 2건 완비. `relevant_dead_ends` 는 `main`(전체 합집합) 대비 **항상 부분집합** ⇒ AC#7 확대가 O-22 를 되돌리지 않음(`java-indirect-relevant-dead-end-detail` 이 `dead_ends=Job.run` 만 단언·PASS).
+
+### 비차단 관찰
+- **🟡 O-29(신규)** `precise_receiver_type()` 의 `this.` 갈래가 `split(".",2)[1]` 로 **두 번째 토큰**만 본다 ⇒ `this.holder.task.run()` 을 **`Holder`** 로 확신(수신자 `this.holder.task` 는 `Runnable`). 접두 없는 `holder.task.run()`(=P7)은 `None` 으로 정확 — **`this.` 하나로 갈린다.** fresh Q1 에서 `main` `null` ↔ 브랜치 `Holder` 확인. 현재는 deferred 쪽도 같은 `Holder` 로 어긋나 `type_match` 가 우연히 성립해 판정 무영향이지만 **틀린 타입을 확신하는 자리**라 AC#12 폐포 도입 시 성질이 바뀔 수 있다. 폐쇄: `this.` 뒤 토큰이 **하나뿐일 때만** 조회, 체인이면 `None`.
+- **🟡 O-30(신규)** `List<String> rows` 바인딩이 **타입 인자** `String` 으로 누출 ⇒ `rows.size()` 의 `receiver_type` 이 `String`(N4 기대값에 그대로 박혀 있다). `bindings` 구성 단계 문제라 R-4 와 별개. 판정 무영향이나 증적 사실성 문제.
+- **🟡 O-22 잔여** detail 이 레코드 1줄 합산이라 `dispatch_targets` 가 전 레코드 합집합 ⇒ "레코드별" 은 구조적 근사. 과대열거 방향 + `main` 부분집합이라 비차단(D-098 판단 유지).
+- **~~O-27~~ 폐쇄**(AC#5b 음성검증 3건) · **~~O-28~~ 폐쇄**(AC#9). O-13·O-3·O-15·O-16 이월.
+- **잔티**: 재제출 전 `origin/main` 머지 **미이행 10회째**(collab-protocol §5.1). 이번엔 충돌 없었으나 관행화 요망.
+
+**판정**: **보정요청.** 코드 브랜치 머지 보류, 리뷰 기록만 `main` 머지(D-007). 상세 `collab/answers/A-0055.md`.
+
 ## TASK-022b R-1 재리뷰 (D-050) — 보정 재제출 **통과** · Claude main 머지 (TASK-022b 완결·킷 v0 수용)
 
 **대상**: `claude/2026-07-15-kit-draft` 보정 델타 `f1bf533`(fix) + `39c2285`(docs). 멱등성(D-049): `00bde19`·`88a7d4e` 재처리 금지 — 통과분(판정 조립·우선순위·--policies·스냅샷 충실성)은 재론 없음, 델타만 재리뷰.

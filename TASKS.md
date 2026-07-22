@@ -652,8 +652,27 @@
 9. **기록 정정 (O-28)**: handoff·summaries 의 *"타입 미상·불투명 조회·합성 초기화는 보수 판정을 유지한다"* 는 구현과 다르다(전칭/존재 혼동). 실동작에 맞게 정정.
 10. **무회귀(보정분)**: 스위트 전량 · `mutation-check.sh` · 결정론 md5 3회 · Python 골든패스 불변 · **exit `0`/`2` 뿐** · **`kit/`·`policies/`·`docs/`·`templates/`·Claude 소유 무접촉**. 재제출 전 **`origin/main` 머지**(collab-protocol §5.1 — 미동기화 9회째).
 
-**의존**: TASK-040 종결(D-097) ⇒ 착수 가능. **TASK-038(킷 sync)과 순서 무관** — 킷은 D-097 기준 착수 가능이며 O-14 는 README 에 **소음 특성 명시**로 정직하게 고지하면 된다. **단 D-098 이후: TASK-041 이 머지되기 전에는 sync 하지 말 것** — 지금 스냅샷하면 R-1·R-2 를 배포 킷에 싣는다(현행 킷은 Java L3 **미탑재** = 구멍이 아니라 미탑재).
-**통과 시**: `java.layers.callgraph` `partial`→`supported` 승격 재검토(Claude · D-076·D-097·**D-098** — **AC#1 + AC#5 + AC#6 + AC#7** + O-19 폐쇄가 조건).
+**🔴 보정 지시 (D-099 · A-0055 — `52e59d4`·`1bb7972` 재리뷰 결과 · AC#5~#10 은 전부 폐쇄 확인, 재작업 불필요)**
+**새 태스크 아님 — `codex/2026-07-22-task041-java-l3-noise` 에 보정 커밋만 재제출.** 아래 2건은 리뷰어가 워크트리에 직접 패치해 **탐지축·소음축을 동시에 실측**한 뒤 확정했다(측정표는 A-0055 §3).
+**⚠️ 이건 이번 보정 델타가 만든 결함이 아니다** — AC#1(O-14) 정밀화의 잔여로 `1f0c60b` 시점부터 있었고 **A-0054 가 all/any 축만 rig 하고 놓쳤다**(리뷰어 자기정정 7회째). Codex 귀책 아님. 브랜치가 아직 `main` 에 없으므로 지금 막는다.
+
+11. **🔴 (R-4a · 차단 · 흔적 없는 과소탐) 타입 근거가 *아예 없는* deferred 레코드는 보수 승격** — 존재 판정(AC#5b)이 꺼지면 승격은 오로지 `type_match = opaque_receiver_types ∩ deferred_types` 에 달리는데, 이건 양쪽에서 **독립적·불완전하게 추정된 타입 이름의 문자열 동등비교**다. **근거가 0 인데 "불일치=무관" 으로 단정**해 레코드를 통째로 버린다(`errors:[]`·`fail_closed:[]`·`indirect_impact:[]` **완전 무흔적**). **R-1 을 불투명 호출 쪽에서 전칭→존재로 고친 것의 거울상**이 deferred 쪽에 그대로 남아 있다.
+    - **fresh 실증(`main` 2 → 브랜치 0)** — **Q20**: `class Dispatcher { Runnable task; void fire(){ task.run(); } }` + `Flow.wire(){ d.task = () -> new Vault().transfer(); }` + `Flow.sink(){ d.fire(); }`. **JDK 호출이 한 줄도 없다** ⇒ R-1 의 잔여가 아니라 **별개 갈래**. **Q12**(Q20 + `rows.size()`) · **Q18**(2단 위임 `Flow.sink → Outer.go → Inner.fire → task.run()`) 동일. 셋 다 deferred 레코드가 `receiver_type` 없음 · `dispatch_targets` 빈값 · caller 에 unresolved 없음 ⇒ `deferred_types = ∅`.
+    - **`A.field = () -> …` 로 남의 객체에 콜백을 꽂고 그 객체가 위임 발사**하는 형태는 리스너/핸들러/디스패처의 **가장 흔한 Java 관용구**다.
+    - **수정 방향(리뷰어 실측)**: `record_has_type_evidence(item)` = `dispatch_targets` ∨ `receiver_type` ∨ `anonymous_class "new X"` ∨ **같은 caller 의 unresolved 가 `receiver_type` 을 갖는지**. 근거 0 이면 승격 조건에 `or not record_has_type_evidence(...)` 추가(기존 3분기 무개변). **마지막 갈래가 N4 를 지키는 판별자다** — N4 는 `Flow.wire` 에 `consume`(`receiver_type: Flow`) 이 있어 근거 있음 → `pass` 유지 / Q20 은 `Flow.wire` 에 unresolved 가 **하나도 없어** 근거 0 → 승격. **다른 구현을 택해도 좋으나 아래 측정표를 그대로 재현할 것.**
+    - **회귀 픽스처 3건 신설**(Q20·Q18·Q12 형태) — 전부 `verdict: approval_required`·`exit_code: 2`. **대조군 불변 단언**: `java-indirect-deferred-jdk-noise-pass`(N4) `pass` · Q9 형태(무관 `Audit` 람다) `pass` · Q17(세터 주입 `d.set(lambda)`) `approval_required`. **음성검증**: 이 분기를 죽이면 신규 3건 **단독 FAIL**.
+12. **🔴 (R-4b · 차단 · 흔적 없는 과소탐) deferred 타입을 리포 타입 계층 폐포로 대조** — 타입이 **양쪽 다 정확한데** 상속관계를 모델링하지 않아 문자열 불일치로 드롭된다.
+    - **fresh 실증(`main` 2 → 브랜치 0)** — **Q11b**: `interface Task extends Runnable { }` + `Task task; wire(){ task = () -> new Vault().transfer(); } sink(){ Runnable r = task; r.run(); }` (`deferred=Task` / `opaque={Runnable}`). **Q11** = Q11b + `rows.size()`. 소음 없이도 뚫린다.
+    - **수정 방향(리뷰어 실측)**: 추출기가 **이미 계산하는** `declaration_supertypes()`(`collect_declarations` 의 `supers`)를 JSON 에 `"type_supers": {simple: [simple_super, …]}` 로 싣고, 게이트에서 `deferred_types` 를 **전이 폐포**로 확장한 뒤 교집합.
+    - **회귀 픽스처 2건 신설**(Q11b·Q11 형태) — `approval_required`. **음성검증**: 폐포 확장을 죽이면 단독 FAIL. **N4·Q9 `pass` 불변 단언 필수**(폐포가 소음 폐쇄를 되돌리면 안 된다).
+    - **(a)AC#11 단독으로는 Q11 계열이, (b)AC#12 단독으로는 Q20 계열이 안 고쳐진다 ⇒ 둘 다 필요**(각각 단독 측정 확인).
+    - **🔴 리뷰어 측정표(재현 필수 · 원복 후 207/208 확인함)**: **(a)+(b) 적용 시** — Q20·Q12·Q18·Q11·Q11b **5형태 전부 `main` 과 동일 복구(2)** · **N4·Q9 `pass`(0) 유지 ⇒ O-14 소음 폐쇄가 살아 있다** · **대조군 11형태 불변(2)**: Q1(`this.holder.task.run()`)·Q2(레지스트리 `put/fetch`)·Q4(getter→지역변수)·Q5(P5)·Q6(직접 dispatch)·Q7(캐스트)·Q8(배열)·Q10(대문자 지역변수)·Q13(`List<Runnable>` add/get)·Q15(정적호출 혼재)·Q17(세터 주입) · **스위트 207/208 유지(회귀 0)** ⇒ 소음↔탐지 트레이드오프가 아니라 **순수 개선**.
+13. **무회귀(보정분)**: 스위트 전량 · `mutation-check.sh` · 결정론 md5 3회(**`PYTHONHASHSEED` 변주 권장** — set 순회 의존은 고정 시드로는 안 잡힌다) · Python 골든패스 불변 · **exit `0`/`2` 뿐** · **`kit/`·`policies/`·`docs/`·`templates/`·`AGENTS.md`·Claude 소유 무접촉**. 재제출 전 **`origin/main` 머지**(collab-protocol §5.1 — 미동기화 **10회째**).
+
+**비차단(차기 · 감점만)**: **O-29** `precise_receiver_type()` 의 `this.` 갈래가 `split(".",2)[1]` 로 두 번째 토큰만 봐서 `this.holder.task.run()` 을 **`Holder`** 로 확신(접두 없는 `holder.task.run()` 은 `None` 으로 정확 — **`this.` 하나로 갈린다**). 지금은 판정 무영향이나 **AC#12 폐포가 들어오면 성질이 바뀔 수 있으니** 같이 닫는 편이 안전 — `this.` 뒤 토큰이 하나뿐일 때만 조회, 체인이면 `None`. **O-30** `List<String> rows` 바인딩의 **타입 인자 누출**(`receiver_type: String`).
+
+**의존**: TASK-040 종결(D-097) ⇒ 착수 가능. **TASK-038(킷 sync)과 순서 무관** — 킷은 D-097 기준 착수 가능이며 O-14 는 README 에 **소음 특성 명시**로 정직하게 고지하면 된다. **단 D-098·D-099 이후: TASK-041 이 머지되기 전에는 sync 하지 말 것** — 지금 스냅샷하면 **R-4(위임 관용구 과소탐)** 를 배포 킷에 싣는다(현행 킷은 Java L3 **미탑재** = 구멍이 아니라 미탑재).
+**통과 시**: `java.layers.callgraph` `partial`→`supported` 승격 재검토(Claude · D-076·D-097·D-098·**D-099** — **AC#1 + AC#5 + AC#6 + AC#7 + AC#11 + AC#12** + O-19 폐쇄가 조건).
 
 ### TASK-038 ☐ 킷에 Java L3 + 잔손질 반영 (MVP-3 킷 스냅샷 갱신)  (Codex)  *(MVP-3 · X · 킷)*
 **배경**: TASK-035·036·037 로 dev 가 Java 전 계층(J1~J3 + L3) 완비되면 킷을 그 상태로 올린다(형 지시 "자바까지 하고 킷 업데이트"). TASK-026/028 킷 스냅샷 선례.
