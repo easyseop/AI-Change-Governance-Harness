@@ -1,0 +1,3 @@
+defaults: {maturity: enforcing, hops: 5}
+sinks:
+  - {id: deferred_wire_jdk_sink, function: Flow.sink, reason: delegated dispatch beside same-line JDK noise, owner: security-reviewer}

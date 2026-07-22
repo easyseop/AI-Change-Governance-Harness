@@ -1,0 +1,3 @@
+defaults: {maturity: enforcing, hops: 4}
+sinks:
+  - {id: sibling_interface_cast_sink, function: Flow.sink, reason: sibling interface dispatch through common supertype, owner: security-reviewer}

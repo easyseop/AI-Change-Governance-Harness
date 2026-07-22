@@ -1,0 +1,3 @@
+defaults: {maturity: enforcing, hops: 5}
+sinks:
+  - {id: deferred_wire_stringbuilder_sink, function: Flow.sink, reason: delegated dispatch beside unrelated invocation, owner: security-reviewer}

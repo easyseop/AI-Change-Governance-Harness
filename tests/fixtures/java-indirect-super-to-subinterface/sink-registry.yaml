@@ -1,0 +1,3 @@
+defaults: {maturity: enforcing, hops: 4}
+sinks:
+  - {id: super_to_subinterface_sink, function: Flow.sink, reason: deferred supertype narrowed before dispatch, owner: security-reviewer}

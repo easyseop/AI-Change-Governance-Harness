@@ -695,6 +695,18 @@ def collect_calls(
                     (method["id"], "unresolved", f"new {owner_type}", node_line(node), ())
                 )
         elif node.type == "lambda_expression":
+            enclosing_receiver_type = None
+            ancestor = node.parent
+            while ancestor is not None and ancestor != body:
+                if ancestor.type == "method_invocation":
+                    enclosing_receiver_type = precise_receiver_type(
+                        source_bytes,
+                        ancestor.child_by_field_name("object"),
+                        method["bindings"],
+                        method["owner"],
+                    )
+                    break
+                ancestor = ancestor.parent
             owner_type = assigned_target_type(source_bytes, node, method["bindings"])
             owner_from_invocation = False
             if not owner_type:
@@ -745,6 +757,7 @@ def collect_calls(
                             node_line(node),
                             tuple(dispatch_targets),
                             owner_type,
+                            enclosing_receiver_type,
                         )
                     )
             else:
@@ -756,6 +769,7 @@ def collect_calls(
                         node_line(node),
                         tuple(dispatch_targets),
                         owner_type,
+                        enclosing_receiver_type,
                     )
                 )
         elif node.type == "method_reference":
@@ -1064,7 +1078,19 @@ def extract_callgraph(repo):
     deduplicated = {}
     for item in unresolved:
         key = item[:5]
-        if key not in deduplicated or len(item) <= 5 or not item[5]:
+        receiver = item[5] if len(item) > 5 and item[5] else ""
+        enclosing = item[6] if len(item) > 6 and item[6] else ""
+        rank = (bool(receiver), not bool(enclosing), receiver, enclosing)
+        previous = deduplicated.get(key)
+        previous_receiver = previous[5] if previous and len(previous) > 5 and previous[5] else ""
+        previous_enclosing = previous[6] if previous and len(previous) > 6 and previous[6] else ""
+        previous_rank = (
+            bool(previous_receiver),
+            not bool(previous_enclosing),
+            previous_receiver,
+            previous_enclosing,
+        )
+        if previous is None or rank < previous_rank:
             deduplicated[key] = item
 
     unresolved_records = []
@@ -1077,6 +1103,7 @@ def extract_callgraph(repo):
             value[2],
             value[4],
             value[5] if len(value) > 5 and value[5] else "",
+            value[6] if len(value) > 6 and value[6] else "",
         ),
     ):
         caller, kind, name, line, dispatch_targets = item[:5]
@@ -1089,6 +1116,8 @@ def extract_callgraph(repo):
         }
         if len(item) > 5 and item[5]:
             record["receiver_type"] = item[5]
+        if len(item) > 6 and item[6]:
+            record["enclosing_invocation_receiver_type"] = item[6]
         unresolved_records.append(record)
     return {
         "gate": "extract-java-callgraph",
