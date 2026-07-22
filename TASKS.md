@@ -739,7 +739,7 @@
 **의존**: TASK-040 종결(D-097) ⇒ 착수 가능. **TASK-038(킷 sync)과 순서 무관** — 킷은 D-097 기준 착수 가능이며 O-14 는 README 에 **소음 특성 명시**로 정직하게 고지하면 된다. **단 D-098·D-099·D-100·D-101·D-102 이후: TASK-041 이 머지되기 전에는 sync 하지 말 것** — 지금 스냅샷하면 **R-4/R-5/R-6/R-7/R-8/R-9(위임·좁힘·등록 관용구·래핑 등록 과소탐)** 를 배포 킷에 싣는다. **D-102 재실측: 현행 킷 `kit/gates/*.py` 20개에 `extract-java-callgraph.py` 미탑재이고 킷 전체에 `java_deferred`·`enclosing_invocation_receiver_type`·`record_has_type_evidence` 0건** ⇒ **구멍이 아니라 미탑재**(run.sh 배선·verdict 조립·`--policies`·fail-closed·selftest 는 이 델타의 영향권 밖).
 **통과 시**: `java.layers.callgraph` `partial`→`supported` 승격 재검토(Claude · D-076·D-097·D-098·D-099·D-100·D-101·**D-102** — **AC#1 + AC#5 + AC#6 + AC#7 + AC#11 + AC#12 + AC#14 + AC#15 + AC#17① + AC#18 + AC#20** + **O-19·O-32·O-33** 폐쇄가 조건).
 
-### TASK-038 ☐ 킷에 Java L3 + 잔손질 반영 (MVP-3 킷 스냅샷 갱신)  (Codex)  *(MVP-3 · X · 킷)*
+### TASK-038 ☑ 킷에 Java L3 + 잔손질 반영 (MVP-3 킷 스냅샷 갱신)  (Codex)  *(MVP-3 · X · 킷)* — **완료 2026-07-22 (D-104 · 1회차 리뷰 통과·머지 · 킷 0.3.4-mvp3-java-l3)**
 **배경**: TASK-035·036·037 로 dev 가 Java 전 계층(J1~J3 + L3) 완비되면 킷을 그 상태로 올린다(형 지시 "자바까지 하고 킷 업데이트"). TASK-026/028 킷 스냅샷 선례.
 **수용기준**:
 1. `sync-from-dev.sh` → 신규 Java 콜그래프/sink 추출기 + 언어중립화된 `check-indirect-impact` + 정책이 킷에 반영(dev↔kit md5 동일·누락검증 통과·게이트 수 갱신).
