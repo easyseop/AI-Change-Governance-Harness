@@ -637,8 +637,23 @@
 2. **🟡 (O-22) `fail_closed` detail 의 개수/집합 불일치**: 개수는 `relevant_java_deferred` 인데 이름은 **sink 막다른 길 전체**를 연다 ⇒ 대상이 해소된 레코드에서는 무관한 이름이 섞인다(D-097 fresh probe: `dispatch_targets={Job.run2}` 인데 `dead_ends=Job.run2,Other.go`). **레코드별 관련 dead-end 만 열거**하도록 정리 + detail 단언 케이스 확장. 대상 불명 레코드(`dispatch_targets` 빈 값)는 **전체 열거가 정확**하므로 그대로 둘 것.
 3. **🟡 (O-23) enum 상수 본문 caller 표기**: `enum Reg { A { Task t = () -> …; } }` 의 caller 가 `Reg.<init>` 로 기록되나 실제로는 **클래스 초기화 시점**이고 익명 하위타입이 `Reg` 로 뭉개진다. 표기 정정 + 픽스처.
 4. **무회귀**: `tests/run-tests.sh` 전량 · `mutation-check.sh` · 결정론 · Python 골든패스 불변. **킷 무접촉**(킷 반영은 TASK-038).
-**의존**: TASK-040 종결(D-097) ⇒ 착수 가능. **TASK-038(킷 sync)과 순서 무관** — 킷은 D-097 기준 착수 가능이며 O-14 는 README 에 **소음 특성 명시**로 정직하게 고지하면 된다.
-**통과 시**: `java.layers.callgraph` `partial`→`supported` 승격 재검토(Claude · D-076·D-097 — AC#1(O-14) + O-19 폐쇄가 조건).
+
+**🔴 보정 지시 (D-098 · A-0054 — `1f0c60b` 리뷰 결과 · AC#1~#4 는 폐쇄 확인, 재작업 불필요)**
+**새 태스크 아님 — `codex/2026-07-22-task041-java-l3-noise` 에 보정 커밋만 재제출.** 아래 3건은 전부 리뷰어가 워크트리에 직접 패치해 **탐지축·소음축을 동시에 실측한 뒤** 확정했다(측정표는 A-0054 §6).
+
+5. **🔴 (R-1) 미상 수신자 = 존재(any) 판정으로 보수 승격** — 현행 `not opaque_receiver_types` 는 **전칭(all-미상)** 이라, 불투명 sink 폐쇄에 타입 붙는 호출이 **하나라도** 섞이면(`rows.size()` 한 줄로 충분) 분기가 죽고 **타입 못 붙는 진짜 dispatch 가 흔적 없이 드롭**된다. fresh 실증 **P4·P6·P7 = `main` `approval_required` → 브랜치 `pass`**(출력 `errors:[]`·`fail_closed:[]`·`indirect_impact:[]`), **대조군 P5 = P4 에서 `rows.size();` 한 줄만 삭제 → `approval_required` 유지.**
+   - **(a) 추출기**: `method_invocation` 의 `unresolved` 레코드 전용 `precise_receiver_type()` 신설 — **체인 수신자**(`field_access`·`method_invocation`·배열·캐스트)는 **`None`(미상)** 을 반환한다. **`receiver_type()` 자체는 절대 건드리지 말 것** — 엣지 탐색을 *넓히는* 근거라 좁히면 엣지를 잃는다. (현행은 `List<String>` → `"String"`(타입 인자 누출) · `holder.task.run()` → `"Holder"`(실제는 `Runnable`) 로 **틀린 타입을 확신한다**.)
+   - **(b) 게이트**: `not opaque_receiver_types` → **`opaque_untyped_dispatch`(존재 판정)** 로 교체.
+   - **(a)만·(b)만으로는 P7 또는 P4 가 안 고쳐진다 — 둘 다 필요.**
+   - **회귀 픽스처 P4·P6·P7 신설**(전부 `approval_required`) + **대조군 P5·P12 불변** + **N4 `pass` 불변**(소음 폐쇄를 되돌리지 말 것) + **음성검증**(존재-판정을 죽이면 P4·P7 단독 FAIL — **O-27**: 현재 이 분기를 고정하는 케이스가 203 중 **0개**다).
+6. **🔴 (R-2) 메서드 이름 화이트리스트 `{"find","get","lookup"}` 삭제** — 근거 없는 매직 상수이고, 게다가 `call_text` 가 `split("(",1)[0]` 로 잘리는 **파싱 아티팩트**에 얹혀 있다. fresh 실증 **P15 = 머지된 픽스처 `java-indirect-registry-lookup-method-reference-hop` 에서 `find`→`resolve` 한 단어만 바꿔 `main` `approval_required` → 브랜치 `pass`**(대조군 P16 = `find` 유지). ⇒ **탐지 범위가 팀의 명명 취향에 종속되고 우회가 자명하다.** AC#5 (a)+(b) 를 넣으면 이 상수는 **완전히 불필요**해진다(리뷰어 측정: 동시 제거해도 verdict/exit FAIL **0**). 상수·`opaque_dispatch_names` 계산·인자 전부 제거 + **P15 회귀 픽스처** + 기존 `java-indirect-registry-lookup-*` 2건 불변 + 음성검증.
+7. **🟠 (R-3) 불투명 분기로 승격했으면 그 dead-end 를 항상 열거** — 현행 `relevant_dead_ends` 는 불투명 dead-end 를 `dispatch_targets` 가 **빌 때만** 남겨, 레코드가 `dispatch_targets` 를 가진 채 불투명 분기로 승격되면 **승격의 실제 이유가 detail 에서 통째로 빠진다**. fresh **P13**: `main` `dead_ends=Flow.sink` → 브랜치 **`dead_ends=`(빈 값)** = **D-097 AC#14 가 닫은 O-25 증상의 재발**. `dispatch_targets` 유무와 무관하게 포함시키고, **"`fail_closed` 가 있는데 `dead_ends=` 가 비는 경우 없음"** 을 불변식 단언으로 고정 + P13 형태 픽스처 + 음성검증. AC#2 의 "레코드별 관련" 목표는 유지(무관 이름 혼입은 계속 배제).
+8. **구현 주의 — coverage 중복**: AC#5(a) 적용 시 `tasks.get(0).exec()` 처럼 체인 안팎 두 레코드의 앞 5필드가 같고 6번째만 달라져 `set` dedup 이 풀린다(리뷰어 프로토타입에서 `java-indirect-opaque-list-dispatch`·`…-hop-boundary` 가 **이 사유로만** FAIL — verdict 는 정상). `(caller, kind, name, line, dispatch_targets)` 로 dedupe 하되 **타입 미상 쪽을 남길 것**(보수 방향).
+9. **기록 정정 (O-28)**: handoff·summaries 의 *"타입 미상·불투명 조회·합성 초기화는 보수 판정을 유지한다"* 는 구현과 다르다(전칭/존재 혼동). 실동작에 맞게 정정.
+10. **무회귀(보정분)**: 스위트 전량 · `mutation-check.sh` · 결정론 md5 3회 · Python 골든패스 불변 · **exit `0`/`2` 뿐** · **`kit/`·`policies/`·`docs/`·`templates/`·Claude 소유 무접촉**. 재제출 전 **`origin/main` 머지**(collab-protocol §5.1 — 미동기화 9회째).
+
+**의존**: TASK-040 종결(D-097) ⇒ 착수 가능. **TASK-038(킷 sync)과 순서 무관** — 킷은 D-097 기준 착수 가능이며 O-14 는 README 에 **소음 특성 명시**로 정직하게 고지하면 된다. **단 D-098 이후: TASK-041 이 머지되기 전에는 sync 하지 말 것** — 지금 스냅샷하면 R-1·R-2 를 배포 킷에 싣는다(현행 킷은 Java L3 **미탑재** = 구멍이 아니라 미탑재).
+**통과 시**: `java.layers.callgraph` `partial`→`supported` 승격 재검토(Claude · D-076·D-097·**D-098** — **AC#1 + AC#5 + AC#6 + AC#7** + O-19 폐쇄가 조건).
 
 ### TASK-038 ☐ 킷에 Java L3 + 잔손질 반영 (MVP-3 킷 스냅샷 갱신)  (Codex)  *(MVP-3 · X · 킷)*
 **배경**: TASK-035·036·037 로 dev 가 Java 전 계층(J1~J3 + L3) 완비되면 킷을 그 상태로 올린다(형 지시 "자바까지 하고 킷 업데이트"). TASK-026/028 킷 스냅샷 선례.

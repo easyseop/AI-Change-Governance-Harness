@@ -2169,3 +2169,21 @@ parity 는 "정상 경로 등가"만이 아니라 **"실패 경로 등가"까지
 - **정책**: `partial` 유지 — 탐지·보호·정직성은 회복됐으나 **O-14 가 열린 채**라 `supported` 는 under-claim 위반. 승격 = **TASK-041** 후.
 - **킷**: **TASK-038 sync 차단 해제.** 신규 **TASK-041**(O-14 소음 + O-22 + O-23) 을 TASKS.md 에 신설.
 - **머지**: ✅ 코드 브랜치 `main` 머지(비민감 — 게이트 판정출력 + 테스트뿐, 선례 D-088·D-091·D-093~D-096) ⇒ H-XXXX 불필요.
+
+## 2026-07-22 — TASK-041 리뷰 (`1f0c60b`·`0ed3c07`) → 🔴 보정요청 · 머지 보류 (A-0054 · D-098)
+
+- **범위(멱등성)**: `7916a7a`(=`origin/main`) ↔ 브랜치 3-dot diff 전체. TASK-040 계열(`…661225f`·`0fb882b`)은 D-097 처리 완료 — 재리뷰 안 함.
+- **✅ AC#1(O-14)**: N4 소음 폐쇄 + load-bearing. `java-indirect-deferred-jdk-noise-pass` 신설(`adversarial`→`negative-corpus`). **RIG-1**(정밀화 4-분기 전체를 `if opaque_sink_dead_ends:` 로 원복) → **201/203 단독 FAIL**.
+- **✅ AC#2(O-22)**: **RIG-2** 단독 FAIL + **fresh P14**(`Alpha`/`Beta`/`Ledger`) — `main` `dead_ends=Alpha.fire,Beta.beam` → 브랜치 `Alpha.fire` ⇒ D-097 이 적은 정의 문장 그대로 재현.
+- **✅ AC#3(O-23)**: **RIG-3** 단독 FAIL + **fresh E3**(상수 2개) — `main` 둘 다 `Reg.<init>` 로 뭉갬 vs 브랜치 `Reg.A.<clinit>`·`Reg.B.<clinit>` **구분** = 표기 정정을 넘은 식별력 증가.
+- **✅ AC#4**: 브랜치 **202/203** ↔ `main` **201/202**(유일 FAIL `tree-sitter-smoke` 은 파서 미설치, 양쪽 동일 ⇒ 브랜치 귀책 아님) · mutation **PASS(353)** · md5 3회 동일 · `py_compile`·`diff --check` PASS · `parity 15/15` · Python 골든패스 무접촉 · 전 입력 exit **0/2 뿐**. Codex 신고 그대로 재현 — 과장 없음(O-28 제외).
+- **🔴 R-1 (차단 · 흔적 없는 과소탐)**: **소음을 만드는 그 조건이 탐지 fallback 을 끈다.** `not opaque_receiver_types` 가 **전칭(all-미상)** 이라 타입 붙는 호출이 하나라도 섞이면 분기 사망. **fresh P4·P6·P7 = `main` 2 → 브랜치 0**(출력 `errors:[]`·`fail_closed:[]`·`indirect_impact:[]` 완전 무흔적). **대조군 P5 = P4 에서 `rows.size();` 한 줄만 삭제 → 2 유지**, P12 2 유지 ⇒ **무관한 JDK 호출 한 줄이 판정을 뒤집는다.** §2B 필수질문 **예**.
+  - **근본원인**: `receiver_type()` 은 **탐색을 넓히려고** 만든 루트-식별자 추측 헬퍼다. 틀려도 예전엔 `unresolved` 로 안전하게 떨어졌는데, **좁히는 근거로 재사용하면서 오차의 안전 방향이 뒤집혔다**. 실측: `List<String>` → `"String"`(타입 인자 누출) · `holder.task.run()` → `"Holder"`(실제는 `Runnable`).
+- **🔴 R-2 (차단 · 이름 화이트리스트 종속)**: `{"find","get","lookup"}` 매직 상수. **RIG-4** → 199/203 3건 FAIL(1건은 `approval_required`→`pass`). **fresh P15 = 머지된 픽스처에서 `find`→`resolve` 한 단어만 바꿔 `main` 2 → 브랜치 0**, 대조군 P16 2 유지. 게다가 이 축은 `call_text` 가 `split("(",1)[0]` 로 잘리는 **파싱 아티팩트**에 얹혀 있다.
+- **🟠 R-3 (차단 · 닫힌 AC 회귀)**: `dispatch_targets` 를 가진 레코드가 불투명 분기로 승격되면 그 dead-end 가 detail 에서 빠진다. **fresh P13**: `main` `dead_ends=Flow.sink` → 브랜치 **`dead_ends=`(빈 값)** = **D-097 AC#14 가 닫은 O-25 재발**.
+- **🟡 O-27**: `synthetic_initializer`+`not opaque_receiver_types` **동시 rig**(단독은 서로 가림) → 200/203, FAIL 은 전자 몫 2건뿐 ⇒ **후자를 고정하는 케이스가 203 중 0개**. 실전 load-bearing(같은 rig 에서 **P5 2→0**) = **A-0051 R-2 와 같은 자리**.
+- **🟡 O-28**: handoff·summaries 의 *"타입 미상 … 보수 판정 유지"* 가 구현과 불일치(전칭/존재 혼동). 은폐 아님. 재제출 시 문구 정정.
+- **🔧 보정 방향(리뷰어 실측)**: (a) 레코드 전용 `precise_receiver_type()`(체인 = `None`, **`receiver_type()` 자체는 불변**) · (b) 존재-판정 `opaque_untyped_dispatch` · (c) 화이트리스트 삭제 · (d) 불투명 승격 시 dead-end 항상 열거 · (e) 5-필드 dedupe(미상 쪽 보존). **측정: 12형태 전부 `main` 복구 · N4 `pass` 유지(O-14 살아 있음) · O-22 케이스 유지 · 화이트리스트 동시 제거해도 verdict FAIL 0 · 잔여 FAIL 3건은 (d)·(e) 몫. (a)만·(b)만으로는 불충분 — 둘 다 필요.**
+- **🔴 자기정정**: AC#1 이 **"타입을 못 구하면 어떻게 하라"** 를 안 적어 미상 처리가 구현자 재량으로 남았고, 필수 검증축 ⑥ 에 **"소음과 동시에 존재하는"** 조합을 빠뜨렸다(= P4/P7). **교훈: 기존 헬퍼를 정밀화 근거로 재사용할 땐 그 헬퍼가 원래 어느 방향으로 틀렸는지 다시 따져라. 미상값 처리는 AC 에 못박는다(존재-판정 = 보수).**
+- **§1 통과**: `kit/`·`policies/`·`docs/`·`templates/`·`AGENTS.md`·`TASKS.md`·Claude 소유 **0 바이트** ⇒ **킷 심층리뷰(형 지시 ★★) 해당 없음**. 기대값 수정 2건은 AC 지시 정정 = 약화 아님. **잔티: `origin/main` 미동기화 재제출 9회째.**
+- **머지**: ❌ 코드 브랜치 보류. 리뷰 기록만 `main` 머지(D-007). 민감 변경 아님 ⇒ H-XXXX 불필요.
