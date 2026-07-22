@@ -2135,3 +2135,20 @@ parity 는 "정상 경로 등가"만이 아니라 **"실패 경로 등가"까지
 - **§1 통과**: 보정 델타 = 게이트 2줄(+4/−14, +1)·`cases.yaml`·픽스처 8세트·handoff·summaries **뿐**. `kit/`·`policies/`·`docs/`·`templates/`·`AGENTS.md`·Claude 소유 **무접촉** ⇒ **킷 심층리뷰 해당 없음**. 무관 리팩터 0. 기대값 약화 0(N4 는 지시 정정 = 강화).
 - **정책**: `partial` 유지 — 승격 재검토는 AC#9·#10 통과 후. **킷**: sync 계속 차단(놓침을 배포 킷에 싣지 않기 위해).
 - **머지**: 코드 브랜치 **보류**, 리뷰 기록만 `main`(D-007). **비민감**(게이트 로직+테스트) ⇒ H-XXXX 불필요.
+
+## 2026-07-22 — TASK-040 A-0051 보정 재제출 재리뷰 (`7daee0c`·`661225f`) → 🔴 보정요청 (A-0052 · D-096)
+
+- **범위·멱등성**: `4573b51`·`ea0191c`(A-0050) · `1164ce0`·`64e7777`(A-0051) 은 처리 완료 → **재리뷰 없음**. 대상은 `64e7777..661225f` 델타뿐. `fetch --prune` 후 미머지 codex 브랜치는 이 1개뿐.
+- **AC#9 ✅ 종결**: 불투명 막다른 길(`kind: unresolved` caller)을 `java_opaque_dead_ends` 로 분리 → 교집합 정밀화 **앞에서** 보수 승격. **논리 정합 확인** — 옛 `sink_dead_ends` = 신 `sink_dead_ends` ∪ `opaque_sink_dead_ends`, 후자가 비면 **정확히 동일**·비지 않으면 조기 반환이 선행 ⇒ 약해지는 갈래 없음. 불투명 집합을 **인접 변조 전에** 계산하는 순서도 옳다. **RIG-1 → 183/199, 15건 FAIL**. fresh **G1·G2·H1 + 신규 G1b(`Map.get(k).handle()`)·G1c(배열)** 전부 `main` 과 동일 복구, 대조군 G3·G4 불변, **F6 `pass` 유지**.
+- **AC#10 ⚠️ 조건부(기능 충족)**: `owner_from_invocation` 으로 인자전달 람다/`::` 레코드 유지 + 불투명→람다 `bodyless` 보수 인접. fresh **G6 복구**(카드 `path: [Flow.sink, Task.exec, Vault.transfer]`), 신규 **G6c(익명 클래스)·P3(지역변수 람다)** 는 **`main` 이 `pass` 인데 브랜치 `approval_required` = 강화**. **RIG-2 단독 FAIL · RIG-3 2건 FAIL**. **O-21 부수 해소**.
+- **AC#11 ✅ 종결**: `modifiers` 자식 중 **텍스트가 정확히 `static` 인 키워드 노드** 판정. **fresh 5형태 전량 정답 — `main` 은 3형태 오답** ⇒ 순수 개선. **RIG-5 단독 FAIL**.
+- **무회귀 ✅**: 브랜치 **198/199** · `main` **179/180** — 유일 FAIL `tree-sitter-smoke` 은 리뷰 환경의 `tree_sitter_javascript`·`tree_sitter_typescript` 미설치 탓, **양쪽 동일 ⇒ 브랜치 귀책 아님**. **`comm -23 main.pass br.pass` = 차집합 0**(`main` 통과 케이스 전량 브랜치에서도 통과). mutation **PASS(345)** · 결정론 md5 3회 · 전 입력 exit **0/2 뿐**. **fresh 25입력에서 과소탐 회귀 0건** — 다이버전스 3건은 **강화 2 + 승인된 정밀화 1(F6)**. **성능**: 보수 인접이 카티션이라 **120×120 합성 repo 실측 → 0.2s(`main` 동일)**, 문제 없음. Codex 신고 실질 정확·과장 없음.
+- **🔴 R-5 (차단) — `::` 인자전달 갈래 회귀보호 0**: 쌍둥이 블록 2개 중 람다만 고정. **RIG-4**(`method_reference` 갈래 9줄 제거) → **198/199, FAIL 0건 = 스위트 완전 무발견.** 그런데 **`hops:1` 로 보수 인접을 굶긴 fresh 입력**(`reg.put("pay", vault::transfer)` + `mid(){reg.find(k).exec();}` + `sink(){mid(k);}`)은 `main`/브랜치 `approval_required`(2) ↔ **RIG-4 `pass`(0)·`fail_closed: []`·레코드 증발**. **A-0051 R-2 와 완전 동종** ⇒ §2B 상설 회귀 픽스처 원칙, 비차단 금지.
+- **🔴 R-6 (차단) — 관측 경로에 `inferred: true` 오표기**: `inferred_edges.add(...)` 가 `if callee not in adjacency[caller]:` **밖**이라 **이미 관측된 엣지도 추정으로 등록**. fresh **P6**(`sink(){ direct.exec(); reg.find("x").exec(); }`)에서 추출기 `edges` 가 두 홉을 **모두 실제 호출로** 기록하는데 카드는 `inferred: true` — **추정 홉 0개인 완전 관측 경로를 추정으로 표시** = AC#10 이 금지한 방향의 **거울상**. **수정 1줄**(리뷰어 실측: P6 표식 소멸 + 198/199 유지 + 진짜 `inferred: true` 보존). **표식 정확성도 회귀보호 0** — 올바른 구현과 버그가 **둘 다 198/199**.
+- **🟡 O-25 (신규)**: `fail_closed` detail 이 분리 후에도 `sink_dead_ends` 만 출력 ⇒ **주력 시나리오 전부에서 `dead_ends=` 빈 문자열**(`main` 은 `dead_ends=Flow.sink`/`Flow.mid`). `grep dead_ends tests/` **0건** = 단언 케이스 부재. O-22 와 함께 **AC#14**.
+- **🔵 자기정정 없음(6회 만에)**: A-0051 의 (a)·(b) 방향·7입력 표가 그대로 재현됐고 리뷰어 신규 fresh 형태에서도 과소탐 없음 — **지시가 처음으로 정확**. 다만 A-0051 §5 교훈이 **구현 쪽에서 재발**(쌍둥이 중 하나만 고정·표식 존재만 고정) ⇒ **교훈 갱신: 대칭 코드를 두 갈래로 추가하면 픽스처도 각 갈래를 *굶겨서* 단독 단언한다.**
+- **§1 통과**: 델타 = 게이트 2·`cases.yaml`·픽스처 6세트·`run-tests.sh`(`inferred` 통과 1블록, 순수 가산)·handoff·summaries **뿐**. `kit/`·`policies/`·`docs/`·`templates/`·`AGENTS.md`·Claude 소유 **3-dot diff 0 바이트** ⇒ **킷 심층리뷰(형 지시 ★★) 해당 없음**. 무관 리팩터 0. 기대값 약화 0(유일 변경은 `false→true` 강화). 브랜치 미동기화 재제출 6회째.
+- **정책**: `partial` 유지 — 탐지는 회복됐으나 **R-5(보호 0) 폐쇄 전 승격 불가**. 승격 조건을 **AC#9+AC#10+AC#12** 로 갱신(D-076).
+- **킷**: TASK-038 sync **계속 차단** — 근거가 "놓침 탑재" → **"보호 없는 탐지 탑재"** 로 완화됐으나 AC#12·#13 이 1줄/1픽스처라 먼저 닫는 편이 싸다.
+- **환경(형 참고 · 브랜치 무관)**: `tree_sitter_javascript`·`tree_sitter_typescript` 미설치로 `tree-sitter-smoke` 가 `main` 에서도 FAIL. `requirements.txt` 반영 또는 스킵 조건 권고.
+- **머지**: 코드 브랜치 **보류**, 리뷰 기록만 `main`(D-007). **비민감**(게이트 로직+테스트) ⇒ H-XXXX 불필요.
