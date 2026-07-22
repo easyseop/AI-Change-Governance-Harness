@@ -4009,6 +4009,72 @@ cases:
           name: new Vault
       deterministic_stdout: true
 
+  - name: java-indirect-registry-lookup-method-reference-hop-boundary
+    group: adversarial
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/java-indirect-registry-lookup-method-reference-hop
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones-empty.yaml
+      sink_registry: tests/fixtures/java-indirect-registry-lookup-method-reference-hop/sink-registry.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      indirect_impact: []
+      shadow_hits: []
+      reviewer_required: [tool_owner]
+      fail_closed_present: true
+      errors_present: true
+      coverage_unevaluated:
+        - caller: Flow.mid
+          kind: unresolved
+          name: reg.find
+        - caller: Flow.wire
+          kind: method_reference
+          name: vault::transfer
+      deterministic_stdout: true
+
+  - name: java-indirect-observed-path-not-inferred
+    group: adversarial
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/java-indirect-observed-path
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones-empty.yaml
+      sink_registry: tests/fixtures/java-indirect-observed-path/sink-registry.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      indirect_impact:
+        - sink_id: observed_path_sink
+          changed_function: Vault.transfer
+          path: [Flow.sink, Task.exec, Vault.transfer]
+          hops: 2
+          reviewer: security-reviewer
+          maturity: enforcing
+      shadow_hits: []
+      reviewer_required: [security-reviewer, tool_owner]
+      fail_closed_present: true
+      errors_present: true
+      deterministic_stdout: true
+
+  - name: java-indirect-opaque-dead-end-detail
+    group: adversarial
+    gate: check-indirect-impact
+    input:
+      fixture_dir: tests/fixtures/java-indirect-opaque-dead-end-detail
+      sensitive_zones: tests/fixtures/indirect-impact/sensitive-zones-empty.yaml
+      sink_registry: tests/fixtures/java-indirect-opaque-dead-end-detail/sink-registry.yaml
+    expect:
+      verdict: approval_required
+      exit_code: 2
+      indirect_impact: []
+      shadow_hits: []
+      reviewer_required: [tool_owner]
+      fail_closed_present: true
+      fail_closed_details:
+        - 1 deferred dispatch; dead_ends=Flow.sink
+      errors_present: true
+      deterministic_stdout: true
+
   - name: java-indirect-dispatch-parameter-control-pass
     group: negative-corpus
     gate: check-indirect-impact

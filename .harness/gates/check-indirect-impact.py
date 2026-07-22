@@ -350,16 +350,17 @@ def check_indirect_impact(
                 if callee not in adjacency[caller]:
                     adjacency[caller].append(callee)
                     adjacency[caller].sort()
-                inferred_edges.add((caller, callee))
+                    inferred_edges.add((caller, callee))
     relevant_java_deferred = sink_relevant_deferred_records(
         java_deferred, sink_dead_ends, opaque_sink_dead_ends
     )
     if relevant_java_deferred:
         errors.extend({"gate": "extract-java-callgraph", **item} for item in relevant_java_deferred)
+        relevant_dead_ends = sink_dead_ends.union(opaque_sink_dead_ends)
         fail_closed_records.append(
             fail_closed(
                 "extract-java-callgraph reported sink-relevant deferred dispatch",
-                f"{len(relevant_java_deferred)} deferred dispatch; dead_ends={','.join(sorted(sink_dead_ends))}",
+                f"{len(relevant_java_deferred)} deferred dispatch; dead_ends={','.join(sorted(relevant_dead_ends))}",
             )
         )
 

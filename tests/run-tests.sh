@@ -1154,6 +1154,13 @@ def validate_indirect_impact(case, result, exit_code):
         assert_equal(errors, "reviewer_required", result.get("reviewer_required"), expect["reviewer_required"])
     if "fail_closed_present" in expect:
         assert_equal(errors, "fail_closed_present", bool(result.get("fail_closed")), expect["fail_closed_present"])
+    if "fail_closed_details" in expect:
+        assert_equal(
+            errors,
+            "fail_closed_details",
+            [item.get("detail") for item in result.get("fail_closed", [])],
+            expect["fail_closed_details"],
+        )
     if "errors_present" in expect:
         assert_equal(errors, "errors_present", bool(result.get("errors")), expect["errors_present"])
     if "coverage_unevaluated" in expect:
