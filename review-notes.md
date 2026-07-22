@@ -2152,3 +2152,20 @@ parity 는 "정상 경로 등가"만이 아니라 **"실패 경로 등가"까지
 - **킷**: TASK-038 sync **계속 차단** — 근거가 "놓침 탑재" → **"보호 없는 탐지 탑재"** 로 완화됐으나 AC#12·#13 이 1줄/1픽스처라 먼저 닫는 편이 싸다.
 - **환경(형 참고 · 브랜치 무관)**: `tree_sitter_javascript`·`tree_sitter_typescript` 미설치로 `tree-sitter-smoke` 가 `main` 에서도 FAIL. `requirements.txt` 반영 또는 스킵 조건 권고.
 - **머지**: 코드 브랜치 **보류**, 리뷰 기록만 `main`(D-007). **비민감**(게이트 로직+테스트) ⇒ H-XXXX 불필요.
+
+---
+
+## 2026-07-22 — TASK-040 A-0052 보정 재제출 재리뷰 (`e6c975f`·`0fb882b`) → ✅ 리뷰 통과 · `main` 머지 (A-0053 · D-097)
+
+- **범위(멱등성)**: `661225f..0fb882b` 델타만. `4573b51`·`ea0191c`(A-0050) · `1164ce0`·`64e7777`(A-0051) · `7daee0c`·`661225f`(A-0052) 는 처리 완료 — 재리뷰 안 함.
+- **✅ AC#12 (R-5 종결)**: `hops: 1` 로 보수 인접을 **굶긴** 픽스처가 `method_reference` + `owner_from_invocation` 갈래를 단독으로 붙든다. **RIG-C**(그 9줄만 제거) → **200/202, 이 케이스 단독 FAIL** — A-0052 시점 동일 rig 는 **FAIL 0** 이었다. **쌍둥이 재확인 RIG-3**(람다 쪽 제거) → 3건 FAIL ⇒ **두 갈래 각각 고정**(A-0052 §6 교훈 이행). fresh 변형(`Bus.subscribe(String,Job)`+`ledger::post`, 이름·구조 전부 다름)도 `main` 과 동일 `approval_required`·동일 coverage 레코드.
+- **✅ AC#13 (R-6 종결)**: `inferred_edges.add` 1줄 들여쓰기 ⇒ **실제 삽입한 엣지만** 추정 등록. **깨보려 한 축 = 과잉억제**(진짜 추정 홉이 표식을 잃는가): ① 같은 `(caller,callee)` 가 관측이면 표식 없음이 정답이고 루프가 쌍당 1회만 방문하므로 오염 경로 없음 ② `path_has_inferred_edge` 가 **any** 라 부분추정도 유지. **fresh 3형태 실측** — **B**(관측+불투명 공존) 표식 소멸 ✅ / **C**(순수 추정)·**D**(관측 1홉+추정 1홉) `inferred: true` 유지 ✅, 셋 다 **verdict 불변**. **RIG-A** 단독 FAIL. `cases.yaml` 이 **존재 1 + 부재 1 = 양방향** 고정(`impact_summary()` 가 truthy 일 때만 키를 넣으므로 기대값 키 부재 = 표식 부재 단언).
+- **⚠️ AC#14 부분충족**: 빈 `dead_ends=` 회귀는 union 으로 폐쇄(**RIG-B 단독 FAIL** · `fail_closed_details` 단언 신설로 `grep dead_ends tests/`=0건 해소 · fresh A·H·C 에서 이름 복구). **정합성**: 불투명 집합이 비면 합집합 = 기존(동작 불변), 비지 않을 때만 이름 추가 ⇒ 새 부정확 없음. **그러나 O-22(개수=relevant/집합=전체)는 미이행** — fresh probe 로 잔존 확인. **§2B 필수질문 아니오**(과대열거 방향 · verdict 무영향 · `main`·직전 커밋과 동일 = 이 델타의 회귀 아님) ⇒ 비차단 이월.
+- **🟡 O-26 (신규)**: `summaries` 가 "O-22 를 닫았다" 고 과장. `handoff-log` 본문은 정확 ⇒ 은폐 아님. **교훈: 관찰 ID 를 "닫았다" 고 쓸 때는 그 ID 의 정의 문장이 그대로 재현되는지 확인할 것** — ID 는 세션을 건너 인용되므로 요약문 과장이 다음 세션의 오판이 된다. 기록은 A-0053·D-097·TASKS.md 로 정정.
+- **무회귀·정직성**: 브랜치 **201/202** · `main` **179/180**(유일 FAIL `tree-sitter-smoke` 은 리뷰·Codex 환경 공통 파서 미설치 ⇒ 브랜치 귀책 아님) · **`comm` 차집합 0** · mutation **PASS(351)** · fresh 8케이스 md5 3회 동일 · 전 입력 exit **0/2 뿐** · `parity 15/15`·`default` `main` 동일 · **선행 RIG-1 재확인 → 17건 FAIL**(기존 보호 무약화). **Codex 신고 그대로 재현 — 과장 없음**(O-26 문장 1건 제외).
+- **§1 통과**: 3-dot diff 에 `kit/`·`policies/`·`docs/`·`templates/`·`AGENTS.md`·`TASKS.md`·Claude 소유 **0 바이트** ⇒ **킷 심층리뷰(형 지시 ★★) 해당 없음**(run.sh 배선·verdict 조립·sync·selftest·`--policies` 오버라이드가 이번 델타에 없음). 델타 = 게이트 **2줄** · `run-tests.sh` **+7줄** · `cases.yaml` **+66줄(삭제 0)** · 픽스처 3세트 · handoff · summaries **뿐**. 무관 리팩터 0, 기대값 약화 0. 커밋 §3 5절 완비. **잔티: 브랜치 미동기화 재제출 8회째**(handoff·summaries 충돌을 Claude 가 양측 보존으로 해소).
+- **내가 짠다면**: 엣지에 **출처 태그**(`source: observed|inferred`)를 다는 편이 더 정확하나, 현행 병합 규칙(**관측 우선**)이 **안전 방향**이고 7줄 vs 추출기 스키마 변경이라 **현행이 옳은 균형** — 리팩터 강요 안 함.
+- **하류(TASK-038 킷)**: `inferred` 는 **카드 렌더에 노출돼야** 의미가 있다 ⇒ 킷 README·`manifest.yaml` 에 표식의 뜻·O-14 소음·O-22 혼입 가능성을 명시할 것(AC 에 반영).
+- **정책**: `partial` 유지 — 탐지·보호·정직성은 회복됐으나 **O-14 가 열린 채**라 `supported` 는 under-claim 위반. 승격 = **TASK-041** 후.
+- **킷**: **TASK-038 sync 차단 해제.** 신규 **TASK-041**(O-14 소음 + O-22 + O-23) 을 TASKS.md 에 신설.
+- **머지**: ✅ 코드 브랜치 `main` 머지(비민감 — 게이트 판정출력 + 테스트뿐, 선례 D-088·D-091·D-093~D-096) ⇒ H-XXXX 불필요.

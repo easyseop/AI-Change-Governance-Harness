@@ -538,7 +538,7 @@
 
 **비차단 이월**: O-13(`nodes[].bodyless` 신규 출력 스키마 — 직접 단언 케이스 0, **TASK-038 킷 sync 시 노드 스키마 동반 필수**) · O-14(승격이 여전히 repo 전역 all-or-nothing — R-1 보정으로 판별식이 넓어지면 소음 재확대 가능, 차기 과제) · O-15(`Vault::new` 는 해소 대신 fail-closed = 안전한 방향, 결함 아님) · O-16(§1 잔티: `direct_field_bindings`→모듈레벨 승격이 호출부 1곳·신규 소비자 0 인 순수 리팩터).
 
-### TASK-040 ☐ Java L3 승격 정밀화 2차 + 잔여 정직성 갭 (Codex)  *(MVP-3 · X · Java L3-d)*
+### TASK-040 ☑ Java L3 승격 정밀화 2차 + 잔여 정직성 갭 (Codex)  *(MVP-3 · X · Java L3-d)*  — **종결(A-0053 · D-097)**
 **배경**: TASK-039 통과·머지(D-093) 후 A-0049 가 fresh 적대입력으로 확인한 **소음 재확대 1건 + 회귀보호 공백 1건 + 정직성 갭 2건**. 전부 **판정/정직성 계층**이라 **킷 스냅샷(TASK-038)보다 AC#1 을 먼저 처리 권고**.
 **수용기준**:
 1. **🟠 (A-0049 O-14) 승격 판별식의 소음 재확대 폐쇄**: `kind: unresolved` 는 **JDK 호출을 포함한 모든 미해소 호출**에 붙으므로(`extract-java-callgraph.py:525`), 현행 `sink_dead_ends` 는 사실상 **"sink 전방폐쇄가 외부 호출을 하나라도 한다"** 로 완화됐다. 실 Java repo 에선 거의 항상 성립 ⇒ **거의 모든 PR 이 `approval_required`** = TASK-039 AC#3 이 지목한 **경보 피로로 3층 무력화**가 재발한다.
@@ -615,10 +615,30 @@
     - `opaque_sink_dead_ends` 를 합쳐 출력 + **O-22**(개수는 relevant, 집합은 전체인 불일치)도 같은 1줄에서 함께 정리.
     - **`grep dead_ends tests/` = 0건** ⇒ detail 을 단언하는 케이스가 아예 없다. **detail 단언 케이스 1건 신설.**
 
-**비차단 관찰(감점만 · 차기)**: **~~O-21~~ 해소**(AC#10 이 fail-closed 경로를 되살려 `java-indirect-lambda-argument-fail-closed` 의 이름·내용이 다시 일치 — 기대값도 `fail_closed_present: true` 로 정정됨) · **O-22**(`fail_closed` detail 의 개수는 relevant, 집합은 전체인 불일치 — **O-25 와 함께 AC#14 에서 처리**) · **O-25**(→ AC#14) · **O-23** enum 상수 본문 caller 가 `Reg.<init>` 로 기록되나 실제로는 클래스 초기화 시점이고 익명 하위타입이 `Reg` 로 뭉개진다 · **O-13·O-3·O-15·O-16 이월**.
+**✅ 보정 재제출(`e6c975f`·`0fb882b`) 재리뷰 결과 = 리뷰 통과 · `main` 머지 (A-0053 · D-097) — TASK-040 종결, 재제출 불필요.**
+**✅ 닫힌 것**: **AC#12**(`hops: 1` 로 보수 인접을 **굶긴** 픽스처 `java-indirect-registry-lookup-method-reference-hop` — **RIG-C 단독 FAIL**. A-0052 시점 동일 rig 는 **FAIL 0** 이었으므로 회귀보호 0 → 단독 load-bearing 전환. **쌍둥이 재확인 RIG-3 → 3건 FAIL** ⇒ 두 갈래 각각 고정. fresh 변형도 `main` 과 동일 복구) · **AC#13**(`inferred_edges.add` 를 `if` 블록 안으로 1줄 이동 — **RIG-A 단독 FAIL** · **fresh B**(관측+불투명 공존)=표식 소멸 ✅ / **C**(순수 추정)·**D**(관측 1홉+추정 1홉 혼합)=`inferred: true` **유지** ✅ ⇒ **과잉억제 없음 실증** · `cases.yaml` 이 **존재 1 + 부재 1 = 양방향** 고정) · **무회귀**(201/202 · `comm` 차집합 0 · mutation **351** · 결정론 md5 3회 · 전 입력 exit 0/2 · **선행 RIG-1 재확인 17건 FAIL** = 기존 보호 무약화) · **§1 보수성**(킷·정책·docs·templates·`AGENTS.md`·Claude 소유 **3-dot 0 바이트**, `cases.yaml` 삭제 0줄).
+**⚠️ AC#14 는 주 증상만 폐쇄**: 빈 `dead_ends=` 회귀는 `sink_dead_ends.union(opaque_sink_dead_ends)` 로 닫혔고(**RIG-B 단독 FAIL** · `run-tests.sh` `fail_closed_details` 단언 + detail 직접 단언 케이스 신설 ⇒ `grep dead_ends tests/`=0건 해소), **O-22(개수=relevant / 집합=전체)는 미이행 → 이월**. fresh probe 로 잔존 확인(`dispatch_targets={Job.run2}` 인데 detail 은 `dead_ends=Job.run2,Other.go`). **§2B 필수질문 = 아니오**(방향이 **과대열거** · verdict 무영향 · `main`·직전 커밋과 동일 = 이 델타의 회귀 아님 · 대상 불명 레코드에서는 전체 열거가 오히려 정확) ⇒ 비차단.
+**🟡 O-26 (신규 · 기록 정정 완료)**: `summaries/2026-07-22.md` 가 *"O-25/O-22를 닫았다"* 고 적었으나 **O-22 는 닫히지 않았다**. `handoff-log.md` 본문은 정확(*"합집합을 이름으로 기록"*)하므로 은폐 아님 = 요약문 1문장 과장. **교훈: 관찰 ID 를 "닫았다" 고 쓸 때는 그 ID 의 정의 문장이 그대로 재현되는지 확인할 것** — ID 는 세션을 건너 인용되므로 요약문 과장이 다음 세션의 오판이 된다.
+**AC#1(O-14) 은 끝내 미충족 — 의도된 이월**(A-0050 §4·A-0051 AC#10 에서 명시). ⇒ **TASK-041**.
 
-**의존**: TASK-039 통과·머지(D-093) ⇒ 착수 가능. **🔴 AC#12·#13 은 TASK-038 보다 먼저** — D-096 기준 sync 차단 근거는 A-0051 의 *"놓침을 배포 킷에 싣는다"* 에서 **"보호 없는 탐지를 싣는다"** 로 완화됐다(과소탐 회귀는 AC#9·#10 으로 닫혔다). 다만 AC#12·#13 이 **1줄/1픽스처** 규모라 **먼저 닫고 sync 하는 편이 명백히 싸다.** TASK-038 이 README·`manifest.yaml` 에 **O-14 소음 특성을 명시**해야 하는 요구는 그대로 유효하다(O-14 는 닫히지 않은 채 남으므로).
-**통과 시**: `java.layers.callgraph` `partial`→`supported` 승격 재검토(Claude·D-076 — **AC#9+AC#10 폐쇄 + AC#12(회귀보호) 폐쇄**가 조건. D-096: 탐지는 회복됐으나 **보호 없는 탐지는 승격 근거가 못 된다**).
+**비차단 관찰(감점만 · 차기)**: **~~O-21~~ 해소**(AC#10 이 fail-closed 경로를 되살려 `java-indirect-lambda-argument-fail-closed` 의 이름·내용이 다시 일치) · **~~O-25~~ 해소**(AC#14 · dead_ends 이름 복구 + detail 단언 신설) · **O-22**(`fail_closed` detail 의 개수는 relevant, 집합은 전체 — **AC#14 에서 미이행, 이월**. 폐쇄 방향: 레코드별 관련 dead-end 만 열거) · **O-26**(요약문 과장 — 기록 정정으로 처리) · **O-23** enum 상수 본문 caller 가 `Reg.<init>` 로 기록되나 실제로는 클래스 초기화 시점이고 익명 하위타입이 `Reg` 로 뭉개진다 · **O-13·O-3·O-14·O-15·O-16 이월**.
+
+**의존**: TASK-039 통과·머지(D-093) ⇒ 착수 가능. **✅ TASK-038 sync 차단 해제(D-097)** — 차단 근거가 A-0051 *"놓침을 배포 킷에 싣는다"* → A-0052 *"보호 없는 탐지를 싣는다"* 로 완화됐고 **AC#12·#13 폐쇄로 모두 소멸**했다. TASK-038 이 README·`manifest.yaml` 에 **O-14 소음 특성을 명시**해야 하는 요구는 그대로 유효하다(O-14 는 닫히지 않은 채 남으므로) + **`inferred` 표식의 뜻 명시**(D-097 신규).
+**정책 결론(D-097)**: `java.layers.callgraph` **`partial` 유지.** D-093/D-076 의 승격 조건은 **AC#1(O-14) + O-19 폐쇄**인데 **O-14 가 열린 채**다. 탐지·회귀보호·표식 정직성은 전부 회복됐으나 **`supported` 는 under-claim 원칙 위반**(D-074 O-5·D-075) ⇒ **승격 재검토 = TASK-041(O-14) 폐쇄 후.**
+
+### TASK-041 ☐ Java L3 소음(O-14) 폐쇄 — 승격 판별식의 수신자 타입 대조 (Codex)  *(MVP-3 · X · Java L3-e)*
+**배경**: TASK-040 이 과소탐(R-1~R-6)을 전부 닫는 과정에서 **소음은 의도적으로 후퇴**시켰다(A-0050 §4·A-0051 AC#10 · D-094~D-097). 현행 판별식은 sink 전방폐쇄에 **`kind: unresolved` 가 하나라도** 있으면 지연 dispatch 를 전부 보수 승격하는데, `unresolved` 는 **JDK 호출 전부**에 붙으므로 실 Java repo 에선 거의 모든 PR 이 `approval_required` = **경보 피로로 3층 무력화**(TASK-039 AC#3 이 지목한 실패모드). **이것이 `java.layers.callgraph` `partial`→`supported` 승격의 마지막 관문**(D-076·D-097).
+**수용기준**:
+1. **🟠 (O-14) 소음 축 폐쇄 — 방향은 미실증이므로 착수 전 실측 필수**: 후보 방향 = **미해소 호출의 수신자 선언 타입** ↔ **지연 레코드의 대상 타입** 이 일치할 때만 그 caller 를 막다른 길로 계수. **N4**(sink 폐쇄에 `rows.size()` JDK 호출 1개 · 변경은 무관 파일) → `pass`, **동시에 G1·G2·H1·G6 및 F1~F8 은 `approval_required` 유지**가 목표.
+   - **🔴 리뷰어가 이미 배제한 오답**: **`caller` 축**(A-0050 AC#1 · 람다 생성 지점이 폐쇄 밖이라 `java-indirect-lambda-argument-fail-closed` 단독 FAIL) — 반복 금지.
+   - **🔴 착수 전 필수 fresh 검증축(탐지·소음을 같은 세트로 동시 실측)**: ① repo 인터페이스 직접대입 ② **인자전달** ③ **JDK 인터페이스**(`Runnable`·`Consumer`·`ExecutorService`) ④ **`::`**(repo 내/외) ⑤ **초기화 컨텍스트**(`<clinit>`/`<init>` 합성 caller = 그래프 노드 아님) ⑥ **불투명 dispatch 표준형**(`tasks.get(k).exec()`·`get().exec()`·`registry.find(k).handle()`) ⑦ 소음(무관 sink · sink 0개 · **N4**) ⑧ 다중 sink · `hops` 경계.
+   - **🔴 불변식(회귀로 고정)**: TASK-039·040 이 신설한 **Java 회귀 케이스 전량 판정 불변**(현행 `adversarial` 55건 + `negative-corpus` 8건) · Python 골든패스 불변 · **N4 를 `pass` 단언 케이스로 신설** · 음성검증(정밀화 제거 시 N4 단독 FAIL).
+   - **⚠️ 과소탐 금지가 우선(MVP-3 계약)**: 소음이 안 닫히면 **닫지 말고 이월**하라. 과소탐을 만드는 정밀화는 즉시 반려된다(D-092·D-094·D-095 선례 3회).
+2. **🟡 (O-22) `fail_closed` detail 의 개수/집합 불일치**: 개수는 `relevant_java_deferred` 인데 이름은 **sink 막다른 길 전체**를 연다 ⇒ 대상이 해소된 레코드에서는 무관한 이름이 섞인다(D-097 fresh probe: `dispatch_targets={Job.run2}` 인데 `dead_ends=Job.run2,Other.go`). **레코드별 관련 dead-end 만 열거**하도록 정리 + detail 단언 케이스 확장. 대상 불명 레코드(`dispatch_targets` 빈 값)는 **전체 열거가 정확**하므로 그대로 둘 것.
+3. **🟡 (O-23) enum 상수 본문 caller 표기**: `enum Reg { A { Task t = () -> …; } }` 의 caller 가 `Reg.<init>` 로 기록되나 실제로는 **클래스 초기화 시점**이고 익명 하위타입이 `Reg` 로 뭉개진다. 표기 정정 + 픽스처.
+4. **무회귀**: `tests/run-tests.sh` 전량 · `mutation-check.sh` · 결정론 · Python 골든패스 불변. **킷 무접촉**(킷 반영은 TASK-038).
+**의존**: TASK-040 종결(D-097) ⇒ 착수 가능. **TASK-038(킷 sync)과 순서 무관** — 킷은 D-097 기준 착수 가능이며 O-14 는 README 에 **소음 특성 명시**로 정직하게 고지하면 된다.
+**통과 시**: `java.layers.callgraph` `partial`→`supported` 승격 재검토(Claude · D-076·D-097 — AC#1(O-14) + O-19 폐쇄가 조건).
 
 ### TASK-038 ☐ 킷에 Java L3 + 잔손질 반영 (MVP-3 킷 스냅샷 갱신)  (Codex)  *(MVP-3 · X · 킷)*
 **배경**: TASK-035·036·037 로 dev 가 Java 전 계층(J1~J3 + L3) 완비되면 킷을 그 상태로 올린다(형 지시 "자바까지 하고 킷 업데이트"). TASK-026/028 킷 스냅샷 선례.
@@ -636,6 +656,7 @@
    - **진입점 케이스 2건**: ① 대상 repo 에 `policies/language-routing.yaml`(`adapters: {}`)을 심어도 **판정 무영향**(sink 상류 변경이 그대로 승인요구) ② `--policies` 로 준 디렉터리의 라우팅 정책이 실제로 쓰임. **음성검증**: 명시 전달을 제거하면 ①이 단독 FAIL.
    - 게이트 자체의 fail-closed(D-089 R-3 보정)는 **TASK-037 재제출에서 닫는다** — 이 AC 는 킷 배선만 책임진다(중복 방어).
 **의존**: TASK-037 통과·머지 완료(D-091) ⇒ 착수 가능. **단 AC#5 는 TASK-036/037 과 무관**하므로 먼저 처리해도 된다(권장 — 회귀 픽스처 공백 기간 단축). **🔴 순서 권고(D-093 갱신)**: TASK-039 가 판정 구멍(AC#1·#2)을 닫고 머지됐으므로 **sync 차단 사유는 해소**. 다만 **TASK-040 AC#1(소음 정밀화)을 먼저** 처리할 것을 권고한다 — 현 상태 그대로 스냅샷하면 실 Java repo 의 거의 모든 PR 이 `approval_required` 라 **경보 피로로 3층이 무력화**된다(A-0049 §3 N4/N5 실증). 순서를 바꾼다면 AC#3 의 README·`manifest.yaml` 에 **이 소음 특성**(sink 전방폐쇄가 외부 호출을 하나라도 하면 지연 dispatch 가 승인요구로 승격)을 함께 명시할 것. **AC#3 의 `partial` 표기는 D-093 에서도 유지** — `supported` 승격은 TASK-040 후.
+**🔴 착수 조건 갱신(D-097 · TASK-040 종결)**: **sync 차단 완전 해제 — 지금 착수 가능.** TASK-040 이 과소탐(R-1~R-6)과 회귀보호 공백을 전부 닫았으므로 킷이 스냅샷할 대상은 **탐지 + 회귀보호 + 정직한 표식** 3종이 갖춰진 상태다. 단 아래 4가지를 AC#3 에 포함할 것: ① README·`manifest.yaml` 에 **O-14 소음 특성** 명시(sink 전방폐쇄가 외부 호출을 하나라도 하면 지연 dispatch 가 승인요구로 승격 — **O-14 는 TASK-041 로 열린 채**) ② **`inferred` 표식의 뜻** 명시("보수 추정 홉 포함 — 실제 호출 관측 아님". 카드 렌더에 노출되지 않으면 무의미한 키다) ③ **`dead_ends=` 에 무관한 이름이 섞일 수 있음(O-22)** 한 줄 고지 ④ 정책은 **`partial` 로 동기화**(`supported` 금지 — D-097).
 
 ## MVP-3 공통 (Codex)
 - **🔴 파이썬 동등성(parity) = 최우선 합격기준**(형 지시): 각 J-태스크는 Python 대응층과 **동일 성능**을 실증해야 통과. **교차언어 등가 픽스처**(`tests/parity/`·py판+java판 동일 verdict 단언 + 음성검증)가 없으면 미완. 불완전성은 **항상 과탐(approval) 쪽으로 반올림 — 과소탐(놓침) 금지**(놓침 = parity 위반). 정의 = 설계 §1.5.
