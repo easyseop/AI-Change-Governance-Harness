@@ -2281,3 +2281,23 @@ parity 는 "정상 경로 등가"만이 아니라 **"실패 경로 등가"까지
 - **★★ 킷 심층리뷰(형 지시) — 해당 없음**: 브랜치 전체 3-dot diff `kit/` **0 바이트** + `kit/gates/*.py` **20개**에 `extract-java-callgraph.py` **부재** · 킷 전체 `java_deferred`·`enclosing_invocation_receiver_type` **0건** ⇒ 미탑재(구멍 아님). run.sh 배선·verdict 조립·`--policies`·fail-closed·selftest 는 영향권 밖. **TASK-038 sync 금지 유지.**
 - **🟡 신규**: **O-34** `precise_receiver_type(None) → 자기 클래스명` — R-7·R-9 를 둘 다 증폭한 근원값, AC#20 은 경계로 우회할 뿐. **O-35(방법론)** 음성검증이 원리적으로 불가능한 AC 를 쓰지 않도록 처방 단계 확인 + **계측 리그(RIG-D) 상설화**. **O-33 격상** — 다섯 계열(R-1·R-4·R-5·R-7·R-9)이 전부 같은 **무신호 경로**로 샜다 ⇒ 승격 차단조건에 추가.
 - **머지**: ❌ 코드 브랜치 보류. 리뷰 기록만 `main` 머지(D-007). 민감 변경 아님 ⇒ H-XXXX 불필요.
+
+## 2026-07-22 — TASK-038 킷 Java L3 스냅샷 (`35960c0`·`b8e519e`) → ✅ 리뷰 통과·머지 (D-104)
+
+- **범위(멱등성)**: `f8aa9c0..b8e519e` = 브랜치 `codex/2026-07-22-task038-java-l3-kit` 전체 2커밋. 격리 worktree `wt-038` + fresh 입력 전부 `kit/tests/` 밖(rigged 차단).
+- **✅ AC#1 (sync)**: 게이트 21종(+README·IR스키마 = 22파일) dev↔kit **md5 전량 동일** · 정책·템플릿 동일 · kit/tests = dev tests **완전 미러**(cases.yaml md5 동일·202케이스 차집합 0) · `sync-from-dev.sh` 재실행 **멱등**(worktree 변경 0) · 게이트 수 19→21 갱신(판정7+추출9+도구2+J0 2+J1 1 산식 검산 일치). 게이트 전부 **main 기리뷰본과 바이트 동일** ⇒ 게이트 내부 재리뷰 불요, 리뷰 초점 = 킷 배선·테스트.
+- **✅ AC#2 (배선)**: Java 간접영향이 기존 3층 배선으로 작동 — **F1**(fresh `Ledger.settleFunds→recompute`, 픽스처 밖 이름) 킷 spine 경유 `indirect_impact fresh_ledger_sink` 승인요구 exit 2. `--policies` 시 `POL` 재바인딩(run.sh L51-57)으로 라우팅 포함 전 정책 동반 — 코드 + **F3** 실측. 정책부재 preflight(`$LANGUAGE_ROUTING` 포함 6종) exit 2 — **F5** 실측. `HAS_RANGE=0` → 능력·간접·정책 3층 전부 range_required fail-safe exit 2 실측. **CWD 상대 기본값 하이재킹 잔여 경로 전수 감사**: 4개 spine 게이트 argparse 기본값 전부 명시 전달로 폐쇄(`--change-intent` 는 설계상 대상 repo 소유물 = 제외 정당).
+- **✅ AC#3 (정직 고지)**: `java.layers.callgraph` **`partial` 유지**(D-097·D-103 준수, supported 승격 없음) · O-14 소음 특성 · `inferred` = "보수 추정 홉, 관측 아님" · O-22 dead_ends 혼입 — README + manifest `coverage_limits` 양쪽 명시. "Java 간접영향 지원" 단정 표현 없음.
+- **✅ AC#4 (selftest·rig)**: `kit/selftest.sh` **exit 0 전량 green** — 러너 스위트 전량(내 환경 Python 3.11 + tree-sitter 0.26.0 이라 Codex 의 201/202 를 넘어 **smoke 포함 전량 PASS** = 더 강한 검증) · 진입점 **31/31** · 뮤테이션 **351 PASS**. Java 간접영향 rig-and-revert = F1 fresh + N1(하단).
+- **✅ AC#5 (G-1·G-2·G-3)**:
+  - **G-1**: **N2 rig**(try/except 제거 + V2 콜론예외 `boom: bad value: x`) → **ScannerError traceback 5줄 재출현** / 가드 有 대조군 → 고지 1줄·scanner 0줄 · **양쪽 exit 2 불변**. 스위트 rig **30/31, `evidence-scanner-error…` 단독 FAIL** (Codex 신고 재현).
+  - **G-2**: **F4 fresh**(stderr 혼입+exit 0) → "파싱 불가 — 원문 앞 6줄" 고지 + 원문 노출, verdict 는 게이트 exit 기반 불변. **N3 rig**(else 제거) → 고지 소실 = load-bearing.
+  - **G-3**: **N4 rig**(level= 제거) + fresh `urllib` repo → `level=protected` 소실/원본 복원. 렌더는 shadow 만이 아니라 3분류 전부에 실제 `level` 노출(게이트 record 에 `level` 상존 확인 = 정직성 확대, 결함 아님).
+- **✅ AC#6 (라우팅 하이재킹 폐쇄)**: **F2b fresh**(대상 repo base 에 라우팅 `adapters:{}`+빈 sink+빈 zones **3종** 심기) → 킷 정책이 이겨 `fresh_ledger_sink` 탐지 유지 exit 2. **F3(리뷰어 추가 판별축)**: override 라우팅에서 java 어댑터 제거 → `fail_closed language routing omitted changed supported files` = **override 파일이 실제 소비됨을 판별 방향으로 실증**(선적재 테스트보다 강함). **N1 rig**(배선 제거) → 정밀 탐지 소실 + 게이트 자체 fail-closed 가 2차 방어로 exit 2 유지(AC 의 "중복 방어" 설계 그대로) · 스위트 rig **28/31, 신규 2건+`language-routing-kit-policy-default` FAIL** (Codex 신고 재현).
+- **무회귀·재현성**: Codex 신고 수치 **전부 일치**(31/31·30/31·28/31·mutation 351) — 과장 없음. 환경 한계(host Python 3.9 smoke 불가)도 정직 고지였고 내 환경에서 그 갭까지 폐쇄 검증.
+- **§1 통과**: 접촉 = `kit/**` + handoff + summaries **뿐**. dev 게이트·정책·테스트 **0 바이트** · `TASKS.md`·Claude 소유 **0 바이트** · 무관 리팩터 0 · 커밋 §3 5절 완비 · 날짜 브랜치 규칙 준수.
+- **🟡 신규 비차단** (§2B 필수질문: 셋 다 탐지 손실·판정 변경 없음 = 거버넌스 구멍 아님):
+  - **O-36** 게이트 *실행 실패*(run_failed=1) 시 콘솔 이중 고지 — `분석 실패`(shell) + `파싱 불가`(trace 주입부) 가 같은 원문 6줄을 두 번 출력, 라벨도 부정확. 과잉 고지 방향이라 안전. 차기 정리(예: `elif run_failed != "1"`).
+  - **O-37** 능력 JSON 파싱 실패 시 감사카드 `coverage.not_checked` 에 노트 미기재(콘솔 고지만 추가됨) — 선재 갭. 카드가 감사 기록 원본이므로 **차기 킷 AC 가드 후보**: 파싱 실패 시에도 "capabilities trace unavailable: unparseable output" 노트 주입.
+  - **O-38** `java-indirect-routing-override` 케이스는 override 와 킷 기본 라우팅 내용이 같아 두 경로를 판별 못함(배선 자체는 rig 시 FAIL 로 지켜짐) — F3 방향(차별화된 override 라우팅) 케이스 추가 권고.
+- **머지**: ✅ **리뷰 통과 + 비민감**(킷 도구·콘솔·테스트·문서 — 정산·인증/인가·암호화·DB·infra 아님) ⇒ D-007 에 따라 Claude 가 `main` 머지. H-XXXX 불필요.
