@@ -25,7 +25,9 @@ classify_gate = load_gate_module(
     "classify-python-function-changes.py", "classify_python_function_changes_gate"
 )
 callgraph_gate = load_gate_module("extract-callgraph.py", "extract_callgraph_gate")
+java_callgraph_gate = load_gate_module("extract-java-callgraph.py", "extract_java_callgraph_gate")
 sinks_gate = load_gate_module("extract-sinks.py", "extract_sinks_gate")
+language_router_gate = load_gate_module("language-router.py", "language_router_gate")
 
 
 def normalize_path(path):
@@ -41,9 +43,11 @@ def module_name_for_path(path):
     return ".".join(parts)
 
 
-def full_function_name(path, local_name):
+def full_function_name(path, local_name, language="python"):
     if not local_name or local_name == "<module>":
         return None
+    if language == "java":
+        return local_name
     module = module_name_for_path(path)
     return f"{module}.{local_name}" if module else local_name
 
@@ -52,10 +56,11 @@ def changed_candidates_from_map(mapping):
     candidates = []
     for file_record in mapping.get("files", []):
         path = normalize_path(file_record.get("path", ""))
-        if not path.endswith(".py"):
+        language = file_record.get("language") or ("java" if path.endswith(".java") else "python")
+        if language not in {"python", "java"}:
             continue
         for function in file_record.get("touched_functions", []):
-            function_id = full_function_name(path, function.get("name"))
+            function_id = full_function_name(path, function.get("name"), language)
             if not function_id:
                 continue
             candidates.append(
@@ -64,6 +69,7 @@ def changed_candidates_from_map(mapping):
                     "path": path,
                     "name": function.get("name"),
                     "source": "map",
+                    "language": language,
                 }
             )
     return candidates
@@ -73,10 +79,11 @@ def changed_candidates_from_classification(classification):
     candidates = []
     for file_record in classification.get("files", []):
         path = normalize_path(file_record.get("path", ""))
-        if not path.endswith(".py") or file_record.get("fallback"):
+        language = file_record.get("language") or ("java" if path.endswith(".java") else "python")
+        if language not in {"python", "java"} or file_record.get("fallback"):
             continue
         for change in file_record.get("function_changes", []):
-            function_id = full_function_name(path, change.get("name"))
+            function_id = full_function_name(path, change.get("name"), language)
             if not function_id:
                 continue
             candidates.append(
@@ -85,6 +92,7 @@ def changed_candidates_from_classification(classification):
                     "path": path,
                     "name": change.get("name"),
                     "source": f"classify_{change.get('change_type')}",
+                    "language": language,
                 }
             )
     return candidates
@@ -93,7 +101,7 @@ def changed_candidates_from_classification(classification):
 def unique_candidates(candidates):
     unique = {}
     for candidate in candidates:
-        key = (candidate["function"], candidate["path"], candidate["name"])
+        key = (candidate["function"], candidate["path"], candidate["name"], candidate.get("language"))
         if key not in unique:
             unique[key] = dict(candidate)
             continue
@@ -132,8 +140,42 @@ def reachable_paths(adjacency, sink, max_hops):
     return paths
 
 
-def finding_for_sink(sink, changed, path):
-    return {
+def reachable_functions_from_sinks(sinks, adjacency):
+    reachable = set()
+    for sink in sinks:
+        start = sink.get("function")
+        paths = reachable_paths(adjacency, start, sink.get("hops", 1))
+        reachable.update(paths)
+        if start:
+            reachable.add(start)
+    return reachable
+
+
+def sink_reachable_bodyless_functions(sinks, adjacency, bodyless_functions):
+    return reachable_functions_from_sinks(sinks, adjacency).intersection(bodyless_functions)
+
+
+def sink_relevant_deferred_records(java_deferred, sink_dead_ends, opaque_sink_dead_ends):
+    relevant = []
+    for item in java_deferred:
+        dispatch_targets = set(item.get("dispatch_targets") or [])
+        if opaque_sink_dead_ends:
+            relevant.append(item)
+            continue
+        if dispatch_targets and dispatch_targets.intersection(sink_dead_ends):
+            relevant.append(item)
+            continue
+        if not dispatch_targets and sink_dead_ends:
+            relevant.append(item)
+    return relevant
+
+
+def path_has_inferred_edge(path, inferred_edges):
+    return any((caller, callee) in inferred_edges for caller, callee in zip(path, path[1:]))
+
+
+def finding_for_sink(sink, changed, path, inferred_edges=None):
+    finding = {
         "sink_id": sink.get("id"),
         "sink_function": sink.get("function"),
         "changed_function": changed.get("function"),
@@ -143,6 +185,9 @@ def finding_for_sink(sink, changed, path):
         "reason": sink.get("reason"),
         "maturity": sink.get("maturity", "shadow"),
     }
+    if inferred_edges and path_has_inferred_edge(path, inferred_edges):
+        finding["inferred"] = True
+    return finding
 
 
 def dedupe_findings(findings):
@@ -177,11 +222,50 @@ def fail_closed(reason, detail=None):
     return record
 
 
-def check_indirect_impact(rev_range, sensitive_zones, sink_registry, repo="."):
+def language_for_path(path):
+    if path.endswith(".py"):
+        return "python"
+    if path.endswith(".java"):
+        return "java"
+    return None
+
+
+def required_languages_from_routing(routing):
+    required = {}
+    for path in routing.get("changed_files", []):
+        language = language_for_path(normalize_path(path))
+        if language:
+            required.setdefault(language, []).append(normalize_path(path))
+    return {
+        language: sorted(paths)
+        for language, paths in sorted(required.items())
+    }
+
+
+def check_indirect_impact(
+    rev_range,
+    sensitive_zones,
+    sink_registry,
+    repo=".",
+    language_routing="policies/language-routing.yaml",
+):
+    routing = language_router_gate.build_result(rev_range, language_routing, repo)
+    active_languages = sorted(
+        {
+            record.get("adapter")
+            for record in routing.get("files", [])
+            if record.get("adapter") in {"python", "java"}
+        }
+    )
+    required_languages = required_languages_from_routing(routing)
     mapping = map_gate.map_diff_to_functions(rev_range, repo)
     classification = classify_gate.classify_python_function_changes(rev_range, repo)
-    callgraph = callgraph_gate.extract_callgraph(repo)
-    sinks = sinks_gate.extract_sinks(repo, sensitive_zones, sink_registry)
+    callgraphs = []
+    if "python" in active_languages:
+        callgraphs.append(("extract-callgraph", callgraph_gate.extract_callgraph(repo)))
+    if "java" in active_languages:
+        callgraphs.append(("extract-java-callgraph", java_callgraph_gate.extract_callgraph(repo)))
+    sinks = sinks_gate.extract_sinks(repo, sensitive_zones, sink_registry, active_languages)
 
     errors = []
     fail_closed_records = []
@@ -193,22 +277,92 @@ def check_indirect_impact(rev_range, sensitive_zones, sink_registry, repo="."):
             errors.append({"gate": gate_name, "error": result["error"]})
             fail_closed_records.append(fail_closed(f"{gate_name} failed", result["error"]))
 
-    for error in callgraph.get("errors", []):
-        errors.append({"gate": "extract-callgraph", **error})
-    if callgraph.get("errors"):
-        fail_closed_records.append(fail_closed("extract-callgraph reported errors"))
-
+    for gate_name, graph in callgraphs:
+        for error in graph.get("errors", []):
+            errors.append({"gate": gate_name, **error})
+        if graph.get("errors"):
+            fail_closed_records.append(fail_closed(f"{gate_name} reported errors"))
     for error in sinks.get("errors", []):
         errors.append({"gate": "extract-sinks", **error})
     if sinks.get("errors"):
         fail_closed_records.append(fail_closed("extract-sinks reported errors"))
+
+    routing_coverage = []
+    for language, paths in required_languages.items():
+        if language in active_languages:
+            continue
+        detail = f"{language}: {', '.join(paths)}"
+        errors.append(
+            {
+                "gate": "language-router",
+                "error": "language_routing_missing_adapter",
+                "language": language,
+                "paths": paths,
+            }
+        )
+        routing_coverage.append(
+            {
+                "caller": ",".join(paths),
+                "kind": "language_routing_missing_adapter",
+                "name": language,
+            }
+        )
+        fail_closed_records.append(
+            fail_closed("language routing omitted changed supported files", detail)
+        )
 
     changed_functions = unique_candidates(
         changed_candidates_from_map(mapping)
         + changed_candidates_from_classification(classification)
     )
     changed_by_id = {candidate["function"]: candidate for candidate in changed_functions}
-    adjacency = adjacency_from_edges(callgraph.get("edges", []))
+    adjacency = adjacency_from_edges(
+        [edge for _, graph in callgraphs for edge in graph.get("edges", [])]
+    )
+    java_graph = next((graph for name, graph in callgraphs if name == "extract-java-callgraph"), {})
+    java_deferred = [
+        item
+        for item in java_graph.get("coverage", {}).get("unevaluated", [])
+        if item.get("kind") in {"anonymous_class", "lambda_dispatch", "method_reference"}
+    ]
+    java_bodyless = {
+        node.get("id")
+        for node in java_graph.get("nodes", [])
+        if node.get("bodyless") and node.get("id")
+    }
+    java_opaque_dead_ends = {
+        item.get("caller")
+        for item in java_graph.get("coverage", {}).get("unevaluated", [])
+        if item.get("kind") == "unresolved" and item.get("caller")
+    }
+    sink_dead_ends = sink_reachable_bodyless_functions(
+        sinks.get("sinks", []), adjacency, java_bodyless
+    )
+    opaque_sink_dead_ends = reachable_functions_from_sinks(
+        sinks.get("sinks", []), adjacency
+    ).intersection(java_opaque_dead_ends)
+    inferred_edges = set()
+    if opaque_sink_dead_ends:
+        lambda_bodyless = sorted(function for function in java_bodyless if adjacency.get(function))
+        for caller in sorted(opaque_sink_dead_ends):
+            for callee in lambda_bodyless:
+                adjacency.setdefault(caller, [])
+                if callee not in adjacency[caller]:
+                    adjacency[caller].append(callee)
+                    adjacency[caller].sort()
+                    inferred_edges.add((caller, callee))
+    relevant_java_deferred = sink_relevant_deferred_records(
+        java_deferred, sink_dead_ends, opaque_sink_dead_ends
+    )
+    if relevant_java_deferred:
+        errors.extend({"gate": "extract-java-callgraph", **item} for item in relevant_java_deferred)
+        relevant_dead_ends = sink_dead_ends.union(opaque_sink_dead_ends)
+        fail_closed_records.append(
+            fail_closed(
+                "extract-java-callgraph reported sink-relevant deferred dispatch",
+                f"{len(relevant_java_deferred)} deferred dispatch; dead_ends={','.join(sorted(relevant_dead_ends))}",
+            )
+        )
 
     enforcing_findings = []
     shadow_findings = []
@@ -217,7 +371,12 @@ def check_indirect_impact(rev_range, sensitive_zones, sink_registry, repo="."):
         for function_id in sorted(changed_by_id):
             if function_id == sink.get("function") or function_id not in reachable:
                 continue
-            finding = finding_for_sink(sink, changed_by_id[function_id], reachable[function_id])
+            finding = finding_for_sink(
+                sink,
+                changed_by_id[function_id],
+                reachable[function_id],
+                inferred_edges,
+            )
             if sink.get("maturity", "shadow") == "shadow":
                 shadow_findings.append(finding)
             else:
@@ -248,11 +407,16 @@ def check_indirect_impact(rev_range, sensitive_zones, sink_registry, repo="."):
     return {
         "gate": "check-indirect-impact",
         "verdict": verdict,
+        "languages": active_languages,
         "changed_functions": changed_functions,
         "indirect_impact": indirect_impact,
         "shadow_hits": shadow_hits,
         "coverage": {
-            "unevaluated": callgraph.get("coverage", {}).get("unevaluated", []),
+            "unevaluated": sorted(
+                [item for _, graph in callgraphs for item in graph.get("coverage", {}).get("unevaluated", [])]
+                + routing_coverage,
+                key=lambda item: json.dumps(item, sort_keys=True),
+            ),
         },
         "fail_closed": fail_closed_records,
         "errors": errors,
@@ -284,7 +448,7 @@ def print_text(result):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Check changed Python functions for indirect impact on registered sinks."
+        description="Check changed functions for indirect impact on registered sinks."
     )
     parser.add_argument("diff_input", help="git diff ref range, for example <base>..<head>")
     parser.add_argument(
@@ -302,6 +466,11 @@ def main():
         default="policies/sink-registry.yaml",
         help="optional sink-registry policy path",
     )
+    parser.add_argument(
+        "--language-routing",
+        default="policies/language-routing.yaml",
+        help="language adapter routing policy path",
+    )
     parser.add_argument("--json", action="store_true", help="print structured JSON")
     args = parser.parse_args()
 
@@ -311,6 +480,7 @@ def main():
             args.sensitive_zones,
             args.sink_registry,
             args.repo,
+            args.language_routing,
         )
     except Exception as error:
         result = {

@@ -206,7 +206,10 @@ if result:
         ("shadow_capabilities", "shadow"),
     ):
         for item in result.get(key, []):
-            rendered.append(f"{level}: {item.get('path', '<unknown>')}::{item.get('id', '<unknown>')}")
+            rendered.append(
+                f"{level}: {item.get('path', '<unknown>')}::{item.get('id', '<unknown>')} "
+                f"level={item.get('level', level)}"
+            )
     for item in result.get("fail_closed", []):
         rendered.append(
             f"fail_closed: {item.get('path', '<unknown>')} {item.get('reason', 'analysis failed')}"
@@ -215,6 +218,14 @@ if result:
         print(f"    {line}")
     if len(rendered) > 8:
         print(f"    … 외 {len(rendered) - 8}건")
+else:
+    print("    능력 게이트 출력 파싱 불가 — 원문 앞 6줄:")
+    try:
+        raw_lines = Path(result_path).read_text(encoding="utf-8").splitlines()
+    except OSError:
+        raw_lines = []
+    for line in raw_lines[:6]:
+        print(f"    {line}")
 
 try:
     with open(card_path, "r", encoding="utf-8") as stream:
@@ -283,7 +294,8 @@ indirect_exit=0
 echo "▸ [3층] sink 간접영향 (등록 sink 의 N홉 의존함수 변경?)"
 if [ "$HAS_RANGE" = 1 ]; then
   run_gate "check-indirect-impact" "0 2" "$G/check-indirect-impact.py" "$RANGE" \
-    --sensitive-zones "$ZONES" --sink-registry "$SINKS" --repo .
+    --sensitive-zones "$ZONES" --sink-registry "$SINKS" \
+    --language-routing "$LANGUAGE_ROUTING" --repo .
   INDIRECT_OUT="$RUN_OUTPUT"; indirect_exit="$RUN_EXIT"
   if [ "$RUN_FAILED" = 1 ]; then show_analysis_failure "check-indirect-impact"; else
     printf '%s\n' "$INDIRECT_OUT" | head -8 | sed 's/^/    /'

@@ -12,8 +12,8 @@ apiVersion: harness-spine/v1
 kind: kit
 metadata:
   name: ai-change-governance
-  version: "0.3.3-mvp3-j3"              # 완료 MVP 스냅샷 (sync-from-dev.sh 로 갱신)
-  reflects_mvp: [MVP-0, MVP-1, MVP-1.5, MVP-2, MVP-3-J0, MVP-3-J1, MVP-3-J2, MVP-3-J3]
+  version: "0.3.4-mvp3-java-l3"         # 완료 MVP 스냅샷 (sync-from-dev.sh 로 갱신)
+  reflects_mvp: [MVP-0, MVP-1, MVP-1.5, MVP-2, MVP-3-J0, MVP-3-J1, MVP-3-J2, MVP-3-J3, MVP-3-Java-L3-partial]
   description: >
     AI 가 만든 코드 변경(diff)을 결정적으로 걸러 "선언 의도 밖 / 필수 변경 파일 부재 /
     민감영역 접촉 / 신규 위험능력 / sink 간접영향 / 정책 자기무력화"만 사람 승인으로 라우팅하는 게이트. 판정에 LLM 없음.
@@ -29,7 +29,7 @@ hooks:
       produces:
         - evidence/change-evidence.yaml
 
-# ── 조립되는 게이트 전량(★누락 검증용 명시 목록 — 20종) ──────────────
+# ── 조립되는 게이트 전량(★누락 검증용 명시 목록 — 21종) ──────────────
 # runtime_verdict = run.sh 가 조립하는 판정 게이트
 # extraction_internal = 판정 게이트가 내부 import(Path(__file__).parent) — 직접 호출 안 하나 co-located 필수
 # tools_offline = spine hook 아님(온보딩/CI) — bootstrap.sh·selftest.sh 로 별도 진입
@@ -49,6 +49,7 @@ gates:
     - extract-gov-annotations
     - extract-python-capabilities
     - extract-java-capabilities
+    - extract-java-callgraph
     - extract-sinks
     - extract-callgraph
   tools_offline:
@@ -59,6 +60,14 @@ gates:
     - check-tree-sitter-languages       # pinned tree-sitter Java/JS/TS/TSX 로드·파싱 스모크
   language_j1:
     - extract-java-inventory            # Java 클래스/메서드/생성자 인벤토리 추출
+
+coverage_limits:
+  java_callgraph:
+    status: partial
+    notes:
+      - "보수적 전방폐쇄에서 외부 호출을 하나라도 만나면 deferred dispatch가 승인요구로 승격될 수 있음(O-14)"
+      - "indirect_impact.inferred=true 는 실제 관측 호출이 아니라 보수 추정 홉이 포함됐다는 뜻"
+      - "fail_closed detail의 dead_ends에는 해당 레코드와 무관한 이름이 섞일 수 있음(O-22)"
 
 # ── 정책(코드 밖 YAML · inline 금지) ─────────────────────────────────
 policies:

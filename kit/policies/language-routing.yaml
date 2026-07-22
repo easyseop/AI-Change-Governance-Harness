@@ -59,12 +59,20 @@ adapters:
     extensions:
       - .py
   java:
-    status: stub               # deprecated floor — callgraph not implemented (capabilities supported since J3/TASK-032)
+    status: stub               # deprecated floor — callgraph not fully supported (capabilities supported since J3/TASK-032)
     layers:
       inventory: supported     # TASK-030 (J1)
       gov_level: supported     # TASK-031 (J2) — @Gov + framework-annotations.yaml
       capabilities: supported  # TASK-032 (J3)
-      callgraph: stub          # L3 — not started
+      # L3 — TASK-036(추출기)+TASK-037(판정 배선) 통과·머지(D-091). `supported` 가 아니라
+      # `partial` 인 이유(A-0047 §7 · under-claim, never over-claim):
+      #   - 필드/static 이니셜라이저 컨텍스트의 호출은 콜그래프에 아예 안 실린다(A-0047 O-9)
+      #   - 메서드 레퍼런스 `::` dispatch 는 엣지도 coverage 기록도 없다(A-0047 O-6)
+      # 즉 "deep analysis available" 로 카드에 찍으면 false card 다(D-074 O-5·D-075).
+      # 어댑터 활성화는 확장자 기준이라 `partial` 이어도 Java 간접영향 판정은 정상 작동하고,
+      # 카드에는 `layers not available: callgraph` 로 한계가 계속 노출된다.
+      # `supported` 승격은 TASK-039 완료 후 재검토(D-076 계약 · 킷 반영은 TASK-038 AC#3).
+      callgraph: partial
     parser: tree-sitter
     parser_package: tree-sitter
     grammar_package: tree-sitter-java
