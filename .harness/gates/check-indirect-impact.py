@@ -140,20 +140,42 @@ def reachable_paths(adjacency, sink, max_hops):
     return paths
 
 
-def sink_reachable_bodyless_functions(sinks, adjacency, bodyless_functions):
-    relevant = set()
+def reachable_functions_from_sinks(sinks, adjacency):
+    reachable = set()
     for sink in sinks:
         start = sink.get("function")
-        reachable = reachable_paths(adjacency, start, sink.get("hops", 1))
-        candidates = set(reachable)
+        paths = reachable_paths(adjacency, start, sink.get("hops", 1))
+        reachable.update(paths)
         if start:
-            candidates.add(start)
-        relevant.update(function for function in candidates if function in bodyless_functions)
+            reachable.add(start)
+    return reachable
+
+
+def sink_reachable_bodyless_functions(sinks, adjacency, bodyless_functions):
+    return reachable_functions_from_sinks(sinks, adjacency).intersection(bodyless_functions)
+
+
+def sink_relevant_deferred_records(java_deferred, sink_dead_ends, opaque_sink_dead_ends):
+    relevant = []
+    for item in java_deferred:
+        dispatch_targets = set(item.get("dispatch_targets") or [])
+        if opaque_sink_dead_ends:
+            relevant.append(item)
+            continue
+        if dispatch_targets and dispatch_targets.intersection(sink_dead_ends):
+            relevant.append(item)
+            continue
+        if not dispatch_targets and sink_dead_ends:
+            relevant.append(item)
     return relevant
 
 
-def finding_for_sink(sink, changed, path):
-    return {
+def path_has_inferred_edge(path, inferred_edges):
+    return any((caller, callee) in inferred_edges for caller, callee in zip(path, path[1:]))
+
+
+def finding_for_sink(sink, changed, path, inferred_edges=None):
+    finding = {
         "sink_id": sink.get("id"),
         "sink_function": sink.get("function"),
         "changed_function": changed.get("function"),
@@ -163,6 +185,9 @@ def finding_for_sink(sink, changed, path):
         "reason": sink.get("reason"),
         "maturity": sink.get("maturity", "shadow"),
     }
+    if inferred_edges and path_has_inferred_edge(path, inferred_edges):
+        finding["inferred"] = True
+    return finding
 
 
 def dedupe_findings(findings):
@@ -304,7 +329,8 @@ def check_indirect_impact(
         node.get("id")
         for node in java_graph.get("nodes", [])
         if node.get("bodyless") and node.get("id")
-    } | {
+    }
+    java_opaque_dead_ends = {
         item.get("caller")
         for item in java_graph.get("coverage", {}).get("unevaluated", [])
         if item.get("kind") == "unresolved" and item.get("caller")
@@ -312,12 +338,29 @@ def check_indirect_impact(
     sink_dead_ends = sink_reachable_bodyless_functions(
         sinks.get("sinks", []), adjacency, java_bodyless
     )
-    if java_deferred and sink_dead_ends:
-        errors.extend({"gate": "extract-java-callgraph", **item} for item in java_deferred)
+    opaque_sink_dead_ends = reachable_functions_from_sinks(
+        sinks.get("sinks", []), adjacency
+    ).intersection(java_opaque_dead_ends)
+    inferred_edges = set()
+    if opaque_sink_dead_ends:
+        lambda_bodyless = sorted(function for function in java_bodyless if adjacency.get(function))
+        for caller in sorted(opaque_sink_dead_ends):
+            for callee in lambda_bodyless:
+                adjacency.setdefault(caller, [])
+                if callee not in adjacency[caller]:
+                    adjacency[caller].append(callee)
+                    adjacency[caller].sort()
+                    inferred_edges.add((caller, callee))
+    relevant_java_deferred = sink_relevant_deferred_records(
+        java_deferred, sink_dead_ends, opaque_sink_dead_ends
+    )
+    if relevant_java_deferred:
+        errors.extend({"gate": "extract-java-callgraph", **item} for item in relevant_java_deferred)
+        relevant_dead_ends = sink_dead_ends.union(opaque_sink_dead_ends)
         fail_closed_records.append(
             fail_closed(
                 "extract-java-callgraph reported sink-relevant deferred dispatch",
-                f"{len(java_deferred)} deferred dispatch; dead_ends={','.join(sorted(sink_dead_ends))}",
+                f"{len(relevant_java_deferred)} deferred dispatch; dead_ends={','.join(sorted(relevant_dead_ends))}",
             )
         )
 
@@ -328,7 +371,12 @@ def check_indirect_impact(
         for function_id in sorted(changed_by_id):
             if function_id == sink.get("function") or function_id not in reachable:
                 continue
-            finding = finding_for_sink(sink, changed_by_id[function_id], reachable[function_id])
+            finding = finding_for_sink(
+                sink,
+                changed_by_id[function_id],
+                reachable[function_id],
+                inferred_edges,
+            )
             if sink.get("maturity", "shadow") == "shadow":
                 shadow_findings.append(finding)
             else:

@@ -1087,6 +1087,22 @@ def validate_extract_callgraph(case, result, exit_code):
             for item in result.get("coverage", {}).get("unevaluated", [])
         ]
         assert_equal(errors, "coverage.unevaluated", actual, expect["coverage_unevaluated"])
+    if "coverage_unevaluated_with_dispatch" in expect:
+        actual = [
+            {
+                "caller": item.get("caller"),
+                "kind": item.get("kind"),
+                "name": item.get("name"),
+                "dispatch_targets": item.get("dispatch_targets", []),
+            }
+            for item in result.get("coverage", {}).get("unevaluated", [])
+        ]
+        assert_equal(
+            errors,
+            "coverage.unevaluated_with_dispatch",
+            actual,
+            expect["coverage_unevaluated_with_dispatch"],
+        )
     if "errors_present" in expect:
         assert_equal(errors, "errors_present", bool(result.get("errors")), expect["errors_present"])
     if expect.get("deterministic_stdout"):
@@ -1098,8 +1114,9 @@ def validate_extract_callgraph(case, result, exit_code):
 
 
 def impact_summary(records):
-    return [
-        {
+    summary = []
+    for record in records:
+        item = {
             "sink_id": record.get("sink_id"),
             "changed_function": record.get("changed_function"),
             "path": record.get("path"),
@@ -1107,8 +1124,10 @@ def impact_summary(records):
             "reviewer": record.get("reviewer"),
             "maturity": record.get("maturity"),
         }
-        for record in records
-    ]
+        if record.get("inferred"):
+            item["inferred"] = True
+        summary.append(item)
+    return summary
 
 
 def validate_indirect_impact(case, result, exit_code):
@@ -1135,6 +1154,13 @@ def validate_indirect_impact(case, result, exit_code):
         assert_equal(errors, "reviewer_required", result.get("reviewer_required"), expect["reviewer_required"])
     if "fail_closed_present" in expect:
         assert_equal(errors, "fail_closed_present", bool(result.get("fail_closed")), expect["fail_closed_present"])
+    if "fail_closed_details" in expect:
+        assert_equal(
+            errors,
+            "fail_closed_details",
+            [item.get("detail") for item in result.get("fail_closed", [])],
+            expect["fail_closed_details"],
+        )
     if "errors_present" in expect:
         assert_equal(errors, "errors_present", bool(result.get("errors")), expect["errors_present"])
     if "coverage_unevaluated" in expect:
@@ -1147,6 +1173,22 @@ def validate_indirect_impact(case, result, exit_code):
             for item in result.get("coverage", {}).get("unevaluated", [])
         ]
         assert_equal(errors, "coverage.unevaluated", actual, expect["coverage_unevaluated"])
+    if "coverage_unevaluated_with_dispatch" in expect:
+        actual = [
+            {
+                "caller": item.get("caller"),
+                "kind": item.get("kind"),
+                "name": item.get("name"),
+                "dispatch_targets": item.get("dispatch_targets", []),
+            }
+            for item in result.get("coverage", {}).get("unevaluated", [])
+        ]
+        assert_equal(
+            errors,
+            "coverage.unevaluated_with_dispatch",
+            actual,
+            expect["coverage_unevaluated_with_dispatch"],
+        )
     if expect.get("deterministic_stdout"):
         first = run_command(case_command(case)).stdout
         second = run_command(case_command(case)).stdout
