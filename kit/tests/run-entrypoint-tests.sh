@@ -177,11 +177,42 @@ run_capability_console_case(){
   TOTAL=$((TOTAL + 1))
   output="$(ACGH_GATE_TIMEOUT_SECONDS=1 bash "$runner" HEAD~1..HEAD --repo "$repo" 2>&1)"; rc=$?
   if [ "$rc" = 2 ] &&
-     printf '%s\n' "$output" | grep -q 'protected: app/service.py::outbound_network'; then
+     printf '%s\n' "$output" | grep -q 'protected: app/service.py::outbound_network level=protected'; then
     echo "PASS $name"; PASS=$((PASS + 1))
   else
     echo "FAIL $name (exit=$rc expected=2, missing capability path and level)"
     printf '%s\n' "$output" | tail -16 | sed 's/^/  /'
+  fi
+}
+
+run_capability_parse_notice_case(){
+  local name="$1" runner="$2" repo="$3"
+  local output rc
+  TOTAL=$((TOTAL + 1))
+  output="$(ACGH_GATE_TIMEOUT_SECONDS=1 bash "$runner" HEAD~1..HEAD --repo "$repo" 2>&1)"; rc=$?
+  if [ "$rc" = 2 ] &&
+     printf '%s\n' "$output" | grep -q '능력 게이트 출력 파싱 불가 — 원문 앞 6줄' &&
+     printf '%s\n' "$output" | grep -q 'diagnostic from capability gate' &&
+     printf '%s\n' "$output" | grep -q 'APPROVAL_REQUIRED'; then
+    echo "PASS $name"; PASS=$((PASS + 1))
+  else
+    echo "FAIL $name (exit=$rc expected=2, missing parse-failure notice/raw output/final verdict)"
+    printf '%s\n' "$output" | tail -20 | sed 's/^/  /'
+  fi
+}
+
+run_shadow_capability_console_case(){
+  local name="$1" runner="$2" repo="$3"
+  local output rc
+  TOTAL=$((TOTAL + 1))
+  output="$(ACGH_GATE_TIMEOUT_SECONDS=1 bash "$runner" HEAD~1..HEAD --repo "$repo" 2>&1)"; rc=$?
+  if [ "$rc" = 0 ] &&
+     printf '%s\n' "$output" | grep -q 'shadow: app/service.py::shadow_exec level=protected' &&
+     printf '%s\n' "$output" | grep -q '최종 판정   : .*PASS'; then
+    echo "PASS $name"; PASS=$((PASS + 1))
+  else
+    echo "FAIL $name (exit=$rc expected=0, missing shadow level or pass verdict)"
+    printf '%s\n' "$output" | tail -20 | sed 's/^/  /'
   fi
 }
 
@@ -273,6 +304,38 @@ printf 'import requests\n\ndef fetch(url):\n    return requests.get(url)\n' >"$r
 git -C "$repo" add . && git -C "$repo" commit -qm capability
 run_case new-capability 2 'APPROVAL_REQUIRED' "$KIT/run.sh" "$repo"
 run_capability_console_case capability-console-path-and-level "$KIT/run.sh" "$repo"
+
+# 정상 exit 와 JSON 을 내더라도 stderr 혼입으로 파싱할 수 없으면 원문과 실패 사실을 고지한다.
+parse_notice="$WORK/kit-capability-parse-notice"; cp -R "$KIT" "$parse_notice"
+cat >"$parse_notice/gates/check-new-capabilities.py" <<'PY'
+import json
+import sys
+
+print("diagnostic from capability gate", file=sys.stderr)
+print(json.dumps({"verdict": "approval_required", "new_capabilities": []}))
+raise SystemExit(2)
+PY
+run_capability_parse_notice_case capability-output-parse-notice "$parse_notice/run.sh" "$repo"
+
+# shadow finding 은 판정을 바꾸지 않되 실제 정책 level 을 콘솔에 보존한다.
+shadow_console="$WORK/kit-shadow-console"; cp -R "$KIT" "$shadow_console"
+cat >"$shadow_console/gates/check-new-capabilities.py" <<'PY'
+import json
+
+print(json.dumps({
+    "verdict": "pass",
+    "new_capabilities": [],
+    "warned_capabilities": [],
+    "shadow_capabilities": [{
+        "path": "app/service.py",
+        "id": "shadow_exec",
+        "level": "protected",
+    }],
+    "fail_closed": [],
+    "errors": [],
+}))
+PY
+run_shadow_capability_console_case capability-shadow-level "$shadow_console/run.sh" "$repo"
 
 # 대상 repo 에 policies/ 가 없어도 킷 동봉 정책을 절대경로로 배선해야 한다.
 repo="$WORK/language-policy-kit-default"; make_repo "$repo"
@@ -418,6 +481,39 @@ PY
 git -C "$repo" add . && git -C "$repo" commit -qm indirect-change
 run_case indirect-impact-approval 2 'indirect sink impact requires review' "$KIT/run.sh" "$repo" --policies "$repo/policies"
 
+# 대상 repo 가 동명 퇴화 라우팅 정책을 심어도 킷 정책이 명시 배선되어 Java L3가 꺼지지 않는다.
+repo="$WORK/java-indirect-routing"; make_repo "$repo"
+cat >"$repo/app/Flow.java" <<'JAVA'
+class Flow {
+  void sink() { helper(); }
+  void helper() { int value = 1; }
+}
+JAVA
+cat >"$repo/policies/sink-registry.yaml" <<'YAML'
+defaults: {maturity: enforcing, hops: 1}
+sinks:
+  - {id: java_sink, function: Flow.sink, reason: Java routing guard, owner: java-reviewer}
+YAML
+cat >"$repo/policies/language-routing.yaml" <<'YAML'
+adapters: {}
+YAML
+git -C "$repo" add . && git -C "$repo" commit -qm java-indirect-base
+python3 - "$repo/app/Flow.java" <<'PY'
+from pathlib import Path
+import sys
+p = Path(sys.argv[1])
+p.write_text(p.read_text().replace("value = 1", "value = 2"))
+PY
+git -C "$repo" add app/Flow.java && git -C "$repo" commit -qm java-indirect-change
+java_route_kit="$WORK/kit-java-routing"; cp -R "$KIT" "$java_route_kit"
+cp "$repo/policies/sink-registry.yaml" "$java_route_kit/policies/sink-registry.yaml"
+run_case java-indirect-target-routing-cannot-disable 2 'java_sink' "$java_route_kit/run.sh" "$repo"
+
+# --policies override 의 language-routing 과 sink-registry 를 같은 디렉터리에서 사용한다.
+override="$WORK/java-indirect-override-policies"; cp -R "$KIT/policies" "$override"
+cp "$repo/policies/sink-registry.yaml" "$override/sink-registry.yaml"
+run_case java-indirect-routing-override 2 'java_sink' "$KIT/run.sh" "$repo" --policies "$override"
+
 # --policies 대상에 sink-registry 가 없으면 조용히 통과하지 않고 fail-safe 한다.
 rm "$repo/policies/sink-registry.yaml"
 run_missing_required_policy_preflight_case missing-sink-registry-preflight "$KIT/run.sh" "$repo" "$repo/policies" "sink-registry.yaml" "$WORK/missing-sink-registry-card.yaml"
@@ -496,6 +592,13 @@ print(json.dumps({
 raise SystemExit(2)
 PY
 run_invalid_card_trace_case evidence-exception-capability-fail-closed "$invalid/run.sh" "$repo" "$WORK/invalid-card.yaml"
+
+# 콜론이 든 예외 원문은 YAML ScannerError 를 유발해 try/except 가 실제로 필요하다.
+invalid_scanner="$WORK/kit-invalid-card-scanner"; cp -R "$invalid" "$invalid_scanner"
+cat >"$invalid_scanner/gates/generate-change-evidence.py" <<'PY'
+raise RuntimeError("boom: bad value: x")
+PY
+run_invalid_card_trace_case evidence-scanner-error-capability-fail-closed "$invalid_scanner/run.sh" "$repo" "$WORK/invalid-scanner-card.yaml"
 
 echo "Entrypoint summary: $PASS/$TOTAL PASS"
 [ "$PASS" = "$TOTAL" ]
