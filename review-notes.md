@@ -2267,3 +2267,17 @@ parity 는 "정상 경로 등가"만이 아니라 **"실패 경로 등가"까지
 - **★★ 킷 심층리뷰(형 지시) — 해당 없음**: `kit/` 0 바이트 + 킷 `kit/gates/` 22개에 `extract-java-callgraph.py` **부재**·`kit/gates/check-indirect-impact.py` 에 `java_deferred` **0건** ⇒ 미탑재(구멍 아님). run.sh 배선·verdict 조립·`--policies`·fail-closed·selftest 는 영향권 밖. **TASK-038 sync 금지 유지.**
 - **🟡 신규**: **O-32** 중첩 람다가 순회에서 제외(fresh C4 = `Optional.ifPresent(c -> { d.task = () -> … })`) — 이 델타의 회귀 아니고 in-repo(C4b)·익명클래스(C4c) 형태는 전부 탐지되나 **승격 차단조건**으로 못박음. **O-33** 폐기 레코드에 거버넌스 신호 부재 — R-1·R-4·R-5·R-7 이 매번 조용히 통과한 근본 원인.
 - **머지**: ❌ 코드 브랜치 보류. 리뷰 기록만 `main` 머지(D-007). 민감 변경 아님 ⇒ H-XXXX 불필요.
+
+## 2026-07-22 — TASK-041 A-0057 보정 재제출 재리뷰 (`0aa6d11`·`67723f9`) → 🔴 보정요청 (D-102 · A-0058)
+
+- **범위(멱등성)**: `ecd906a..67723f9` 델타만. D-098·D-099·D-100·D-101 처리분은 재리뷰 안 함.
+- **✅ AC#18 폐쇄** — dedup 동점규칙 보수 반전. **RIG-C**(원복) **220/222, `…same-line-lambda-dedup` 단독 FAIL.** 픽스처의 `(Runnable)` 캐스트 의존 의심 → **캐스트 없는 fresh C3** 독립검증(`wt-br` 2 ↔ `rigC` 0) ⇒ 픽스처 정직.
+- **✅ AC#17① 폐쇄** — 대입식/선언자 순회 중단. **RIG-A**(`break` 2줄 제거) **218/222, 신규 3건 단독 FAIL.** fresh C2·C1·C6 로 C2 **순회귀 복구** 확인.
+- **⚠️ AC#17② 무효(inert)** — `child == arguments` 가드는 **RIG-B**(제거) FAIL **0건**, **RIG-D**(계측) 스위트 전량 **0회**. 원인: 그 갈래에 닿는 유일 형태(`object` 필드 = 캐스트·괄호)에서 `precise_receiver_type()` 이 **항상 `None`**. **내 처방(AC#17②)의 결함 — 자기정정 10회째.** 가드는 유지, 픽스처 요구는 철회.
+- **🔴 R-9 (차단 · 과소탐)** — **결부 경계가 단방향.** 채택한 invocation *위*에 대입·선언·`return` 이 있어도 `break` 때문에 무시 ⇒ **래핑 등록 관용구**가 뚫린다. fresh **9형태**(H2·H2c·H2d·H2e·H3·H7·H9·K2·K3) `main` **2** → 브랜치 **`pass`(0)**. K3 는 생성자를 뚫고 바깥 호출 수신자를 가져오는 **R-7 오귀속 잔존**. **커밋별 이분탐색: `1f0c60b` 부터 이미 `pass` ⇒ 이 델타의 순회귀는 아니나, `main` 대비 탐지 손실이므로 머지 시 후퇴.** 대조군 13형태·소음폐쇄 3형태 전부 생존 ⇒ 구멍은 한 갈래로 정확히 한정.
+- **🔧 보정 방향(`wt-fix3` 실측·단계별 원복 확인)**: `break` → **`adopted` 플래그로 순회 계속**(채택 1회 한정) + 경계집합에 **`return_statement`·`object_creation_expression`** + 경계에서 **채택분 폐기**. **9형태 복구 · 대조군 13형태 불변 · N4·N5·N6 `pass` 유지 · 스위트 221/222 회귀 0** ⇒ 순수 개선. 중간 단계 `wt-fix`(6형태)·`wt-fix2`(8형태) 도 전부 221/222.
+- **무회귀**: 브랜치 **221/222** ↔ `main` **201/202**(유일 FAIL `tree-sitter-smoke` = 환경 파서 의존성, 양쪽 동일) · mutation **PASS(391)** · `PYTHONHASHSEED` 0/1/999/12345 md5 동일(신규 픽스처 4종) · exit **0/2 뿐**(fresh 28 + 스위트 + 파싱불능 소스 fail-closed) · `py_compile`·`diff --check` PASS · 케이스 차집합 = 추가 4·제거 0.
+- **§1 통과**: Codex 저작 커밋이 만진 파일 = 게이트 1(+13/−8) · `cases.yaml`(+60) · 픽스처 4세트 · handoff · summaries **뿐**. `TASKS.md` 머지베이스와 바이트 동일 · `kit/`·`policies/`·`docs/`·`templates/`·`AGENTS.md`·Claude 소유 **0 바이트**. 무관 리팩터·기대값 약화 0. handoff·summaries **문언 정확·과장 없음**(한계도 정직 고지). `origin/main` 재머지 생략은 미머지분이 내 리뷰기록 2커밋(docs only)뿐이라 위반으로 세지 않음.
+- **★★ 킷 심층리뷰(형 지시) — 해당 없음**: 브랜치 전체 3-dot diff `kit/` **0 바이트** + `kit/gates/*.py` **20개**에 `extract-java-callgraph.py` **부재** · 킷 전체 `java_deferred`·`enclosing_invocation_receiver_type` **0건** ⇒ 미탑재(구멍 아님). run.sh 배선·verdict 조립·`--policies`·fail-closed·selftest 는 영향권 밖. **TASK-038 sync 금지 유지.**
+- **🟡 신규**: **O-34** `precise_receiver_type(None) → 자기 클래스명` — R-7·R-9 를 둘 다 증폭한 근원값, AC#20 은 경계로 우회할 뿐. **O-35(방법론)** 음성검증이 원리적으로 불가능한 AC 를 쓰지 않도록 처방 단계 확인 + **계측 리그(RIG-D) 상설화**. **O-33 격상** — 다섯 계열(R-1·R-4·R-5·R-7·R-9)이 전부 같은 **무신호 경로**로 샜다 ⇒ 승격 차단조건에 추가.
+- **머지**: ❌ 코드 브랜치 보류. 리뷰 기록만 `main` 머지(D-007). 민감 변경 아님 ⇒ H-XXXX 불필요.
